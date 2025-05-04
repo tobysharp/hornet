@@ -51,8 +51,6 @@ TEST(VersionMessageTest, SendVersionMessage) {
   builder << "version" << msg;
 
   auto bytes = builder.AsBytes();
-  std::cout << bytes << std::endl;
-  
   send(sock, bytes.data(), bytes.size(), 0);
 
   // Receive response

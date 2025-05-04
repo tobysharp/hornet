@@ -50,8 +50,6 @@ class MessageBuilder {
     
     // Compute payload hash and write it into the buffer
     hash = DoubleSha256(std::span{buffer_.AsBytes().data() + payload_start_index, payload_length_bytes});
-    std::cout << hash << std::endl;
-
     buffer_.WriteAt(payload_hash_index, {hash.data(), 4});
     
     return *this;
