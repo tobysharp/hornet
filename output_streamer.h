@@ -1,6 +1,7 @@
 // output_streamer.h
 #pragma once
 
+#include "hash.h"
 #include "message_buffer.h"
 #include "sha256.h"
 
@@ -55,7 +56,7 @@ class OutputStreamer {
     out_.put((len >> 24) & 0xFF);
 
     // Checksum (first 4 bytes of double SHA256)
-    auto checksum = SHA256::DoubleHash(current_payload_);
+    auto checksum = DoubleSha256(current_payload_);
     out_.write(reinterpret_cast<char*>(checksum.data()), 4);
 
     // Payload

@@ -3,24 +3,17 @@
 // SHA-256
 // Implemented from the spec at https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf
 
-#include "uint256.h"
 #include <array>
 #include <ostream>
 #include <span>
 
 namespace SHA256
 {
+    using hash256_t = std::array<uint8_t, 32>;
+
     // Compute the SHA-256 hash of an arbitrary byte stream
-    uint256_t Hash(std::span<const uint8_t> bytes);
-    template <typename Iter> uint256_t Hash(Iter begin, Iter end);
-
-    inline uint256_t DoubleHash(std::span<const uint8_t> bytes);
-    template <typename Iter> uint256_t DoubleHash(Iter begin, Iter end);
+    hash256_t Hash(std::span<const uint8_t> bytes);
 }
-
-// Write the hash digest to an output stream
-std::ostream& operator <<(std::ostream& os, const uint256_t& h);
-
 
 /* Implementation follows */
 
@@ -30,6 +23,7 @@ namespace SHA256
 {
 namespace Detail
 {
+    using uint256_t = std::array<uint32_t, 8>;
     static constexpr uint256_t s_initialHash = { 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19 };
     static constexpr std::array<uint32_t, 64> s_K = { 0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
                                                       0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -93,6 +87,14 @@ namespace Detail
         return (x << 24) | ((x & 0x0000FF00) << 8) | ((x & 0x00FF0000) >> 8) | (x >> 24);
     }
 
+    inline hash256_t ReverseEndianWords(const uint256_t& words) {
+        hash256_t rv;
+        uint32_t* output = reinterpret_cast<uint32_t*>(&rv[0]);
+        for (int i = 0; i < 8; ++i)
+            output[i] = ReverseEndianWord(words[i]);
+        return rv;
+    }
+
     inline void Process16WordBlock(const uint32_t* M, Schedule& W, uint256_t& H)
     {
         // Prepare the message schedule {W_t}
@@ -124,7 +126,7 @@ namespace Detail
     }
 }
 
-inline uint256_t Hash(std::span<const uint8_t> bytes)
+inline hash256_t Hash(std::span<const uint8_t> bytes)
 {
     using namespace Detail;
 
@@ -176,25 +178,7 @@ inline uint256_t Hash(std::span<const uint8_t> bytes)
         Process16WordBlock(&localWords[16], W, H);
 
     // Return the final hash value
-    return H;
+    return ReverseEndianWords(H);
 }
 
-template <typename Iter> uint256_t Hash(Iter begin, Iter end)
-{
-    const auto diff = end - begin;
-    const size_t bytes = diff * sizeof(std::remove_reference_t<decltype(*begin)>);
-    return Hash(std::span<const uint8_t>{bytes > 0 ? reinterpret_cast<const uint8_t*>(&*begin) : nullptr, bytes});
-}
-
-inline uint256_t DoubleHash(std::span<const uint8_t> span) {
-    const auto hash = Hash(span);
-    return Hash(hash.cbegin(), hash.cend());
-}
-
-template <typename Iter> uint256_t DoubleHash(Iter begin, Iter end) {
-    const auto hash = Hash(begin, end);
-    return Hash(hash.cbegin(), hash.cend());
-}
-
-}
-
+}  // namespace SHA256

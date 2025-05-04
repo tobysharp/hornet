@@ -60,6 +60,11 @@
         "stop_token": "cpp",
         "streambuf": "cpp",
         "thread": "cpp",
-        "typeinfo": "cpp"
+        "typeinfo": "cpp",
+        "any": "cpp",
+        "condition_variable": "cpp",
+        "mutex": "cpp",
+        "cinttypes": "cpp",
+        "variant": "cpp"
     }
 }
