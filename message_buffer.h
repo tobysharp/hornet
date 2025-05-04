@@ -1,5 +1,8 @@
 #pragma once
 
+#include "types.h"
+
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <ostream>
@@ -11,13 +14,18 @@
 // A buffer for serializing Bitcoin protocol messages.
 class MessageBuffer {
  public:
+  size_t Size() const {
+    return data_.size();
+  }
+  
   // Adds raw bytes to the buffer.
   void Add(std::span<const uint8_t> bytes) {
     data_.insert(data_.end(), bytes.begin(), bytes.end());
   }
 
-  // Adds a string to the buffer.
+  // Adds a string to the buffer, prefixed with a variable-int length.
   void Add(const std::string& s) {
+    AddVarInt(s.size());
     data_.insert(data_.end(), s.begin(), s.end());
   }
 
@@ -82,6 +90,15 @@ class MessageBuffer {
     }
   }
 
+  void WriteAt(size_t index, std::span<const uint8_t> bytes) {
+    std::copy_n(bytes.begin(), bytes.size(), data_.begin() + index);
+  }
+  
+  void WriteAt(size_t index, uint32_t value) {
+    auto bytes = AsByteSpan<uint32_t>({&value, 1});
+    std::copy_n(bytes.begin(), bytes.size(), data_.begin() + index);
+  }
+  
   void Clear() {
     data_.clear();
   }

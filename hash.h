@@ -18,10 +18,10 @@ template <typename Iter> bytes32_t Sha256(Iter begin, Iter end) {
 // their contents as raw bytes. Not suitable for types with internal pointers or padding.
 template <typename T>
 inline bytes32_t Sha256(const T& value) {
-  if constexpr (std::is_trivially_copyable_v<T>) {
-    return SHA256::Hash(AsByteSpan<T>({&value, 1}));
-  } else if constexpr (requires { value.begin(); value.end(); }) {
+  if constexpr (requires { value.begin(); value.end(); }) {
     return Sha256(value.begin(), value.end());
+  } else if constexpr (std::is_trivially_copyable_v<T>) {
+    return SHA256::Hash(AsByteSpan<T>({&value, 1}));
   } else {
     static_assert(always_false_v<T>, "Unsupported type passed to Sha256.");
   }

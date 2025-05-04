@@ -2,9 +2,6 @@
 #include <cstdint>
 #include <gtest/gtest.h>
 
-#include "message_buffer.h"
-#include <gtest/gtest.h>
-
 TEST(MessageBufferTest, BasicSerialization) {
   MessageBuffer buffer;
 
@@ -18,7 +15,7 @@ TEST(MessageBufferTest, BasicSerialization) {
   buffer.AddVarInt(0xfd);                     // 0xfd + 2 bytes
   buffer.AddVarInt(0x12345678);               // 0xfe + 4 bytes
   buffer.AddVarInt(0x123456789abcdef0);       // 0xff + 8 bytes
-  buffer.Add(std::string("abc"));             // 3 bytes
+  buffer.Add(std::string("abc"));             // 0x03 + 3 bytes
   buffer.Add(true);                           // 1 byte
 
   auto bytes = buffer.AsBytes();
@@ -33,7 +30,7 @@ TEST(MessageBufferTest, BasicSerialization) {
     0xfd, 0xfd, 0x00,
     0xfe, 0x78, 0x56, 0x34, 0x12,
     0xff, 0xf0, 0xde, 0xbc, 0x9a, 0x78, 0x56, 0x34, 0x12,
-    'a', 'b', 'c',
+    0x03, 'a', 'b', 'c',
     0x01
   };
 

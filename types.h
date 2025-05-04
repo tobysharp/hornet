@@ -30,3 +30,21 @@ inline std::ostream& operator <<(std::ostream& os, const bytes32_t& h)
     os.flags(f); // Restore flags
     return os;
 }
+
+inline std::ostream& operator <<(std::ostream& os, std::span<const uint8_t> bytes)
+{
+    std::ios_base::fmtflags f(os.flags());  // Save stream flags
+    os << std::hex << std::uppercase << std::setfill('0');
+
+    size_t count = 0;
+    for (const uint8_t uc : bytes) {
+        os << std::setw(2) << static_cast<int>(uc);
+        if ((++count & 0xF) == 0)
+            os << std::endl;
+        else
+            os << " ";
+    }
+
+    os.flags(f); // Restore flags
+    return os;
+}
