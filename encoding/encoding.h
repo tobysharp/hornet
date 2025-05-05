@@ -13,7 +13,7 @@ struct EncodingTraits;
 template <Encoding E, typename T>
 class Wrapper {
 public:
-    explicit Wrapper(T& v) : value_(v) {}
+    Wrapper(T& v) : value_(v) {}
     T& operator *() { return value_; }
 private:
     T& value_;
