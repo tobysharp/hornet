@@ -47,7 +47,7 @@ TEST(VersionMessageTest, SendVersionMessage) {
   msg.timestamp = 1700000000;
   msg.user_agent = "/btchornet:test/";
 
-  MessageBuilder builder(0xDAB5BFFA); // mainnet magic
+  MessageBuilder builder;
   builder << "version" << msg;
 
   auto bytes = builder.AsBytes();
