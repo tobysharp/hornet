@@ -45,6 +45,6 @@ struct EncodingTraits<Encoding::kVarInt> {
 
 template <typename T>
 Wrapper<Encoding::kVarInt, T> AsVarInt(T& value) {
-    static_assert(std::is_integral_v<U> && std::is_unsigned_v<U>);
+    static_assert(std::is_integral_v<T> && std::is_unsigned_v<T>);
     return value;
 }

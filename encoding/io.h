@@ -10,7 +10,8 @@
 // tag-invoke, the read/write calls will be dispatched to the best available
 // overload as late as possible. This means that users can define their own stream-
 // like Read/Writer objects and provide their own streaming behavior using Dispatch
-// overloads with the appropriate tag.
+// overloads with the appropriate tag. These overloads do not need to appear in the
+// io namespace.
 namespace io {
 
 inline constexpr struct WriteTag {
