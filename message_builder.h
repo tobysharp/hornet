@@ -3,6 +3,7 @@
 
 #include "hash.h"
 #include "message_buffer.h"
+#include "protocol.h"
 #include "sha256.h"
 #include "types.h"
 
@@ -13,7 +14,7 @@
 
 class MessageBuilder {
  public:
-  MessageBuilder(uint32_t magic)
+  MessageBuilder(Magic magic = Magic::Testnet)
       : magic_(magic) {}
 
   MessageBuilder& operator<<(std::string_view command) {
@@ -22,23 +23,18 @@ class MessageBuilder {
   }
 
   MessageBuilder& operator<<(const Message& message) {
-    buffer_.Add(magic_);
+    buffer_.Add(static_cast<uint32_t>(magic_));
 
     // Write command (12 bytes, null-padded)
     std::array<char, 12> cmd = {};
     std::copy_n(command_.begin(), std::min(size_t{12}, command_.size()), cmd.begin());
-    buffer_.Add(AsByteSpan<char>({cmd.data(), cmd.size()}));
+    buffer_.Add(AsByteSpan<char>(cmd));
 
-    // Store the location of the payload length buffer, so we can
-    // go back and write in the value once it's known.
-    const auto payload_length_index = buffer_.Size();
+    // Defer payload length (4 bytes, LE)
+    const auto payload_length_index = buffer_.Add(uint32_t{0});
 
-    // Write payload length (4 bytes, LE)
-    buffer_.Add(uint32_t{0});
-
-    bytes32_t hash = {};
-    const auto payload_hash_index = buffer_.Size();
-    buffer_.Add({hash.data(), 4});
+    // Defer payload hash (4 bytes)
+    const auto payload_hash_index = buffer_.Add(uint32_t{0});
 
     // Write payload itself
     const auto payload_start_index = buffer_.Size();
@@ -49,7 +45,7 @@ class MessageBuilder {
     buffer_.WriteAt(payload_length_index, static_cast<uint32_t>(payload_length_bytes));
     
     // Compute payload hash and write it into the buffer
-    hash = DoubleSha256(std::span{buffer_.AsBytes().data() + payload_start_index, payload_length_bytes});
+    const auto hash = DoubleSha256(std::span{buffer_.AsBytes().data() + payload_start_index, payload_length_bytes});
     buffer_.WriteAt(payload_hash_index, {hash.data(), 4});
     
     return *this;
@@ -59,7 +55,7 @@ class MessageBuilder {
     return buffer_.AsBytes();
   }
 
-  const uint32_t magic_;
+  const Magic magic_;
   std::string command_;
   MessageBuffer buffer_;
 };

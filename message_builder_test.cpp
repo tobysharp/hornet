@@ -1,5 +1,6 @@
 #include "version_message.h"
 #include "message_builder.h"
+#include "protocol.h"
 
 #include <gtest/gtest.h>
 
@@ -8,7 +9,7 @@ TEST(MessageBuilderTest, VersionMessageFraming) {
     msg.timestamp = 1700000000;
     msg.user_agent = "/btchornet:test/";
   
-    MessageBuilder builder(0xD9B4BEF9); // mainnet magic
+    MessageBuilder builder(Magic::Main);
     builder << "version" << msg;
   
     auto bytes = builder.AsBytes();

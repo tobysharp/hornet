@@ -19,7 +19,7 @@ class MessageBuffer {
   }
   
   // Adds raw bytes to the buffer.
-  void Add(std::span<const uint8_t> bytes) {
+ void Add(std::span<const uint8_t> bytes) {
     data_.insert(data_.end(), bytes.begin(), bytes.end());
   }
 
@@ -35,38 +35,40 @@ class MessageBuffer {
   }
 
   // Adds an 8-bit unsigned integer.
-  void Add(uint8_t value) {
+  size_t Add(uint8_t value) {
+    size_t index = Size();
     data_.push_back(value);
+    return index;
   }
 
   // Adds a boolean as an 8-bit integer (1 or 0).
-  void Add(bool value) {
-    Add(static_cast<uint8_t>(value ? 1 : 0));
+  size_t Add(bool value) {
+    return Add(static_cast<uint8_t>(value ? 1 : 0));
   }
 
   // Adds a 16-bit little-endian integer.
-  void Add(uint16_t value) {
-    AddLittleEndian(value);
+  size_t Add(uint16_t value) {
+    return AddLittleEndian(value);
   }
 
   // Adds a 16-bit big-endian integer.
-  void AddBigEndian(uint16_t value) {
-    AddBigEndian<uint16_t>(value);
+  size_t AddBigEndian(uint16_t value) {
+    return AddBigEndian<uint16_t>(value);
   }
 
   // Adds a 32-bit little-endian unsigned integer.
-  void Add(uint32_t value) {
-    AddLittleEndian(value);
+  size_t Add(uint32_t value) {
+    return AddLittleEndian(value);
   }
 
   // Adds a 32-bit little-endian signed integer.
-  void Add(int32_t value) {
-    AddLittleEndian(value);
+  size_t Add(int32_t value) {
+    return AddLittleEndian(value);
   }
 
   // Adds a 64-bit little-endian integer.
-  void Add(uint64_t value) {
-    AddLittleEndian(value);
+  size_t Add(uint64_t value) {
+    return AddLittleEndian(value);
   }
 
   // Adds a variable-length integer using Bitcoin's VarInt encoding.
@@ -110,17 +112,21 @@ class MessageBuffer {
 
  private:
   // Add data in little-endian format, i.e. matching the memory layout.
-  template <typename T> void AddLittleEndian(T value) {
+  template <typename T> size_t AddLittleEndian(T value) {
     static_assert(std::is_trivially_copyable_v<T>, "AddLittleEndian requires trivially copyable types.");
+    size_t index = Size();
     const auto ptr = static_cast<const uint8_t*>(static_cast<const void*>(&value));
     Add({ptr, sizeof(T)});
+    return index;
   }
 
   // Add data in big-endian format, i.e. reversing the memory layout.
-  template <typename T> void AddBigEndian(T value) {
+  template <typename T> size_t AddBigEndian(T value) {
     static_assert(std::is_trivially_copyable_v<T>, "AddBigEndian requires trivially copyable types.");
+    size_t index = Size();
     const auto ptr = static_cast<const uint8_t*>(static_cast<const void*>(&value));
     AddReverse({ptr, sizeof(T)});
+    return index;
   }
 
   std::vector<uint8_t> data_;
