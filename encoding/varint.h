@@ -34,11 +34,11 @@ struct EncodingTraits<Encoding::kVarInt> {
         if (prefix < 0xFD) {
             return static_cast<T>(prefix);
         } else if (prefix == 0xFD) {
-            return Read<T, uint16_t>(is);   
+            return ReadCast<T, uint16_t>(is);   
         } else if (prefix == 0xFE) {
-            return Read<T, uint32_t>(is);
+            return ReadCast<T, uint32_t>(is);
         } else {
-            return Read<T, uint64_t>(is);
+            return ReadCast<T, uint64_t>(is);
         }
     }
 };

@@ -21,7 +21,7 @@ private:
 
 template <Encoding kEncoding, typename T, typename Writer>
 Writer& operator<<(Writer& os, Wrapper<kEncoding, T> ref) {
-    if constexpr (requires { EncodingTraits<kEncoding>::template Write<T>(os, ref); }) {
+    if constexpr (requires { EncodingTraits<kEncoding>::template Encode<T>(os, ref); }) {
         EncodingTraits<kEncoding>::template Encode<T>(os, *ref);
     } else {
         EncodingTraits<kEncoding>::Encode(os, *ref);
@@ -31,7 +31,7 @@ Writer& operator<<(Writer& os, Wrapper<kEncoding, T> ref) {
 
 template <Encoding kEncoding, typename T, typename Reader>
 Reader& operator>>(Reader& is, Wrapper<kEncoding, T> ref) {
-    if constexpr (requires { EncodingTraits<kEncoding>::template Read<T>(is); }) {
+    if constexpr (requires { EncodingTraits<kEncoding>::template Decode<T>(is); }) {
         *ref = EncodingTraits<kEncoding>::template Decode<T>(is);
     } else {
         *ref = EncodingTraits<kEncoding>::Decode(is);
