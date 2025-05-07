@@ -33,10 +33,10 @@ inline constexpr struct ReadTag {
     
 
 // Writes a simple type to the output stream in little-endian format
-template <typename T, typename Writer>
-inline void Write(Writer& os, T value) {
+template <typename T>
+inline void Write(std::ostream& os, T value) {
     static_assert(std::is_integral_v<T>, "Write<T> requires an integral type.");
-    io::WriteCPO(os, reinterpret_cast<const char*>(&value), sizeof(T));
+    WriteCPO(os, reinterpret_cast<const char*>(&value), sizeof(T));
 }
 
 // Reads an integer of type T from the input stream.

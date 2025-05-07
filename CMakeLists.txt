@@ -18,11 +18,7 @@ add_subdirectory(extern/googletest)
 # Unit test binary using GoogleTest
 add_executable(hornet_tests
    hash_test.cpp
-   message_buffer_test.cpp
-   message_builder_test.cpp
-   version_message_test.cpp
-   encoding/io_test.cpp
-   encoding/varint_test.cpp
+   encoding/message_writer_test.cpp
 )
 target_link_libraries(hornet_tests PRIVATE hornet gtest_main)
 

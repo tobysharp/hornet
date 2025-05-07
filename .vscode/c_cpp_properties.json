@@ -1,12 +1,16 @@
 {
-  "configurations": [
-    {
-      "name": "Linux",  // or "Mac", "Win32"
-      "compilerPath": "/usr/bin/clang++",  // adjust to your system
-      "cStandard": "c17",
-      "cppStandard": "c++20",
-      "intelliSenseMode": "clang-x64"
-    }
-  ],
-  "version": 4
+    "configurations": [
+        {
+            "name": "Linux",
+            "compilerPath": "/usr/bin/clang++",
+            "cStandard": "c17",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "clang-x64",
+            "includePath": [
+                "${default}",
+                "${workspaceFolder}"
+            ]
+        }
+    ],
+    "version": 4
 }

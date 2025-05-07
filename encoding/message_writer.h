@@ -1,11 +1,18 @@
 #pragma once
 
 #include <algorithm>
+#include <bit>
 #include <concepts>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <type_traits>
 #include <vector>
+
+// Returns true (at compile time) when targeting little-endian systems
+inline constexpr bool IsLittleEndian() {
+    return std::endian::native == std::endian::little;
+}
 
 class MessageWriter {
 public:
@@ -25,22 +32,22 @@ public:
     }
 
     // Write raw bytes
-    size_t WriteBytes(const uint8_t* data, size_t len) {
+    size_t WriteBytes(std::span<const uint8_t> span) {
         size_t offset = GetPos();
 
         if (pos_ == buffer_.end()) {
             // Append to the end of the buffer
-            buffer_.insert(pos_, data, data + len);
+            buffer_.insert(pos_, span.begin(), span.end());
             pos_ = buffer_.end();
         } else {
             // Overwrite the current data
             auto remaining = std::distance(pos_, buffer_.end());
-            size_t to_write = std::min<size_t>(remaining, len);
-            std::copy_n(data, to_write, pos_);
+            size_t to_write = std::min<size_t>(remaining, span.size());
+            std::copy_n(span.begin(), to_write, pos_);
             pos_ += to_write;
             // Appends the remaining data to the buffer end
-            if (to_write < len) {
-                buffer_.insert(pos_, data + to_write, data + len);
+            if (to_write < span.size()) {
+                buffer_.insert(pos_, span.begin() + to_write, span.end());
                 pos_ = buffer_.end();
             }
         }
@@ -51,20 +58,44 @@ public:
     template <std::integral T>
     size_t WriteLE(T value) {
         if constexpr (IsLittleEndian()) {
-            return WriteBytes(reinterpret_cast<const uint8_t*>(&value), sizeof(T));
+            return WriteBytes({reinterpret_cast<const uint8_t*>(&value), sizeof(T)});
         } else {
             return WriteReverseBytes(value);
         }
+    }
+
+    // Write an integral value as 2-bytes little-endian
+    template <std::integral T>
+    size_t WriteLE2(T value) {
+        return WriteLE(static_cast<uint16_t>(value));
+    }
+
+    // Write an integral value as 4-bytes little-endian
+    template <std::integral T>
+    size_t WriteLE4(T value) {
+        return WriteLE(static_cast<uint32_t>(value));
+    }
+
+    // Write an integral value as 8-bytes little-endian
+    template <std::integral T>
+    size_t WriteLE8(T value) {
+        return WriteLE(static_cast<uint64_t>(value));
     }
 
     // Writes an integral value in big-endian order
     template <std::integral T>
     size_t WriteBE(T value) {
         if constexpr (!IsLittleEndian()) {
-            return WriteBytes(reinterpret_cast<const uint8_t*>(&value), sizeof(T));
+            return WriteBytes({reinterpret_cast<const uint8_t*>(&value), sizeof(T)});
         } else {
             return WriteReverseBytes(value);
         }
+    }
+
+    // Write an integral value as 2-bytes big-endian
+    template <std::integral T>
+    size_t WriteBE2(T value) {
+        return WriteBE(static_cast<uint16_t>(value));
     }
 
     // Writes a variable-length unsigned integer
@@ -89,13 +120,13 @@ public:
     // Writes a variable-length string
     size_t WriteVarString(const std::string& s) {
         size_t pos = WriteVarInt(s.size());
-        WriteBytes(reinterpret_cast<const uint8_t*>(s.data()), s.size());
+        WriteBytes({reinterpret_cast<const uint8_t*>(s.data()), s.size()});
         return pos;
     }
 
     // Returns the current seek position
     size_t GetPos() const {
-        return static_cast<size_t>(std::distance(buffer_.begin(), pos_));
+        return static_cast<size_t>(std::distance(const_cast<MessageWriter*>(this)->buffer_.begin(), pos_));
     }
 
     // Returns true when the seek position is at the end of the buffer
@@ -119,19 +150,13 @@ public:
     }
     
 private:
-    // Returns true (at compile time) when targeting little-endian systems
-    static constexpr bool IsLittleEndian() {
-        union { uint16_t i; uint8_t c[2]; } test = { 0x0100 };
-        return test.c[1] == 0x01;
-    }
-
     // Write bytes in reversed order for switching endianness
     template <std::integral T>
     size_t WriteReverseBytes(T value) {
         uint8_t reversed[sizeof(T)];
         const uint8_t* begin_byte = reinterpret_cast<const uint8_t*>(&value);
         std::reverse_copy(begin_byte, begin_byte + sizeof(T), reversed);
-        return WriteBytes(reversed, sizeof(T));
+        return WriteBytes(reversed);
     }
 
     std::vector<uint8_t> buffer_;

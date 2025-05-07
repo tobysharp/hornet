@@ -4,7 +4,7 @@
 #include "encoding/io.h"
 
 template <>
-struct EncodingTraits<Encoding::kVarInt> {
+struct EncodingTraits<encoding::VarInt> {
 // Writes an unsigned integer to the stream with a variable-sized encoding
     template <typename T, typename Writer>
     static void Encode(Writer& os, T value) {
@@ -44,7 +44,7 @@ struct EncodingTraits<Encoding::kVarInt> {
 };
 
 template <typename T>
-Wrapper<Encoding::kVarInt, T> AsVarInt(T& value) {
+Wrapper<encoding::VarInt, T> AsVarInt(T& value) {
     static_assert(std::is_integral_v<T> && std::is_unsigned_v<T>);
     return value;
 }
