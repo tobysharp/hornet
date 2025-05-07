@@ -19,6 +19,8 @@ add_subdirectory(extern/googletest)
 add_executable(hornet_tests
    hash_test.cpp
    encoding/message_writer_test.cpp
+   protocol/message_framer_test.cpp
+   messages/version_test.cpp
 )
 target_link_libraries(hornet_tests PRIVATE hornet gtest_main)
 

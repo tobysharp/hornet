@@ -14,10 +14,11 @@ class MessageFramer {
         explicit MessageFramer(Magic magic = Magic::Testnet) :
             magic_(magic) {}
     
-        void Frame(const std::string& command, const Message& message) {
+        void Frame(const Message& message) {
             writer_.WriteLE4(static_cast<uint32_t>(magic_));
 
             // Write command (12 bytes, null-padded)
+            const std::string command = message.GetName();
             std::array<char, 12> cmd = {};
             std::copy_n(command.begin(), std::min(size_t{12}, command.size()), cmd.begin());
             writer_.WriteBytes(AsByteSpan<char>(cmd));
@@ -47,11 +48,11 @@ class MessageFramer {
             return writer_.Buffer(); 
         }
     
-    private:
         void Clear() {
             writer_.Clear();
         }
-    
+
+     private:
         Magic magic_;
         MessageWriter writer_;
     };

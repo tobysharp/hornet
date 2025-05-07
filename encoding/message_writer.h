@@ -31,6 +31,10 @@ public:
         return before;
     }
 
+    size_t WriteBool(bool flag) {
+        return WriteByte(static_cast<uint8_t>(flag ? 1 : 0));
+    }
+
     // Write raw bytes
     size_t WriteBytes(std::span<const uint8_t> span) {
         size_t offset = GetPos();
