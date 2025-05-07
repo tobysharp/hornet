@@ -1,18 +1,14 @@
 #pragma once
 
+#include "encoding/endian.h"
+
 #include <algorithm>
-#include <bit>
 #include <concepts>
 #include <cstdint>
 #include <span>
 #include <string>
 #include <type_traits>
 #include <vector>
-
-// Returns true (at compile time) when targeting little-endian systems
-inline constexpr bool IsLittleEndian() {
-    return std::endian::native == std::endian::little;
-}
 
 class MessageWriter {
 public:
