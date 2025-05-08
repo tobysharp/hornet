@@ -8,6 +8,15 @@
 
 using bytes32_t = std::array<uint8_t, 32>;
 
+template <typename T, size_t N>
+constexpr std::span<T> AsSpan(std::array<T, N>& arr) {
+    return arr;
+}
+
+template <typename T, size_t N>
+constexpr std::span<const T> AsSpan(const std::array<T, N>& arr) {
+    return arr;
+}
 template <typename T>
 inline std::span<const uint8_t> AsByteSpan(std::span<const T> input) {
   static_assert(std::is_trivially_copyable_v<T>,

@@ -2,7 +2,9 @@
 
 #include "encoding/message_reader.h"
 #include "encoding/message_writer.h"
+#include "encoding/transfer.h"
 #include "protocol/message.h"
+#include "types.h"
 
 #include <array>
 #include <string>
@@ -36,26 +38,24 @@ public:
     }
 
     void Serialize(MessageWriter& w) const override {
-        w.WriteLE4(version);
-        w.WriteLE8(services);
-        w.WriteLE8(timestamp);
-        w.WriteBytes(addr_recv);
-        w.WriteBytes(addr_from);
-        w.WriteLE8(nonce);
-        w.WriteVarString(user_agent);
-        w.WriteLE4(start_height);
-        w.WriteBool(relay);
+        Transfer(*this, w);
     }
 
     void Deserialize(MessageReader& r) override {
-        r.ReadLE4(version);
-        r.ReadLE8(services);
-        r.ReadLE8(timestamp);
-        r.ReadBytes(addr_recv);
-        r.ReadBytes(addr_from);
-        r.ReadLE8(nonce);
-        r.ReadVarString(user_agent);
-        r.ReadLE4(start_height);
-        r.ReadBool(relay);
+        Transfer(*this, r);
+    }
+
+ private:
+    template <typename Message, typename Streamer>
+    static void Transfer(Message& m, Streamer& s) {
+        TransferLE4(s, m.version);
+        TransferLE8(s, m.services);
+        TransferLE8(s, m.timestamp);
+        TransferBytes(s, AsSpan(m.addr_recv));
+        TransferBytes(s, AsSpan(m.addr_from));
+        TransferLE8(s, m.nonce);
+        TransferVarString(s, m.user_agent);
+        TransferLE4(s, m.start_height);
+        TransferBool(s, m.relay);
     }
 };
