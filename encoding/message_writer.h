@@ -54,48 +54,45 @@ public:
         return offset;
     }
 
+    template <std::integral T>
+    size_t WriteRaw(T value) {
+        return WriteBytes({reinterpret_cast<const uint8_t*>(&value), sizeof(T)});
+    }
+
     // Writes an integral value in little-endian order
     template <std::integral T>
     size_t WriteLE(T value) {
-        if constexpr (IsLittleEndian()) {
-            return WriteBytes({reinterpret_cast<const uint8_t*>(&value), sizeof(T)});
-        } else {
-            return WriteReverseBytes(value);
-        }
+        return WriteRaw(NativeToLittleEndian(value));
     }
 
     // Write an integral value as 2-bytes little-endian
     template <std::integral T>
     size_t WriteLE2(T value) {
-        return WriteLE(static_cast<uint16_t>(value));
+        return WriteLE(NarrowOrThrow<uint16_t>(value));
     }
 
     // Write an integral value as 4-bytes little-endian
     template <std::integral T>
     size_t WriteLE4(T value) {
-        return WriteLE(static_cast<uint32_t>(value));
+        return WriteLE(NarrowOrThrow<uint32_t>(value));
     }
 
     // Write an integral value as 8-bytes little-endian
     template <std::integral T>
     size_t WriteLE8(T value) {
-        return WriteLE(static_cast<uint64_t>(value));
+        return WriteLE(NarrowOrThrow<uint64_t>(value));
     }
 
     // Writes an integral value in big-endian order
     template <std::integral T>
     size_t WriteBE(T value) {
-        if constexpr (!IsLittleEndian()) {
-            return WriteBytes({reinterpret_cast<const uint8_t*>(&value), sizeof(T)});
-        } else {
-            return WriteReverseBytes(value);
-        }
+        return WriteRaw(NativeToBigEndian(value));
     }
 
     // Write an integral value as 2-bytes big-endian
     template <std::integral T>
     size_t WriteBE2(T value) {
-        return WriteBE(static_cast<uint16_t>(value));
+        return WriteBE(NarrowOrThrow<uint16_t>(value));
     }
 
     // Writes a variable-length unsigned integer
@@ -150,15 +147,6 @@ public:
     }
     
 private:
-    // Write bytes in reversed order for switching endianness
-    template <std::integral T>
-    size_t WriteReverseBytes(T value) {
-        uint8_t reversed[sizeof(T)];
-        const uint8_t* begin_byte = reinterpret_cast<const uint8_t*>(&value);
-        std::reverse_copy(begin_byte, begin_byte + sizeof(T), reversed);
-        return WriteBytes(reversed);
-    }
-
     std::vector<uint8_t> buffer_;
     std::vector<uint8_t>::iterator pos_;
 };

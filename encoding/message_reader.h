@@ -6,6 +6,7 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -44,70 +45,48 @@ public:
         return s;
     }
 
+    template <std::integral T>
+    T ReadRaw() {
+        RequireAvailable(sizeof(T));
+        T value;
+        std::memcpy(reinterpret_cast<uint8_t*>(&value), buffer_.data() + pos_, sizeof(T));
+        pos_ += sizeof(T);
+        return value;
+    }
+
     // Read little-endian integer of type T
     template <std::integral T>
     T ReadLE() {
-        constexpr size_t n = sizeof(T);
-        RequireAvailable(n);
-        T val = 0;
-        const auto src_bytes = ReadBytes(n);
-         if constexpr (IsLittleEndian()) {
-            val = *reinterpret_cast<const T*>(&src_bytes[0]);
-        } else {
-            std::reverse_copy(src_bytes.begin(), src_bytes.end(), reinterpret_cast<uint8_t*>(&val));
-        }
-        return val;
+        return NativeToLittleEndian(ReadRaw<T>());
     }
 
     // Read big-endian integer of type T
     template <std::integral T>
     T ReadBE() {
-        size_t n = sizeof(T);
-        RequireAvailable(n);
-        T val = 0;
-        const auto src_bytes = ReadBytes(n);
-        if constexpr (!IsLittleEndian()) {
-            val = *reinterpret_cast<const T*>(src_bytes);
-        } else {
-            std::reverse_copy(src_bytes.begin(), src_bytes.end(), reinterpret_cast<uint8_t*>(&val));
-        }
-        return val;
+        return NativeToBigEndian(ReadRaw<T>());
     }
 
     template <std::integral T = uint16_t>
     T ReadLE2() {
-        const auto native = ReadLE<uint16_t>();
-        if (native > std::numeric_limits<T>::max()) {
-            throw std::out_of_range("Data lost in type conversion.");
-        }
-        return static_cast<T>(native);
+        return NarrowOrThrow<T>(ReadLE<uint16_t>());
     }
 
     template <std::integral T = uint32_t>
     T ReadLE4() {
-        const auto native = ReadLE<uint32_t>();
-        if (native > std::numeric_limits<T>::max()) {
-            throw std::out_of_range("Data lost in type conversion.");
-        }
-        return static_cast<T>(native);
+        return NarrowOrThrow<T>(ReadLE<uint32_t>());
+
     }
 
     template <std::integral T = uint64_t>
     T ReadLE8() {
-        const auto native = ReadLE<uint64_t>();
-        if (native > std::numeric_limits<T>::max()) {
-            throw std::out_of_range("Data lost in type conversion.");
-        }
-        return static_cast<T>(native);
+        return NarrowOrThrow<T>(ReadLE<uint64_t>());
+
     }
     
     template <std::integral T = uint16_t>
     T ReadBE2() {
-        const auto native = ReadBE<uint16_t>();
-        if (native > std::numeric_limits<T>::max()) {
-            throw std::out_of_range("Data lost in type conversion.");
-        }
-        return static_cast<T>(native);
+        return NarrowOrThrow<T>(ReadBE<uint16_t>());
+
     }
 
     // Read a VarInt as per Bitcoin CompactSize
