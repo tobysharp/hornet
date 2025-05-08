@@ -13,7 +13,7 @@ class MessageFramer {
     public:
         explicit MessageFramer(Magic magic = Magic::Testnet) :
             magic_(magic) {}
-    
+
         void Frame(const Message& message) {
             writer_.WriteLE4(static_cast<uint32_t>(magic_));
 
@@ -43,17 +43,22 @@ class MessageFramer {
             writer_.SeekPos(payload_hash_index);
             writer_.WriteBytes({hash.data(), 4});
         }
-    
+
         const std::vector<uint8_t>& Buffer() const { 
             return writer_.Buffer(); 
         }
-    
+
         void Clear() {
             writer_.Clear();
         }
 
-     private:
+    private:
         Magic magic_;
         MessageWriter writer_;
-    };
-    
+};
+
+inline std::vector<uint8_t> FrameMessage(Magic magic, const Message& message) {
+    MessageFramer framer(magic);
+    framer.Frame(message);
+    return std::move(framer.Buffer());  // explicitly moved to avoid copy
+}

@@ -21,6 +21,7 @@ add_executable(hornet_tests
    encoding/message_reader_test.cpp
    encoding/message_writer_test.cpp
    protocol/message_framer_test.cpp
+   protocol/message_parser_test.cpp
    messages/version_test.cpp
 )
 target_link_libraries(hornet_tests PRIVATE hornet gtest_main)
