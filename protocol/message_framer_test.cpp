@@ -1,6 +1,9 @@
 #include "protocol/message_framer.h"
-#include "protocol/message.h"
+
+#include "encoding/message_reader.h"
+#include "encoding/message_writer.h"
 #include "protocol/constants.h"
+#include "protocol/message.h"
 
 #include <gtest/gtest.h>
 
@@ -14,6 +17,10 @@ class DummyMessage : public Message {
 
         void Serialize(MessageWriter& w) const override {
             w.WriteLE4(0xDEADBEEF);
+        }
+
+        void Deserialize(MessageReader& r) override {
+            r.ReadLE4();
         }
     };
 

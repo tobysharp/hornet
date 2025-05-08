@@ -14,6 +14,10 @@ namespace {
 
 class DummyMessage : public Message {
     public:
+        void Deserialize(MessageReader& r) override {
+            r.ReadByte();
+            r.ReadLE4();
+        }
         void Serialize(MessageWriter& w) const override {
             w.WriteByte(0x42);
             w.WriteLE4(0xDEADBEEF);

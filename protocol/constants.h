@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <cstddef>
+
 // Magic numbers from https://en.bitcoin.it/wiki/Protocol_documentation
 enum class Magic : uint32_t {
     Main = 0xD9B4BEF9,      // main

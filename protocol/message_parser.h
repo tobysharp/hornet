@@ -5,9 +5,9 @@
 #include "protocol/constants.h"
 
 #include <cstdint>
-#include <string>
 #include <span>
 #include <stdexcept>
+#include <string>
 
 class MessageParser {
 public:

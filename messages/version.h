@@ -1,5 +1,6 @@
 #pragma once
 
+#include "encoding/message_reader.h"
 #include "encoding/message_writer.h"
 #include "protocol/message.h"
 
@@ -32,5 +33,17 @@ public:
         w.WriteVarString(user_agent);
         w.WriteLE4(start_height);
         w.WriteBool(relay);
+    }
+
+    void Deserialize(MessageReader& r) override {
+        r.ReadLE4(version);
+        r.ReadLE8(services);
+        r.ReadLE8(timestamp);
+        r.ReadBytes(addr_recv);
+        r.ReadBytes(addr_from);
+        r.ReadLE8(nonce);
+        r.ReadVarString(user_agent);
+        r.ReadLE4(start_height);
+        r.ReadBool(relay);
     }
 };

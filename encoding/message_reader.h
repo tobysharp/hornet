@@ -34,8 +34,16 @@ public:
         return buffer_[pos_++];
     }
 
+    void ReadByte(uint8_t& uc) {
+        uc = ReadByte();
+    }
+
     uint8_t ReadBool() {
         return static_cast<bool>(ReadByte());
+    }
+
+    void ReadBool(bool& b) {
+        b = ReadBool();
     }
 
     std::span<const uint8_t> ReadBytes(size_t len) {
@@ -43,6 +51,11 @@ public:
         auto s = buffer_.subspan(pos_, len);
         pos_ += len;
         return s;
+    }
+
+    void ReadBytes(std::span<uint8_t> span) {
+        const auto src = ReadBytes(span.size());
+        std::copy(src.begin(), src.end(), span.begin());
     }
 
     template <std::integral T>
@@ -71,10 +84,20 @@ public:
         return NarrowOrThrow<T>(ReadLE<uint16_t>());
     }
 
+    template <std::integral T>
+    void ReadLE2(T& t) {
+        t = NarrowOrThrow<T>(ReadLE<uint16_t>());
+    }
+
     template <std::integral T = uint32_t>
     T ReadLE4() {
         return NarrowOrThrow<T>(ReadLE<uint32_t>());
 
+    }
+
+    template <std::integral T>
+    void ReadLE4(T& t) {
+        t = NarrowOrThrow<T>(ReadLE<uint32_t>());
     }
 
     template <std::integral T = uint64_t>
@@ -83,10 +106,20 @@ public:
 
     }
     
+    template <std::integral T>
+    void ReadLE8(T& t) {
+        t = NarrowOrThrow<T>(ReadLE<uint64_t>());
+    }
+
     template <std::integral T = uint16_t>
     T ReadBE2() {
         return NarrowOrThrow<T>(ReadBE<uint16_t>());
 
+    }
+
+    template <std::integral T>
+    void ReadBE2(T& t) {
+        t = NarrowOrThrow<T>(ReadBE<uint16_t>());
     }
 
     // Read a VarInt as per Bitcoin CompactSize
@@ -104,10 +137,19 @@ public:
         }
     }
 
+    template <std::unsigned_integral T>
+    void ReadVarInt(T& t) {
+        t = ReadVarInt<T>();
+    }
+
     std::string ReadVarString() {
         size_t len = ReadVarInt<size_t>();
         auto s = ReadBytes(len);
         return std::string(reinterpret_cast<const char*>(s.data()), s.size());
+    }
+
+    void ReadVarString(std::string& str) {
+        str = ReadVarString();
     }
 
 private:
