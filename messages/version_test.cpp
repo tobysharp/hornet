@@ -68,15 +68,7 @@ TEST(VersionMessageTest, RoundTripSerialization) {
     const auto buffer = FrameMessage(Magic::Main, original);
     auto msg = ParseMessage<VersionMessage>(factory, Magic::Main, buffer);
 
-    EXPECT_EQ(msg->version, original.version);
-    EXPECT_EQ(msg->services, original.services);
-    EXPECT_EQ(msg->timestamp, original.timestamp);
-    EXPECT_EQ(msg->addr_recv, original.addr_recv);
-    EXPECT_EQ(msg->addr_from, original.addr_from);
-    EXPECT_EQ(msg->nonce, original.nonce);
-    EXPECT_EQ(msg->user_agent, original.user_agent);
-    EXPECT_EQ(msg->start_height, original.start_height);
-    EXPECT_EQ(msg->relay, original.relay);
+    EXPECT_EQ(*msg, original);
 }
 
 TEST(VersionMessageTest, SendVersionMessage) {

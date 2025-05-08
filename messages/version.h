@@ -23,6 +23,18 @@ public:
         return "version";
     }
     
+    inline friend bool operator==(const VersionMessage& a, const VersionMessage& b) {
+        return a.version == b.version &&
+               a.services == b.services &&
+               a.timestamp == b.timestamp &&
+               a.addr_recv == b.addr_recv &&
+               a.addr_from == b.addr_from &&
+               a.nonce == b.nonce &&
+               a.user_agent == b.user_agent &&
+               a.start_height == b.start_height &&
+               a.relay == b.relay;
+    }
+
     void Serialize(MessageWriter& w) const override {
         w.WriteLE4(version);
         w.WriteLE8(services);
