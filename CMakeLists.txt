@@ -20,6 +20,7 @@ add_executable(hornet_tests
    hash_test.cpp
    encoding/message_reader_test.cpp
    encoding/message_writer_test.cpp
+   protocol/message_factory_test.cpp
    protocol/message_framer_test.cpp
    protocol/message_parser_test.cpp
    messages/version_test.cpp
