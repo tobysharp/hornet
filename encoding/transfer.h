@@ -1,66 +1,64 @@
 #pragma once
 
-#include "encoding/message_reader.h"
-#include "encoding/message_writer.h"
-
 #include <concepts>
 #include <cstdint>
 #include <string>
 
+#include "encoding/reader.h"
+#include "encoding/writer.h"
 
 template <typename Streamer, std::integral T>
-inline void TransferLE2(Streamer& s, T& field) {
-    if constexpr (std::is_const_v<T>)
-        s.WriteLE2(field);
-    else
-        s.ReadLE2(field);
+inline void TransferLE2(Streamer &s, T &field) {
+  if constexpr (std::is_const_v<T>)
+    s.WriteLE2(field);
+  else
+    s.ReadLE2(field);
 }
 
 template <typename Streamer, std::integral T>
-inline void TransferBE2(Streamer& s, T& field) {
-    if constexpr (std::is_const_v<T>)
-        s.WriteBE2(field);
-    else
-        s.ReadBE2(field);
+inline void TransferBE2(Streamer &s, T &field) {
+  if constexpr (std::is_const_v<T>)
+    s.WriteBE2(field);
+  else
+    s.ReadBE2(field);
 }
 
 template <typename Streamer, std::integral T>
-inline void TransferLE4(Streamer& s, T& field) {
-    if constexpr (std::is_const_v<T>)
-        s.WriteLE4(field);
-    else
-        s.ReadLE4(field);
+inline void TransferLE4(Streamer &s, T &field) {
+  if constexpr (std::is_const_v<T>)
+    s.WriteLE4(field);
+  else
+    s.ReadLE4(field);
 }
 
 template <typename Streamer, std::integral T>
-inline void TransferLE8(Streamer& s, T& field) {
-    if constexpr (std::is_const_v<T>)
-        s.WriteLE8(field);
-    else
-        s.ReadLE8(field);
+inline void TransferLE8(Streamer &s, T &field) {
+  if constexpr (std::is_const_v<T>)
+    s.WriteLE8(field);
+  else
+    s.ReadLE8(field);
 }
 
 template <typename Streamer, std::integral T>
-inline void TransferBytes(Streamer& s, std::span<T> field) {
-    if constexpr (std::is_const_v<T>)
-        s.WriteBytes(field);
-    else
-        s.ReadBytes(field);
+inline void TransferBytes(Streamer &s, std::span<T> field) {
+  if constexpr (std::is_const_v<T>)
+    s.WriteBytes(field);
+  else
+    s.ReadBytes(field);
 }
 
 template <typename Streamer, typename String>
-inline void TransferVarString(Streamer& s, String& field) {
-    if constexpr (std::is_const_v<String>)
-        s.WriteVarString(field);
-    else
-        s.ReadVarString(field);
+inline void TransferVarString(Streamer &s, String &field) {
+  if constexpr (std::is_const_v<String>)
+    s.WriteVarString(field);
+  else
+    s.ReadVarString(field);
 }
 
 template <typename Streamer, typename Bool>
-inline void TransferBool(Streamer& s, Bool& field) {
-    if constexpr (std::is_const_v<Bool>)
-        s.WriteBool(field);
-    else
-        s.ReadBool(field);
+inline void TransferBool(Streamer &s, Bool &field) {
+  if constexpr (std::is_const_v<Bool>)
+    s.WriteBool(field);
+  else
+    s.ReadBool(field);
 }
-

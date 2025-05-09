@@ -21,12 +21,12 @@ add_subdirectory(extern/googletest)
 # Unit test binary using GoogleTest
 add_executable(hornet_tests
    crypto/hash_test.cpp
-   encoding/message_reader_test.cpp
-   encoding/message_writer_test.cpp
-   protocol/message_dispatch_test.cpp
-   protocol/message_factory_test.cpp
-   protocol/message_framer_test.cpp
-   protocol/message_parser_test.cpp
+   encoding/reader_test.cpp
+   encoding/writer_test.cpp
+   protocol/dispatch_test.cpp
+   protocol/factory_test.cpp
+   protocol/framer_test.cpp
+   protocol/parser_test.cpp
    messages/version_test.cpp
    net/bitcoind_test.cpp
 )

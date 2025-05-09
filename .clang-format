@@ -1,0 +1,13 @@
+BasedOnStyle: Google
+IndentWidth: 2
+ColumnLimit: 100
+AllowShortFunctionsOnASingleLine: Empty
+SpacesBeforeTrailingComments: 2
+SortIncludes: true
+IncludeBlocks: Preserve
+IncludeCategories:
+  - Regex:           '^<>'
+    Priority:        1
+  - Regex:           '^"[^/]+\.h"$'
+    Priority:        2
+

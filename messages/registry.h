@@ -1,19 +1,23 @@
 #pragma once
 
 #include "messages/version.h"
-#include "protocol/message_factory.h"
+#include "protocol/factory.h"
 
-inline void RegisterCoreMessages(MessageFactory& factory) {
-    // Register all message types here that we want to be able
-    // to instantiate on parsing prior to deserialization.
-    factory.Register<VersionMessage>();
-    // factory.Register<...>();
+namespace hornet::message {
+
+inline void RegisterCoreMessages(protocol::Factory &factory) {
+  // Register all message types here that we want to be able
+  // to instantiate on parsing prior to deserialization.
+  factory.Register<Version>();
+  // factory.Register<...>();
 }
 
 // Returns a message factory initialized with all the message
 // types that we know how to represent with concrete classes.
-inline MessageFactory CreateMessageFactory() {
-    MessageFactory factory;
-    RegisterCoreMessages(factory);
-    return factory;
+inline protocol::Factory CreateMessageFactory() {
+  protocol::Factory factory;
+  RegisterCoreMessages(factory);
+  return factory;
 }
+
+}  // namespace hornet::message
