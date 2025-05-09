@@ -5,8 +5,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Header-only core library
-add_library(hornet INTERFACE)
-target_include_directories(hornet INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+add_library(hornet STATIC
+   net/bitcoind.cpp
+   net/socket.cpp
+)
+target_include_directories(hornet PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Main app (optional)
 add_executable(btchornet main.cpp)
@@ -25,6 +28,8 @@ add_executable(hornet_tests
    protocol/message_framer_test.cpp
    protocol/message_parser_test.cpp
    messages/version_test.cpp
+   net/bitcoind_test.cpp
+   net/socket_test.cpp
 )
 target_link_libraries(hornet_tests PRIVATE hornet gtest_main)
 

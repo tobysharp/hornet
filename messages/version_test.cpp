@@ -71,38 +71,4 @@ TEST(VersionMessageTest, RoundTripSerialization) {
     EXPECT_EQ(*msg, original);
 }
 
-TEST(VersionMessageTest, SendVersionMessage) {
-    // Set up socket
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
-    ASSERT_NE(sock, -1);
-
-    sockaddr_in addr{};
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(8333); // mainnet port
-    addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-
-    ASSERT_NE(connect(sock, (sockaddr*)&addr, sizeof(addr)), -1);
-
-    // Create and serialize the version message
-    VersionMessage msg;
-    msg.timestamp = 1700000000;
-    msg.user_agent = "/btchornet:test/";
-
-    MessageFramer framer;
-    framer.Frame(msg);
-    const auto& bytes = framer.Buffer();
-    send(sock, bytes.data(), bytes.size(), 0);
-
-    // Receive response
-    uint8_t header[24];
-    size_t n = recv(sock, header, sizeof(header), 0);
-    ASSERT_EQ(n, 24) << "Expected 24-byte message header from bitcoind";
-
-    // Expect response command to be "version"
-    std::string command(reinterpret_cast<char*>(header + 4), 12);
-    EXPECT_EQ(strcmp(command.c_str(), "version"), 0);
-
-    close(sock);
-}
-
 }  // namespace 
