@@ -13,9 +13,9 @@
 
 namespace {
 
-TEST(BitcoindTest, LaunchesAndAcceptsConnection) {
+void SwapVersionMessages(Network network) {
     // Launch bitcoind on regtest
-    Bitcoind node = Bitcoind::Launch(Network::Regtest);
+    Bitcoind node = Bitcoind::Launch(network);
 
     // Try connecting to it
     Socket sock = Socket::Connect(kLocalhost, node.port);
@@ -36,6 +36,19 @@ TEST(BitcoindTest, LaunchesAndAcceptsConnection) {
     const auto msgin = ParseMessage(factory, node.magic, {buf.data(), n});
 
     EXPECT_TRUE(msgin->GetName() == "version");
+}
+
+TEST(BitcoindTest, SwapVersionMessagesRegtest) {
+    SwapVersionMessages(Network::Regtest);
+}
+
+
+TEST(BitcoindTest, SwapVersionMessagesTestnett) {
+    SwapVersionMessages(Network::Testnet);
+}
+
+TEST(BitcoindTest, SwapVersionMessagesMainnett) {
+    SwapVersionMessages(Network::Mainnet);
 }
 
 }  // namespace

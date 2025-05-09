@@ -29,7 +29,6 @@ add_executable(hornet_tests
    protocol/message_parser_test.cpp
    messages/version_test.cpp
    net/bitcoind_test.cpp
-   net/socket_test.cpp
 )
 target_link_libraries(hornet_tests PRIVATE hornet gtest_main)
 

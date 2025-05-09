@@ -1,18 +1,13 @@
 // bitcoind_instance.h
 #pragma once
 
+#include "net/constants.h"
 #include "protocol/constants.h"
 
 #include <cstdint>
 #include <string>
 #include <sys/types.h>
 #include <unistd.h>
-
-enum class Network {
-    Mainnet,
-    Testnet,
-    Regtest
-};
 
 struct Bitcoind {
     pid_t pid = -1;

@@ -2,6 +2,8 @@
 
 #include "net/bitcoind.h"
 
+#include "net/constants.h"
+
 #include <cstdlib>
 #include <stdexcept>
 #include <sys/wait.h>
@@ -21,20 +23,8 @@ Bitcoind Bitcoind::Launch(Network network) {
     Bitcoind instance;
 
     // Determine network parameters
-    switch (network) {
-        case Network::Mainnet:
-            instance.magic = Magic::Main;
-            instance.port = 8333;
-            break;
-        case Network::Testnet:
-            instance.magic = Magic::Testnet;
-            instance.port = 18333;
-            break;
-        case Network::Regtest:
-            instance.magic = Magic::Regtest;
-            instance.port = 18444;
-            break;
-    }
+    instance.magic = GetNetworkMagic(network);
+    instance.port = GetNetworkPort(network);
 
     // Create temp datadir
     std::ostringstream path;
