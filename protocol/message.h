@@ -14,8 +14,8 @@ namespace hornet::protocol {
 class Message {
  public:
   virtual ~Message() = default;
-  virtual void Serialize(encoding::Writer& w) const = 0;
-  virtual void Deserialize(encoding::Reader& r) = 0;
+  virtual void Serialize(encoding::Writer& w) const {}
+  virtual void Deserialize(encoding::Reader& r) {}
   virtual std::string GetName() const = 0;
 };
 
