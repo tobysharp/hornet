@@ -1,5 +1,5 @@
-#include "hash.h"
-#include "sha256.h"
+#include "crypto/hash.h"
+#include "crypto/sha256.h"
 #include "types.h"
 
 #include <array>

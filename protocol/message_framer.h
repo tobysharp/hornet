@@ -1,7 +1,7 @@
 #pragma once
 
+#include "crypto/hash.h"
 #include "encoding/message_writer.h"
-#include "hash.h"
 #include "protocol/constants.h"
 #include "protocol/message.h"
 

@@ -20,7 +20,7 @@ add_subdirectory(extern/googletest)
 
 # Unit test binary using GoogleTest
 add_executable(hornet_tests
-   hash_test.cpp
+   crypto/hash_test.cpp
    encoding/message_reader_test.cpp
    encoding/message_writer_test.cpp
    protocol/message_dispatch_test.cpp

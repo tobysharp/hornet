@@ -1,9 +1,10 @@
+#include "protocol/message_parser.h"
+
+#include "crypto/hash.h"  // for DoubleSha256
 #include "encoding/message_writer.h"
-#include "hash.h"  // for DoubleSha256
 #include "protocol/constants.h"
 #include "protocol/message.h"
 #include "protocol/message_framer.h"
-#include "protocol/message_parser.h"
 
 #include <array>
 #include <string>
