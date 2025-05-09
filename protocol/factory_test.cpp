@@ -1,7 +1,7 @@
 #include "protocol/factory.h"
 
-#include "messages/registry.h"
-#include "messages/version.h"
+#include "message/registry.h"
+#include "message/version.h"
 
 #include <gtest/gtest.h>
 

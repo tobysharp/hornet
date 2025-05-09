@@ -1,7 +1,7 @@
 #include "net/bitcoind.h"
 
-#include "messages/registry.h"
-#include "messages/version.h"
+#include "message/registry.h"
+#include "message/version.h"
 #include "net/constants.h"
 #include "net/socket.h"
 #include "protocol/dispatch.h"

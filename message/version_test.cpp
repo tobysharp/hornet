@@ -1,6 +1,6 @@
-#include "messages/version.h"
+#include "message/version.h"
 
-#include "messages/registry.h"
+#include "message/registry.h"
 #include "protocol/constants.h"
 #include "protocol/dispatch.h"
 #include "protocol/factory.h"

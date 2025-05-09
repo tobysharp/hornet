@@ -1,6 +1,6 @@
 #pragma once
 
-#include "messages/version.h"
+#include "message/version.h"
 #include "protocol/factory.h"
 
 namespace hornet::message {
