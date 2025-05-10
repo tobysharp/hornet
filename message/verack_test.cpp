@@ -5,7 +5,9 @@
 #include "message/registry.h"
 #include "message/version.h"
 #include "net/bitcoind.h"
+#include "net/connection.h"
 #include "net/constants.h"
+#include "net/receive.h"
 #include "net/socket.h"
 #include "protocol/constants.h"
 #include "protocol/dispatch.h"
@@ -24,36 +26,19 @@ TEST(VerackMessageTest, TestVerack) {
 }
 
 TEST(VerackMessageTest, TestSendVerack) {
-  const auto network = net::Network::Regtest;
-  net::Bitcoind node = net::Bitcoind::Launch(network);
-  std::array<uint8_t, 2048> buf{};
-  protocol::Factory factory = message::CreateMessageFactory();
- 
-  // Try connecting to it
+  // Launch a local bitcoind node instance if necessary, and connect
+  net::Bitcoind node = net::Bitcoind::Launch();
   const auto sock = net::Socket::Connect(net::kLocalhost, node.port);
+  net::Connection connection{sock, node.magic};
 
   // Send a version message
   sock.Write(FrameMessage(node.magic, Version{}));
-
-  // Try reading the response
-  size_t n = sock.Read(buf);
-  EXPECT_GT(n, 24);
-  EXPECT_EQ(*reinterpret_cast<const protocol::Magic*>(&buf[0]), node.magic);
-
-  // Attempt to parse and deserialize
-  const auto msgin = protocol::ParseMessage<Version>(factory, node.magic, {buf.data(), n});
-  EXPECT_TRUE(msgin->GetName() == "version");
+  const auto version = connection.NextMessage();
+  EXPECT_TRUE(version->GetName() == "version");
 
   // Send verack message
   sock.Write(FrameMessage(node.magic, Verack{}));
-
-  // Read response
-  n = sock.Read(buf);
-  EXPECT_EQ(n, 24);
-  EXPECT_EQ(*reinterpret_cast<const protocol::Magic*>(&buf[0]), node.magic);
-
-  // Parse and deserialize
-  const auto verack = protocol::ParseMessage<Verack>(factory, node.magic, {buf.data(), n});
+  const auto verack =connection.NextMessage();
   EXPECT_EQ(verack->GetName(), "verack");
 }
 

@@ -8,6 +8,7 @@
 #include "crypto/hash.h"
 #include "encoding/reader.h"
 #include "protocol/constants.h"
+#include "protocol/header.h"
 
 namespace hornet::protocol {
 
@@ -16,46 +17,64 @@ class Parser {
   using Error = std::runtime_error;
 
   struct ParsedMessage {
-    std::string_view command;
+    Header header;
     std::span<const uint8_t> payload;
   };
 
   explicit Parser(Magic expected_magic = Magic::Testnet) : magic_(expected_magic) {}
 
+  // Reads a 24-byte header from a buffer.
+  static Header ReadHeader(std::span<const uint8_t> buffer) {
+    encoding::Reader reader{buffer};
+    Header header;
+    header.Deserialize(reader);
+    return header;
+  }
+
+  // Parses (unframes) a buffer to extract command and payload.
   ParsedMessage Parse(std::span<const uint8_t> buffer) const {
-    if (buffer.size() < 24) throw Error("Message too short: requires 24-byte header.");
+    // Validate buffer holds enough data for header.
+    if (buffer.size() < kHeaderLength) throw Error("Message too short: requires 24-byte header.");
 
-    encoding::Reader reader(buffer);
+    // Read the header.
+    const Header header = ReadHeader(buffer);
 
-    // 1. Read and validate magic
-    const Magic magic = static_cast<Magic>(reader.ReadLE4());
-    if (magic != magic_) {
-      throw Error("Invalid magic bytes.");
-    }
+    // Validate magic.
+    if (header.magic != magic_) throw Error("Invalid magic bytes.");
 
-    // 2. Read and map command string (12-byte null-padded ASCII)
-    const auto command_bytes = reader.ReadBytes(12);
-    std::string_view command = MapCommand(command_bytes);
-
-    // 3. Read payload length
-    uint32_t length = reader.ReadLE4();
-    if (length > buffer.size() - 24) {
+    // Validate buffer length -- incomplete messages not allowed here.
+    if (header.bytes > buffer.size() - kHeaderLength) {
       throw Error("Declared payload length exceeds buffer size.");
+    } else if (header.bytes > kMaxMessageSize) {
+      throw Error("Payload size exceeds protocol maximum.");
     }
 
-    // 4. Read checksum
-    auto checksum = reader.ReadBytes(4);
+    // Extract payload
+    const auto payload = buffer.subspan(kHeaderLength, header.bytes);
 
-    // 5. Extract payload
-    auto payload = buffer.subspan(reader.GetPos(), length);
-
-    // 6. Validate checksum
-    auto hash = crypto::DoubleSha256(payload);
-    if (!std::equal(checksum.begin(), checksum.end(), hash.begin())) {
+    // Validate checksum
+    const auto hash = crypto::DoubleSha256(payload);
+    if (!std::equal(header.checksum.begin(), header.checksum.end(), hash.begin())) {
       throw Error("Checksum mismatch");
     }
 
-    return {command, payload};
+    // Return unframed payload
+    return {header, payload};
+  }
+
+  // Determines whether a buffer contains at least one complete message, ready
+  // to be parsed and deserialized.
+  bool IsCompleteMessage(std::span<const uint8_t> buffer) const {
+    // Validate buffer holds enough data for header.
+    if (buffer.size() < kHeaderLength) return false;
+
+    // Read the header.
+    const Header header = ReadHeader(buffer);
+
+    // NB: Note that currently we don't try to validate the magic bytes here.
+
+    // Returns true if the buffer holds all the advertised data.
+    return kHeaderLength + header.bytes <= buffer.size();
   }
 
   static ParsedMessage Parse(Magic expected_magic, std::span<const uint8_t> buffer) {
@@ -63,13 +82,12 @@ class Parser {
   }
 
  private:
-  static inline std::string_view MapCommand(std::span<const uint8_t> bytes) {
+  static inline std::string_view MapCommand(const std::array<char, 12>& bytes) {
     auto end = std::find(bytes.begin(), bytes.end(), 0);
-    return std::string_view(reinterpret_cast<const char *>(bytes.data()),
-                            std::distance(bytes.begin(), end));
+    return std::string_view(bytes.data(), std::distance(bytes.begin(), end));
   }
 
-  Magic magic_;
+  const Magic magic_;
 };
 
 inline Parser::ParsedMessage ParseMessage(Magic magic, const std::span<const uint8_t> buffer) {

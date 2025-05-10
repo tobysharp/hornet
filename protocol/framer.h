@@ -7,6 +7,7 @@
 #include "crypto/hash.h"
 #include "encoding/writer.h"
 #include "protocol/constants.h"
+#include "protocol/header.h"
 #include "protocol/message.h"
 
 namespace hornet::protocol {
@@ -16,34 +17,25 @@ class Framer {
   explicit Framer(Magic magic = Magic::Testnet) : magic_(magic) {}
 
   void Frame(const Message &message) {
-    writer_.WriteLE4(static_cast<uint32_t>(magic_));
+    // Defer writing the real header until after we know the payload details.
+    const auto header_pos = writer_.GetPos();
+    Header header = { .magic = magic_,
+                      .command = message.GetName() };
+    header.Serialize(writer_);
 
-    // Write command (12 bytes, null-padded)
-    const std::string command = message.GetName();
-    std::array<char, 12> cmd = {};
-    std::copy_n(command.begin(), std::min(size_t{12}, command.size()), cmd.begin());
-    writer_.WriteBytes(AsByteSpan<char>(cmd));
-
-    // Defer payload length (4 bytes, LE)
-    const auto payload_length_index = writer_.WriteLE4(0);
-
-    // Defer payload hash (4 bytes)
-    const auto payload_hash_index = writer_.WriteLE4(0);
-
-    // Write payload itself
-    const auto payload_start_index = writer_.GetPos();
+    // Serialize the message payload.
+    const auto payload_pos = writer_.GetPos();
     message.Serialize(writer_);
+    header.bytes = writer_.GetPos() - payload_pos;
 
-    // Compute payload length and write it into the buffer
-    const auto payload_length_bytes = writer_.GetPos() - payload_start_index;
-    writer_.SeekPos(payload_length_index);
-    writer_.WriteLE4(payload_length_bytes);
+    // Compute the hash of the payload.
+    const auto hash = crypto::DoubleSha256(std::span{Buffer().data() + payload_pos, header.bytes});
+    std::copy_n(hash.begin(), header.checksum.size(), header.checksum.begin());
 
-    // Compute payload hash and write it into the buffer
-    const auto hash = crypto::DoubleSha256(
-        std::span{Buffer().data() + payload_start_index, payload_length_bytes});
-    writer_.SeekPos(payload_hash_index);
-    writer_.WriteBytes({hash.data(), 4});
+    // Rewind and serialize the correct header.
+    const auto end_pos = writer_.SeekPos(header_pos);
+    header.Serialize(writer_);
+    writer_.SeekPos(end_pos);
   }
 
   const std::vector<uint8_t> &Buffer() const {

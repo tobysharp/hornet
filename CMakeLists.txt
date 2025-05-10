@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Header-only core library
 add_library(hornet STATIC
    net/bitcoind.cpp
+   net/connection.cpp
    net/socket.cpp
 )
 target_include_directories(hornet PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

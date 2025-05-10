@@ -36,7 +36,7 @@ TEST(ParserTest, ParsesValidMessage) {
   Parser parser(Magic::Main);
   auto parsed = parser.Parse(framer.Buffer());
 
-  EXPECT_EQ(parsed.command, "ping");
+  EXPECT_EQ(parsed.header.command, "ping");
   EXPECT_EQ(parsed.payload.size(), 5);
   EXPECT_EQ(parsed.payload[0], 0x42);
 }

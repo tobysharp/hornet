@@ -26,6 +26,12 @@ inline std::span<const uint8_t> AsByteSpan(std::span<const T> input) {
   return {reinterpret_cast<const uint8_t*>(input.data()), input.size_bytes()};
 }
 
+template <typename T>
+inline std::span<uint8_t> AsByteSpan(std::span<T> input) {
+  static_assert(std::is_trivially_copyable_v<T>, "AsByteSpan requires trivially copyable types");
+  return {reinterpret_cast<uint8_t*>(input.data()), input.size_bytes()};
+}
+
 // Writes the uint256_t as a 64-character hex string to an output stream,
 // using big-endian byte order (as typically displayed in Bitcoin).
 // Note: this is a textual representation, not binary output.

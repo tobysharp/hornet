@@ -19,7 +19,7 @@ Bitcoind::~Bitcoind() {
   Terminate();
 }
 
-Bitcoind Bitcoind::Launch(Network network) {
+Bitcoind Bitcoind::Launch(Network network /* = Network::Regtest */) {
   Bitcoind instance;
 
   // Determine network parameters

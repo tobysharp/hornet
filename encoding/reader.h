@@ -147,6 +147,14 @@ class Reader {
     return std::string(reinterpret_cast<const char *>(s.data()), s.size());
   }
 
+  // Reads a fixed-length zero-padded string
+  template <size_t kLength>
+  void ReadZeroPaddedString(std::string& out) {
+    std::array<char, kLength> cstr = {};
+    ReadBytes({reinterpret_cast<uint8_t*>(cstr.data()), sizeof(cstr)});
+    out = cstr.data();
+  }
+
   void ReadVarString(std::string &str) {
     str = ReadVarString();
   }

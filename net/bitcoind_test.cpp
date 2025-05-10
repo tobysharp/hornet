@@ -3,6 +3,7 @@
 #include "message/registry.h"
 #include "message/version.h"
 #include "net/constants.h"
+#include "net/receive.h"
 #include "net/socket.h"
 #include "protocol/dispatch.h"
 #include "protocol/factory.h"
@@ -22,20 +23,10 @@ void SwapVersionMessages(Network network) {
   Socket sock = Socket::Connect(kLocalhost, node.port);
 
   // Send a version message
-  message::Version msgout;
-  sock.Write(FrameMessage(node.magic, msgout));
+  sock.Write(FrameMessage(node.magic, message::Version{}));
 
-  // Try reading the response
-  std::array<uint8_t, 2048> buf{};
-  const size_t n = sock.Read(buf);
-  EXPECT_GT(n, 24);
-
-  EXPECT_EQ(*reinterpret_cast<const protocol::Magic*>(&buf[0]), node.magic);
-
-  // Attempt to parse and deserialize
-  protocol::Factory factory = message::CreateMessageFactory();
-  const auto msgin = protocol::ParseMessage(factory, node.magic, {buf.data(), n});
-
+  // Receive a version message
+  const auto msgin = ReceiveMessage<message::Version>(sock, node.magic);
   EXPECT_TRUE(msgin->GetName() == "version");
 }
 

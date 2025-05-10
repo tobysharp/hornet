@@ -15,7 +15,7 @@ template <typename T = Message>
 inline std::unique_ptr<T> ParseMessage(const Factory &factory, Magic magic,
                                        std::span<const uint8_t> buffer) {
   const auto parsed = Parser{magic}.Parse(buffer);
-  auto msg = factory.Create(parsed.command);
+  auto msg = factory.Create(parsed.header.command);
   encoding::Reader reader{parsed.payload};
   msg->Deserialize(reader);
   return Downcast<T>(std::move(msg));

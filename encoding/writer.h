@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "encoding/endian.h"
+#include "types.h"
 
 namespace hornet::encoding {
 
@@ -123,6 +124,17 @@ class Writer {
     return pos;
   }
 
+  // Writes a string as a fixed-length zero-padded character array.
+  template <size_t kLength>
+  size_t WriteZeroPaddedString(const std::string &str) {
+    if (str.size() > kLength) {
+      // NB: String will be silently truncated. Optionally log.
+    }
+    std::array<char, kLength> cstr = {};
+    std::copy_n(str.data(), std::min(str.size(), kLength), cstr.begin());
+    return WriteBytes({reinterpret_cast<const uint8_t*>(cstr.data()), sizeof(cstr)});
+  }
+
   // Returns the current seek position
   size_t GetPos() const {
     return static_cast<size_t>(std::distance(const_cast<Writer *>(this)->buffer_.begin(), pos_));
@@ -134,8 +146,10 @@ class Writer {
   }
 
   // Sets the internal seek position to allow overwriting
-  void SeekPos(size_t offset) {
+  size_t SeekPos(size_t offset) {
+    const size_t old = GetPos();
     pos_ = buffer_.begin() + offset;
+    return old;
   }
 
   // Buffer access

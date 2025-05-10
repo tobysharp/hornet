@@ -16,7 +16,7 @@ struct Bitcoind {
   uint16_t port;
   std::string datadir;
 
-  static Bitcoind Launch(Network network);
+  static Bitcoind Launch(Network network = Network::Regtest);
   ~Bitcoind();
   void Terminate();
 };
