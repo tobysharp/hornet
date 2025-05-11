@@ -4,6 +4,7 @@
 #include "net/socket.h"
 #include "protocol/constants.h"
 #include "protocol/factory.h"
+#include "protocol/framer.h"
 #include "protocol/message.h"
 #include "protocol/parser.h"
 
@@ -16,14 +17,26 @@ namespace hornet::net {
 
 class Connection {
  public:
-  Connection(Socket sock, protocol::Magic magic)
-      : sock_(std::move(sock)), parser_(magic) {}
+  Connection(const std::string& host, uint16_t port, protocol::Magic magic)
+      : sock_(Socket::Connect(host, port)), parser_(magic), framer_(magic) {}
+
+  void SendMessage(const protocol::Message& msg);
 
   std::unique_ptr<protocol::Message> NextMessage(
       int timeout_ms = -1);
 
+  bool IsOpen() const { 
+    return sock_.IsOpen(); 
+  }
+  bool IsFinished() const {
+    return !IsOpen();
+  }
   bool IsPartial() const;
   bool IsWaiting() const;
+
+  const Socket& GetSocket()const {
+    return sock_;
+  }
 
  private:
   std::span<const uint8_t> GetUnparsedData() const;
@@ -33,6 +46,7 @@ class Connection {
   Socket sock_;
   const protocol::Factory factory_ = message::CreateMessageFactory();
   const protocol::Parser parser_;
+  protocol::Framer framer_;
   std::vector<uint8_t> buffer_;
   size_t write_at_ = 0;
   size_t parse_at_ = 0;

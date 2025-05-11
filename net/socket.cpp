@@ -19,9 +19,7 @@ Socket::Socket(int fd) : fd_(fd) {
 }
 
 Socket::~Socket() {
-  if (fd_ >= 0) {
-    close(fd_);
-  }
+  Close();
 }
 
 Socket::Socket(Socket &&other) noexcept : fd_(other.fd_) {
@@ -30,11 +28,8 @@ Socket::Socket(Socket &&other) noexcept : fd_(other.fd_) {
 
 Socket &Socket::operator=(Socket &&other) noexcept {
   if (this != &other) {
-    if (fd_ >= 0) {
-      close(fd_);
-    }
-    fd_ = other.fd_;
-    other.fd_ = -1;
+    Close();
+    std::swap(fd_, other.fd_);
   }
   return *this;
 }
@@ -67,6 +62,9 @@ Socket &Socket::operator=(Socket &&other) noexcept {
 }
 
 void Socket::Write(std::span<const uint8_t> data) const {
+  if (fd_ < 0) {
+    throw std::runtime_error("Write on closed socket.");
+  }
   const uint8_t *ptr = data.data();
   size_t remaining = data.size();
   while (remaining > 0) {
@@ -78,6 +76,9 @@ void Socket::Write(std::span<const uint8_t> data) const {
 }
 
 size_t Socket::Read(std::span<uint8_t> buffer) const {
+  if (fd_ < 0) {
+    throw std::runtime_error("Read on closed socket.");
+  }
   ssize_t n = read(fd_, buffer.data(), buffer.size());
   if (n < 0) throw std::runtime_error("Socket read failed");
   return static_cast<size_t>(n);

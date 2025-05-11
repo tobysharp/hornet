@@ -28,17 +28,18 @@ TEST(VerackMessageTest, TestVerack) {
 TEST(VerackMessageTest, TestSendVerack) {
   // Launch a local bitcoind node instance if necessary, and connect
   net::Bitcoind node = net::Bitcoind::Launch();
-  const auto sock = net::Socket::Connect(net::kLocalhost, node.port);
-  net::Connection connection{sock, node.magic};
+  net::Connection connection{net::kLocalhost, node.port, node.magic};
 
   // Send a version message
-  sock.Write(FrameMessage(node.magic, Version{}));
+  connection.SendMessage(Version{});
   const auto version = connection.NextMessage();
+  ASSERT_NE(version, nullptr);
   EXPECT_TRUE(version->GetName() == "version");
 
   // Send verack message
-  sock.Write(FrameMessage(node.magic, Verack{}));
-  const auto verack =connection.NextMessage();
+  connection.SendMessage(Verack{});
+  const auto verack = connection.NextMessage();
+  ASSERT_NE(verack, nullptr);
   EXPECT_EQ(verack->GetName(), "verack");
 }
 

@@ -6,10 +6,17 @@
 #include "encoding/reader.h"
 #include "net/connection.h"
 #include "protocol/dispatch.h"
+#include "protocol/framer.h"
 #include "protocol/message.h"
 #include "protocol/parser.h"
 
 namespace hornet::net {
+
+void Connection::SendMessage(const protocol::Message& msg) {
+  framer_.Frame(msg);
+  sock_.Write(framer_.Buffer());
+  framer_.Clear();
+}
 
 std::unique_ptr<protocol::Message> Connection::NextMessage(int timeout_ms /* = 0 */) {
   using namespace std::chrono_literals;
@@ -19,14 +26,31 @@ std::unique_ptr<protocol::Message> Connection::NextMessage(int timeout_ms /* = 0
   const auto time_to_exit = time_at_entry + std::chrono::milliseconds{timeout_ms};
 
   size_t read_bytes = 0;
-  do {
-    // Calculate how much time is remaining on the clock
-    const auto time_remaining_ms =
-        std::max(0ms, std::chrono::duration_cast<std::chrono::milliseconds>(
-                          time_to_exit - std::chrono::high_resolution_clock::now()));
+  while (true) {
+    // If the data buffer now contains a whole message we should parse it.
+    // cursor_ is an offset to the start of the unparsed buffered data.
+    if (IsCompleteMessageBuffered()) {
+      return TryParseMessage();
+    }
 
+    // Calculate how much time is remaining on the clock
     // If there is no time remaining on our clock, we pass 0ms here for non-blocking
-    if (!sock_.HasReadData(static_cast<int>(time_remaining_ms.count()))) {
+    int internal_timeout_ms = timeout_ms;
+    if (timeout_ms > 0) {
+      const auto time_remaining_ms =
+          std::max(0ms, std::chrono::duration_cast<std::chrono::milliseconds>(
+                            time_to_exit - std::chrono::high_resolution_clock::now()));
+      internal_timeout_ms = static_cast<int>(time_remaining_ms.count());
+    }
+
+    // If the socket has already been closed, there is no more data to be read.
+    if (!sock_.IsOpen()) {
+      return nullptr;
+    }
+
+    // Wait for the given time period to see if data appears on the socket.
+    // Non-blocking when internal_timeout_ms is zero.
+    if (!sock_.HasReadData(internal_timeout_ms)) {
       // Return nullptr if we didn't get enough data to parse into a message.
       return nullptr;
     }
@@ -38,8 +62,13 @@ std::unique_ptr<protocol::Message> Connection::NextMessage(int timeout_ms /* = 0
     }
 
     // Read directly into our buffer and update the write cursor.
-    // We now know there is data available so this will be non-blocking.
+    // Since HasReadData returned true, this call will be non-blocking.
     const size_t length = sock_.Read({buffer_.begin() + write_at_, buffer_.end()});
+    if (length == 0) {
+      // Connection has been closed by remote peer.
+      sock_.Close();
+      return nullptr;
+    }
     write_at_ += length;
     read_bytes += length;
 
@@ -47,23 +76,16 @@ std::unique_ptr<protocol::Message> Connection::NextMessage(int timeout_ms /* = 0
     if (read_bytes > kReadLimit) {
       throw std::runtime_error("Exceeded per-message read limit.");
     }
-
-    // If the data buffer now contains a whole message we should parse it.
-    // cursor_ is an offset to the start of the unparsed buffered data.
-    if (IsCompleteMessageBuffered()) {
-      return TryParseMessage();
-    }
-  } while (true);
+  }
 }
 
 std::span<const uint8_t> Connection::GetUnparsedData() const {
-    return {buffer_.begin() + parse_at_,
-        write_at_ - parse_at_};
+  return {buffer_.begin() + parse_at_, write_at_ - parse_at_};
 }
 
 bool Connection::IsCompleteMessageBuffered() const {
   // If we don't have a full 24-byte header, we don't have a full message.
-  if (parse_at_ + protocol::kHeaderLength >= write_at_) return false;
+  if (parse_at_ + protocol::kHeaderLength > write_at_) return false;
 
   // Use the parser to determine if we have the full payload buffered.
   return parser_.IsCompleteMessage(GetUnparsedData());
