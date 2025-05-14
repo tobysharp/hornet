@@ -14,6 +14,16 @@ enum class Magic : uint32_t {
   Namecoin = 0xFEB4BEF9  // namecoin
 };
 
+enum class HandshakeState {
+    Nothing,
+    SentVersion,
+    ReceivedVersion,
+    SentVerack,
+    ReceivedVerack,
+    Complete,
+    Failed
+};
+
 inline constexpr size_t kCommandLength = 12;
 inline constexpr size_t kHeaderLength = 24;
 inline constexpr size_t kChecksumLength = 4;
