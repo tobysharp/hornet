@@ -1,55 +1,23 @@
 #pragma once
 
+#include <list>
 #include <memory>
 #include <unordered_map>
 #include <vector>
 
 #include "net/peer.h"
+#include "util/weak_ptr_collection.h"
 
 namespace hornet::net {
 
 class PeerManager {
  public:
-  class PeerIterator {
-   public:
-    PeerIterator(PeerManager& manager, std::vector<int>::iterator it)
-        : manager_(manager), it_(it) {}
-
-    Peer& operator*() const {
-      return manager_.PeerByFD(*it_);
-    }
-    PeerIterator& operator++() {
-      ++it_;
-      return *this;
-    }
-    bool operator!=(const PeerIterator& rhs) const {
-      return it_ != rhs.it_;
-    }
-
-   private:
-    PeerManager& manager_;
-    std::vector<int>::iterator it_;
-  };
-
-  class PeerCollection {
-   public:
-    PeerCollection(PeerManager& manager, std::vector<int> fds)
-        : manager_(manager), fds_(std::move(fds)) {}
-    PeerIterator begin() {
-      return {manager_, fds_.begin()};
-    }
-    PeerIterator end() {
-      return {manager_, fds_.end()};
-    }
-
-   private:
-    PeerManager& manager_;
-    std::vector<int> fds_;
-  };
+  using PeerList = std::list<std::weak_ptr<Peer>>;
+  using PeerCollection = util::WeakPtrCollection<Peer, PeerList>;
 
   void AddPeer(const std::string& host, uint16_t port) {
-    Peer peer(host, port);
-    int fd = peer.Conn().GetSocket().GetFD();
+    auto peer = std::make_shared<Peer>(host, port);
+    int fd = peer->GetConnection().GetSocket().GetFD();
     peers_by_fd_.emplace(fd, std::move(peer));
     fds_dirty_ = true;
   }
@@ -64,7 +32,7 @@ class PeerManager {
     if (it == peers_by_fd_.end()) {
       throw std::out_of_range("PeerByFD was given a non-existent fd.");
     }
-    return it->second;
+    return *it->second;
   }
 
   // Returns an iterable collection of peers that are ready to deliver input data.
@@ -73,15 +41,15 @@ class PeerManager {
   PeerCollection PollRead(int timeout_ms = 0) {
     RefreshPollFDs();
     int rc = poll(poll_fds_in_.data(), poll_fds_in_.size(), timeout_ms);
-    std::vector<int> ready;
+    PeerList ready;
     if (rc > 0) {
       for (const auto& pfd : poll_fds_in_) {
         if (pfd.revents & POLLIN) {
-          ready.push_back(pfd.fd);
+          ready.push_back(peers_by_fd_[pfd.fd]);
         }
       }
     }
-    return {*this, ready};
+    return ready;
   }
 
   // Returns an iterable collection of peers that are ready to receive output data.
@@ -90,22 +58,22 @@ class PeerManager {
   PeerCollection PollWrite(int timeout_ms = 0) {
     RefreshPollFDs();
     int rc = poll(poll_fds_out_.data(), poll_fds_out_.size(), timeout_ms);
-    std::vector<int> ready;
+    PeerList ready;
     if (rc > 0) {
       for (const auto& pfd : poll_fds_out_) {
         if (pfd.revents & POLLOUT) {
-          ready.push_back(pfd.fd);
+          ready.push_back(peers_by_fd_[pfd.fd]);
         }
       }
     }
-    return {*this, ready};
+    return ready;
   }
 
   // Removes all the peers whose sockets have been closed.
   void RemoveClosedPeers() {
     std::vector<int> to_remove;
     for (const auto& [fd, peer] : peers_by_fd_) {
-      if (!peer.GetConnection().GetSocket().IsOpen()) {
+      if (!peer->GetConnection().GetSocket().IsOpen()) {
         to_remove.push_back(fd);
       }
     }
@@ -126,7 +94,7 @@ class PeerManager {
     fds_dirty_ = false;
   }
 
-  std::unordered_map<int, Peer> peers_by_fd_;
+  std::unordered_map<int, std::shared_ptr<Peer>> peers_by_fd_;
   bool fds_dirty_ = false;
   std::vector<pollfd> poll_fds_in_;
   std::vector<pollfd> poll_fds_out_;

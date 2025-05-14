@@ -4,6 +4,7 @@
 #include "message/registry.h"
 #include "net/peer.h"
 #include "net/peer_manager.h"
+#include "node/inbound_message.h"
 #include "protocol/constants.h"
 #include "protocol/factory.h"
 #include "protocol/parser.h"
@@ -29,8 +30,10 @@ class ProtocolThread {
   net::PeerManager peers_;
   std::atomic<bool> abort_ = false;
 
-  std::queue<net::Peer&> peers_for_parsing_;
+  std::queue<PeerPtr> peers_for_parsing_;
   protocol::Factory message_factory_;
+
+  std::queue<InboundMessage> inbox_;
 
   // The maximum number of milliseconds to wait per loop iteration for data to arrive.
   // Smaller values lead to more spinning in the message loop during inactivity, while
@@ -73,9 +76,9 @@ void ProtocolThread::MessageLoop() {
 // reading socket data into local buffers. This can be parallelized over the peers
 // if preferable.
 void ProtocolThread::ReadSocketsToBuffers() {
-  for (net::Peer& peer : peers_.PollRead(kPollReadTimeoutMs)) {
+  for (const auto peer : peers_.PollRead(kPollReadTimeoutMs)) {
     // Reads bytes from a peer's socket to its internal memory buffer.
-    const size_t bytes = peer.GetConnection().ReadToBuffer(kMaxReadBytesPerFrame);
+    const size_t bytes = peer->GetConnection().ReadToBuffer(kMaxReadBytesPerFrame);
 
     if (bytes == 0) {
       // Either the socket was closed, or else the socket is in non-blocking mode
@@ -98,12 +101,14 @@ void ProtocolThread::ReadSocketsToBuffers() {
 void ProtocolThread::ParseBuffersToMessageQueues() {
   protocol::Parser parser(magic_);
   while (!peers_for_parsing_.empty()) {
-    net::Peer& peer = peers_for_parsing_.front();
+    const std::shared_ptr<net::Peer> peer = peers_for_parsing_.front().lock();
+    peers_for_parsing_.pop();
+    if (!peer) continue;
 
     bool continue_later = true;
     try {
       for (size_t count = 0; count < kMaxParsedMessagesPerFrame; ++count) {
-        const auto unparsed = peer.GetConnection().PeekBufferedData();
+        const auto unparsed = peer->GetConnection().PeekBufferedData();
         if (!parser.IsCompleteMessage(unparsed)) {
           // There are no more complete messages to be parsed for this peer.
           continue_later = false;
@@ -114,7 +119,7 @@ void ProtocolThread::ParseBuffersToMessageQueues() {
         const auto parsed = parser.Parse(unparsed);
 
         // Eat the parsed bytes from the peer buffer.
-        peer.GetConnection().ConsumeBufferedData(protocol::kHeaderLength + parsed.payload.size());
+        peer->GetConnection().ConsumeBufferedData(protocol::kHeaderLength + parsed.payload.size());
 
         // Instantiate a protocol::Message object of the correct derived type.
         auto msg = message_factory_.Create(parsed.header.command);
@@ -124,18 +129,17 @@ void ProtocolThread::ParseBuffersToMessageQueues() {
         msg->Deserialize(reader);
 
         // Add the deserialized message to the queue for dispatch and processing.
-        inbox_.push({peer, msg});
+        inbox_.push({peer, std::move(msg)});
       }
     } catch (std::exception& e) {
       // If any peer-specific behavior throws, we will defensively drop the connection,
       // marking the peer for removal. This also clears the connection's read buffer,
       // preventing looping on poisoned data.
       // TODO: Log error
-      peer.GetConnection().Drop();
+      peer->GetConnection().Drop();
       continue_later = false;
-      break;
     }
-    peers_for_parsing_.pop();
+    // Peer may have more complete messages — requeue for next frame
     if (continue_later) peers_for_parsing_.push(peer);
   }
 }
