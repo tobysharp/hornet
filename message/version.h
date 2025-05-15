@@ -7,6 +7,7 @@
 #include "encoding/reader.h"
 #include "encoding/transfer.h"
 #include "encoding/writer.h"
+#include "message/visitor.h"
 #include "protocol/message.h"
 
 namespace hornet::message {
@@ -39,6 +40,10 @@ class Version : public protocol::Message {
 
   void Deserialize(encoding::Reader &r) override {
     Transfer(*this, r);
+  }
+
+  void Accept(Visitor& v) const override {
+    v.Visit(*this);
   }
 
  private:
