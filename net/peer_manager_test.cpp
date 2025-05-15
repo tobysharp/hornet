@@ -1,5 +1,6 @@
 #include "net/peer_manager.h"
 
+#include <memory>
 #include <netinet/in.h>
 #include <thread>
 #include <unistd.h>
@@ -45,10 +46,11 @@ TEST(PeerManagerTest, AddAndRemovePeer) {
   auto write_ready = manager.PollWrite(1000);
   ASSERT_FALSE(write_ready.empty());
 
-  int fd = write_ready.front();
-  Peer& peer = manager.PeerByFD(fd);
-  EXPECT_EQ(peer.Address(), "127.0.0.1");
+  auto peer = *(write_ready.begin());
+  EXPECT_EQ(peer->Address(), "127.0.0.1");
+  peer->GetConnection().Write(std::array<uint8_t, 1>{'x'});
 
+  const int fd = peer->GetConnection().GetSocket().GetFD();
   manager.RemovePeer(fd);
   EXPECT_THROW(manager.PeerByFD(fd), std::out_of_range);
 

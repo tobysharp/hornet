@@ -43,21 +43,21 @@ TEST(PeerTest, SocketEchoThroughPeerConnection) {
 
   Peer peer("127.0.0.1", kTestPort);
   std::vector<uint8_t> msg = {'B', 'T', 'C'};
-  size_t written = peer.Conn().Write(msg);
+  size_t written = peer.GetConnection().Write(msg);
   ASSERT_EQ(written, msg.size());
 
   size_t read = 0;
   for (int i = 0; i < 100 && read == 0; ++i) {
-    read = peer.Conn().ReadToBuffer(16);
+    read = peer.GetConnection().ReadToBuffer(16);
     if (read == 0) std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
 
-  auto echoed = peer.Conn().PeekBufferedData();
+  auto echoed = peer.GetConnection().PeekBufferedData();
   ASSERT_EQ(echoed.size(), msg.size());
   ASSERT_TRUE(std::equal(echoed.begin(), echoed.end(), msg.begin()));
 
-  peer.Conn().ConsumeBufferedData(read);
-  ASSERT_TRUE(peer.Conn().PeekBufferedData().empty());
+  peer.GetConnection().ConsumeBufferedData(read);
+  ASSERT_TRUE(peer.GetConnection().PeekBufferedData().empty());
 
   server_thread.join();
 }

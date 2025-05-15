@@ -11,9 +11,9 @@ namespace hornet::net {
 class Peer {
   public:
   Peer(const std::string& host, uint16_t port)
-      : conn_(host, port), address_(host) {}
+      : conn_(host, port), address_(host), handshake_(protocol::Handshake::Role::Outbound) {}
   Peer(Connection conn, std::string address)
-      : conn_(std::move(conn)), address_(std::move(address)) {}
+      : conn_(std::move(conn)), address_(std::move(address)), handshake_(protocol::Handshake::Role::Outbound) {}
 
   const std::string& Address() const { return address_; }
   Connection& GetConnection() { return conn_; }

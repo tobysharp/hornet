@@ -26,6 +26,7 @@ add_executable(hornet_tests
    protocol/dispatch_test.cpp
    protocol/factory_test.cpp
    protocol/framer_test.cpp
+   protocol/handshake_test.cpp
    protocol/parser_test.cpp
    message/version_test.cpp
    net/bitcoind_test.cpp

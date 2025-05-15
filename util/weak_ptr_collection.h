@@ -24,7 +24,7 @@ class WeakPtrIteratorT {
 
   WeakPtrIteratorT& operator++() {
     cur_.reset();
-    while (it_ != end_ && (cur_ = it->lock()) == nullptr) {
+    while (it_ != end_ && (cur_ = it_->lock()) == nullptr) {
       ++it_;
       if (cur_) break;
     }
@@ -57,7 +57,15 @@ class WeakPtrCollection {
   WeakPtrIteratorT<const T, const Collection> end() const {
     return {collection_.end(), collection_.end()};
   }
-
+  bool empty() const {
+    return collection_.empty();
+  }
+  std::weak_ptr<T> front() {
+    return collection_.front();
+  }
+  std::weak_ptr<const T>  front() const {
+    return collection_.front();
+  } 
  private:
   Collection collection_;
 };
