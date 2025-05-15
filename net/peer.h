@@ -3,17 +3,10 @@
 #include <string>
 
 #include "net/connection.h"
+#include "net/constants.h"
+#include "protocol/handshake.h"
 
 namespace hornet::net {
-
-enum class HandshakeState {
-  None,
-  OneVersion,
-  TwoVersions,
-  OneVerack,
-  Complete,
-  Failed  
-};
 
 class Peer {
   public:
@@ -26,13 +19,12 @@ class Peer {
   Connection& GetConnection() { return conn_; }
   const Connection& GetConnection() const { return conn_; }
 
-  HandshakeState GetHandshakeState() const { return handshake_state_; }
-  void SetHandshakeState(HandshakeState state) { handshake_state_ = state; }
+  protocol::Handshake& GetHandshake() { return handshake_; }
 
  private:
   Connection conn_;
   std::string address_;
-  HandshakeState handshake_state_ = HandshakeState::None;
+  protocol::Handshake handshake_;
 
   // TODO: 
   // Magic?

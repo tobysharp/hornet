@@ -43,4 +43,13 @@ inline constexpr uint16_t GetNetworkPort(Network net) {
   __builtin_unreachable();
 }
 
+enum class HandshakeState {
+  None,
+  OneVersion,
+  TwoVersions,
+  OneVerack,
+  Complete,
+  Failed  
+};
+
 }  // namespace hornet::net
