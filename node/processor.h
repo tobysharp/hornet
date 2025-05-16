@@ -14,7 +14,7 @@ namespace hornet::node {
 
 class Processor : public message::Visitor {
  public:
-  Processor(const protocol::Factory& factory, Broadcaster& broadcaser);
+  Processor(const protocol::Factory& factory, Broadcaster& broadcaster);
 
   void Process(const InboundMessage& msg);
 

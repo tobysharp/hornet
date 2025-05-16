@@ -28,7 +28,6 @@ class ProtocolThread : public Broadcaster {
   virtual void SendToAll(OutboundMessagePtr msg) override;
 
  private:
-
   void ReadSocketsToBuffers();
   void ParseBuffersToMessageQueues();
   void ManagePeers();
@@ -43,10 +42,10 @@ class ProtocolThread : public Broadcaster {
 
   std::queue<InboundMessage> inbox_;
 
-  Processor processor_;
+  std::unique_ptr<Processor> processor_;
 
   using OutboundMessageQueue = std::deque<OutboundMessagePtr>;
-  using Outbox = std::map<PeerPtr, OutboundMessageQueue>;  
+  using Outbox = std::map<PeerPtr, OutboundMessageQueue, std::owner_less<PeerPtr>>;
   Outbox outbox_;
 
   // The maximum number of milliseconds to wait per loop iteration for data to arrive.
@@ -62,10 +61,14 @@ class ProtocolThread : public Broadcaster {
 };
 
 ProtocolThread::ProtocolThread(protocol::Magic magic)
-    : magic_(magic), factory_(message::CreateMessageFactory()), processor_(factory_, *this) {}
+    : Broadcaster(), magic_(magic), factory_(message::CreateMessageFactory()) {
+      Broadcaster& b = static_cast<Broadcaster&>(*this);
+      processor_ = std::make_unique<Processor>(factory_, b);
+}
 
 void ProtocolThread::SendToOne(std::shared_ptr<net::Peer> peer, OutboundMessagePtr msg) {
   const auto it = outbox_.find(std::weak_ptr<net::Peer>(peer));
+  Broadcaster& b = static_cast<Broadcaster&>(*this);
   if (it == outbox_.end()) {
     // The peer's outbound message queue was not found in the map.
     throw std::runtime_error{"Peer not found in the outbox."};
@@ -175,9 +178,7 @@ void ProtocolThread::ParseBuffersToMessageQueues() {
   }
 }
 
-void ProtocolThread::ProcessMessages() {
-
-}
+void ProtocolThread::ProcessMessages() {}
 
 void ProtocolThread::ManagePeers() {
   // Removes all the peers whose sockets have been closed.
@@ -185,6 +186,5 @@ void ProtocolThread::ManagePeers() {
 
   // TODO: Other bookkeeping and network tasks.
 }
-
 
 }  // namespace hornet::node

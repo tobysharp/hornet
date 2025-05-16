@@ -5,6 +5,7 @@
 #include "message/verack.h"
 #include "message/version.h"
 #include "net/constants.h"
+#include "node/broadcaster.h"
 #include "node/inbound_message.h"
 #include "node/processor.h"
 #include "protocol/handshake.h"

@@ -60,12 +60,6 @@ class WeakPtrCollection {
   bool empty() const {
     return collection_.empty();
   }
-  std::weak_ptr<T> front() {
-    return collection_.front();
-  }
-  std::weak_ptr<const T>  front() const {
-    return collection_.front();
-  } 
  private:
   Collection collection_;
 };

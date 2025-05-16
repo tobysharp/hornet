@@ -51,8 +51,7 @@ TEST(PeerManagerTest, AddAndRemovePeer) {
   peer->GetConnection().Write(std::array<uint8_t, 1>{'x'});
 
   const int fd = peer->GetConnection().GetSocket().GetFD();
-  manager.RemovePeer(fd);
-  EXPECT_THROW(manager.PeerByFD(fd), std::out_of_range);
+  manager.RemovePeer(peer);
 
   server_thread.join();
 }

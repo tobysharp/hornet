@@ -18,21 +18,20 @@ class PeerManager {
   void AddPeer(const std::string& host, uint16_t port) {
     auto peer = std::make_shared<Peer>(host, port);
     int fd = peer->GetConnection().GetSocket().GetFD();
-    peers_by_fd_.emplace(fd, std::move(peer));
+    peers_.push_back(peer);
+    auto back = peers_.end(); --back;
+    peers_by_fd_.emplace(fd, Lookup{std::move(peer), back});
     fds_dirty_ = true;
   }
 
-  void RemovePeer(int fd) {
-    peers_by_fd_.erase(fd);
-    fds_dirty_ = true;
-  }
-
-  Peer& PeerByFD(int fd) {
-    auto it = peers_by_fd_.find(fd);
-    if (it == peers_by_fd_.end()) {
-      throw std::out_of_range("PeerByFD was given a non-existent fd.");
+  void RemovePeer(std::shared_ptr<Peer> peer) {
+    const int fd = peer->GetConnection().GetSocket().GetFD();
+    const auto it = peers_by_fd_.find(fd);
+    if (it != peers_by_fd_.end()) {
+      peers_.erase(it->second.list_it);
+      peers_by_fd_.erase(it);
+      fds_dirty_ = true;
     }
-    return *it->second;
   }
 
   // Returns an iterable collection of peers that are ready to deliver input data.
@@ -45,7 +44,7 @@ class PeerManager {
     if (rc > 0) {
       for (const auto& pfd : poll_fds_in_) {
         if (pfd.revents & POLLIN) {
-          ready.push_back(peers_by_fd_[pfd.fd]);
+          ready.push_back(peers_by_fd_[pfd.fd].peer);
         }
       }
     }
@@ -62,7 +61,7 @@ class PeerManager {
     if (rc > 0) {
       for (const auto& pfd : poll_fds_out_) {
         if (pfd.revents & POLLOUT) {
-          ready.push_back(peers_by_fd_[pfd.fd]);
+          ready.push_back(peers_by_fd_[pfd.fd].peer);
         }
       }
     }
@@ -71,15 +70,14 @@ class PeerManager {
 
   // Removes all the peers whose sockets have been closed.
   void RemoveClosedPeers() {
-    std::vector<int> to_remove;
-    for (const auto& [fd, peer] : peers_by_fd_) {
-      if (!peer->GetConnection().GetSocket().IsOpen()) {
-        to_remove.push_back(fd);
-      }
+    auto it = peers_.begin();
+    while (it != peers_.end()) {
+      if (!(*it)->GetConnection().GetSocket().IsOpen())
+        it = peers_.erase(it);
+      else
+        ++it;
     }
-    for (int fd : to_remove) {
-      RemovePeer(fd);
-    }
+    fds_dirty_ = true;
   }
 
  private:
@@ -87,14 +85,30 @@ class PeerManager {
     if (!fds_dirty_) return;
     poll_fds_in_.clear();
     poll_fds_out_.clear();
-    for (const auto& [fd, _] : peers_by_fd_) {
-      poll_fds_in_.push_back({fd, POLLIN, 0});
-      poll_fds_out_.push_back({fd, POLLOUT, 0});
+    peers_by_fd_.clear();
+    for (auto it = peers_.begin(); it != peers_.end(); ++it) {
+      const std::shared_ptr<Peer> peer = *it;
+      const Socket& socket = peer->GetConnection().GetSocket();
+      if (socket.IsOpen()) {
+        int fd = socket.GetFD();
+        poll_fds_in_.push_back({fd, POLLIN, 0});
+        poll_fds_out_.push_back({fd, POLLOUT, 0});
+        peers_by_fd_.emplace(fd, Lookup{peer, it});
+      }
     }
+    // for (const auto& [fd, _] : peers_by_fd_) {
+    //   poll_fds_in_.push_back({fd, POLLIN, 0});
+    //   poll_fds_out_.push_back({fd, POLLOUT, 0});
+    // }
     fds_dirty_ = false;
   }
 
-  std::unordered_map<int, std::shared_ptr<Peer>> peers_by_fd_;
+  std::list<std::shared_ptr<Peer>> peers_;
+  struct Lookup {
+    std::weak_ptr<Peer> peer;
+    std::list<std::shared_ptr<Peer>>::iterator list_it;
+  };
+  std::unordered_map<int, Lookup> peers_by_fd_;
   bool fds_dirty_ = false;
   std::vector<pollfd> poll_fds_in_;
   std::vector<pollfd> poll_fds_out_;
