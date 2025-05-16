@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <bit>
 #include <cstdint>
+#include <numeric>
 #include <stdexcept>
 
 namespace hornet::encoding {

@@ -4,36 +4,50 @@
 #include "message/registry.h"
 #include "net/peer.h"
 #include "net/peer_manager.h"
+#include "node/broadcaster.h"
 #include "node/inbound_message.h"
+#include "node/outbound_message.h"
+#include "node/processor.h"
 #include "protocol/constants.h"
 #include "protocol/factory.h"
 #include "protocol/parser.h"
 
 namespace hornet::node {
 
-class ProtocolThread {
+class ProtocolThread : public Broadcaster {
  public:
-  ProtocolThread(protocol::Magic magic) : magic_(magic) {}
+  ProtocolThread(protocol::Magic magic);
 
-  void MessageLoop() {}
+  void MessageLoop();
 
   void Abort() {
     abort_ = true;
   }
 
+  virtual void SendToOne(std::shared_ptr<net::Peer> peer, OutboundMessagePtr msg) override;
+  virtual void SendToAll(OutboundMessagePtr msg) override;
+
  private:
+
   void ReadSocketsToBuffers();
   void ParseBuffersToMessageQueues();
   void ManagePeers();
+  void ProcessMessages();
 
   protocol::Magic magic_;
   net::PeerManager peers_;
   std::atomic<bool> abort_ = false;
 
   std::queue<PeerPtr> peers_for_parsing_;
-  protocol::Factory message_factory_;
+  protocol::Factory factory_;
 
   std::queue<InboundMessage> inbox_;
+
+  Processor processor_;
+
+  using OutboundMessageQueue = std::deque<OutboundMessagePtr>;
+  using Outbox = std::map<PeerPtr, OutboundMessageQueue>;  
+  Outbox outbox_;
 
   // The maximum number of milliseconds to wait per loop iteration for data to arrive.
   // Smaller values lead to more spinning in the message loop during inactivity, while
@@ -48,7 +62,22 @@ class ProtocolThread {
 };
 
 ProtocolThread::ProtocolThread(protocol::Magic magic)
-    : magic_(magic), message_factory_(message::CreateMessageFactory()) {}
+    : magic_(magic), factory_(message::CreateMessageFactory()), processor_(factory_, *this) {}
+
+void ProtocolThread::SendToOne(std::shared_ptr<net::Peer> peer, OutboundMessagePtr msg) {
+  const auto it = outbox_.find(std::weak_ptr<net::Peer>(peer));
+  if (it == outbox_.end()) {
+    // The peer's outbound message queue was not found in the map.
+    throw std::runtime_error{"Peer not found in the outbox."};
+  }
+  it->second.push_back(msg);
+}
+
+void ProtocolThread::SendToAll(OutboundMessagePtr msg) {
+  for (auto pair : outbox_) {
+    pair.second.push_back(msg);
+  }
+}
 
 void ProtocolThread::MessageLoop() {
   // We design the message loop in discrete stages with well-defined boundaries between
@@ -65,6 +94,8 @@ void ProtocolThread::MessageLoop() {
     ParseBuffersToMessageQueues();
 
     // 3. Message Dispatch / Processing.
+    ProcessMessages();
+
     // 4. Framing.
     // 5. Writing.
     // 6. Connection Management & Bookkeeping.
@@ -122,7 +153,7 @@ void ProtocolThread::ParseBuffersToMessageQueues() {
         peer->GetConnection().ConsumeBufferedData(protocol::kHeaderLength + parsed.payload.size());
 
         // Instantiate a protocol::Message object of the correct derived type.
-        auto msg = message_factory_.Create(parsed.header.command);
+        auto msg = factory_.Create(parsed.header.command);
 
         // Deserialize the message from the payload.
         encoding::Reader reader{parsed.payload};
@@ -144,11 +175,16 @@ void ProtocolThread::ParseBuffersToMessageQueues() {
   }
 }
 
+void ProtocolThread::ProcessMessages() {
+
+}
+
 void ProtocolThread::ManagePeers() {
   // Removes all the peers whose sockets have been closed.
   peers_.RemoveClosedPeers();
 
   // TODO: Other bookkeeping and network tasks.
 }
+
 
 }  // namespace hornet::node
