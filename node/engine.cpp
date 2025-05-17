@@ -5,91 +5,50 @@
 #include "net/peer.h"
 #include "net/peer_manager.h"
 #include "node/broadcaster.h"
+#include "node/engine.h"
 #include "node/inbound_message.h"
 #include "node/outbound_message.h"
 #include "node/processor.h"
 #include "protocol/constants.h"
 #include "protocol/factory.h"
 #include "protocol/parser.h"
+#include "util/timeout.h"
 
 namespace hornet::node {
 
-class ProtocolThread : public Broadcaster {
- public:
-  ProtocolThread(protocol::Magic magic);
-
-  void MessageLoop();
-
-  void Abort() {
-    abort_ = true;
-  }
-
-  virtual void SendToOne(std::shared_ptr<net::Peer> peer, OutboundMessagePtr msg) override;
-  virtual void SendToAll(OutboundMessagePtr msg) override;
-
- private:
-  void ReadSocketsToBuffers();
-  void ParseBuffersToMessageQueues();
-  void ManagePeers();
-  void ProcessMessages();
-
-  protocol::Magic magic_;
-  net::PeerManager peers_;
-  std::atomic<bool> abort_ = false;
-
-  std::queue<PeerPtr> peers_for_parsing_;
-  protocol::Factory factory_;
-
-  std::queue<InboundMessage> inbox_;
-
-  std::unique_ptr<Processor> processor_;
-
-  using OutboundMessageQueue = std::deque<OutboundMessagePtr>;
-  using Outbox = std::map<PeerPtr, OutboundMessageQueue, std::owner_less<PeerPtr>>;
-  Outbox outbox_;
-
-  // The maximum number of milliseconds to wait per loop iteration for data to arrive.
-  // Smaller values lead to more spinning in the message loop during inactivity, while
-  // larger values can lead to delays in servicing other stages of the loop pipeline.
-  static constexpr int kPollReadTimeoutMs = 2;  // 2 ms
-
-  // The maximum number of bytes to read per peer per frame.
-  static constexpr size_t kMaxReadBytesPerFrame = 64 * 1024;  // 64 KiB
-
-  // The maximum number of messages to parse per peer per frame.
-  static constexpr size_t kMaxParsedMessagesPerFrame = 1;
-};
-
-ProtocolThread::ProtocolThread(protocol::Magic magic)
+Engine::Engine(protocol::Magic magic)
     : Broadcaster(), magic_(magic), factory_(message::CreateMessageFactory()) {
-      Broadcaster& b = static_cast<Broadcaster&>(*this);
-      processor_ = std::make_unique<Processor>(factory_, b);
-}
-
-void ProtocolThread::SendToOne(std::shared_ptr<net::Peer> peer, OutboundMessagePtr msg) {
-  const auto it = outbox_.find(std::weak_ptr<net::Peer>(peer));
   Broadcaster& b = static_cast<Broadcaster&>(*this);
-  if (it == outbox_.end()) {
-    // The peer's outbound message queue was not found in the map.
-    throw std::runtime_error{"Peer not found in the outbox."};
-  }
-  it->second.push_back(msg);
+  processor_ = std::make_unique<Processor>(factory_, b);
 }
 
-void ProtocolThread::SendToAll(OutboundMessagePtr msg) {
+void Engine::SendToOne(std::shared_ptr<net::Peer> peer, OutboundMessagePtr msg) {
+  if (!peer->IsDropped())
+    outbox_[peer].push_back(msg);  // Creates queue if previously non-existent
+}
+
+void Engine::SendToAll(OutboundMessagePtr msg) {
   for (auto pair : outbox_) {
     pair.second.push_back(msg);
   }
 }
 
-void ProtocolThread::MessageLoop() {
+std::shared_ptr<net::Peer> Engine::AddOutboundPeer(const std::string& host, uint16_t port) {
+  // TODO: Pass outbound direction to AddPeer also
+  const auto peer = peers_.AddPeer(host, port/*, Peer::Direction::Outbound*/);
+  processor_->InitiateHandshake(peer);
+  return peer;
+}
+
+void Engine::RunMessageLoop(int64_t timeout_ms /* = -1 */) {
   // We design the message loop in discrete stages with well-defined boundaries between
   // each, so that the various stages can be executed in parallel in pipeline fashion,
   // for example so that last frame's data is being parsed while this frame's data is
   // being read, etc. Beyond this task parallelization, much of the work within each task
   // can also be parallelized and split up among a pool of worker threads for efficiency.
 
-  while (!abort_) {
+  util::Timeout timeout{timeout_ms};
+  while (!abort_ && !timeout.IsExpired()) {
     // 1. Reading.
     ReadSocketsToBuffers();
 
@@ -109,7 +68,7 @@ void ProtocolThread::MessageLoop() {
 // Determine which peers' sockets have data for reading, and iterate over them,
 // reading socket data into local buffers. This can be parallelized over the peers
 // if preferable.
-void ProtocolThread::ReadSocketsToBuffers() {
+void Engine::ReadSocketsToBuffers() {
   for (const auto peer : peers_.PollRead(kPollReadTimeoutMs)) {
     // Reads bytes from a peer's socket to its internal memory buffer.
     const size_t bytes = peer->GetConnection().ReadToBuffer(kMaxReadBytesPerFrame);
@@ -132,7 +91,7 @@ void ProtocolThread::ReadSocketsToBuffers() {
 // Visit each peer buffer with new data recently arrived, and look to see whether
 // there exists one or more whole messages ready for parsing. If so, parse and store
 // the message in a queue, then eat the bytes in the peer buffer.
-void ProtocolThread::ParseBuffersToMessageQueues() {
+void Engine::ParseBuffersToMessageQueues() {
   protocol::Parser parser(magic_);
   while (!peers_for_parsing_.empty()) {
     const std::shared_ptr<net::Peer> peer = peers_for_parsing_.front().lock();
@@ -170,7 +129,7 @@ void ProtocolThread::ParseBuffersToMessageQueues() {
       // marking the peer for removal. This also clears the connection's read buffer,
       // preventing looping on poisoned data.
       // TODO: Log error
-      peer->GetConnection().Drop();
+      peer->Drop();
       continue_later = false;
     }
     // Peer may have more complete messages — requeue for next frame
@@ -178,9 +137,26 @@ void ProtocolThread::ParseBuffersToMessageQueues() {
   }
 }
 
-void ProtocolThread::ProcessMessages() {}
+// Pull messages from the inbound queue and dispatch each one in turn to the processor.
+// OPT: A future optimization could be to distribute work over parallel threads where each concurrent
+// thread represents a different peer.
+void Engine::ProcessMessages() {
+  for (size_t processed_count = 0;
+       !inbox_.empty() && processed_count < kMaxProcessedMessagesPerFrame;
+       ++processed_count) {
+    InboundMessage inbound = std::move(inbox_.front());
+    try {
+      processor_->Process(inbound);
+    }
+    catch (std::exception& e) {
+      // On unexpected exception, treat as protocol violation: close socket.
+      if (auto peer = inbound.GetPeer())
+        peer->Drop();
+    }
+  }
+}
 
-void ProtocolThread::ManagePeers() {
+void Engine::ManagePeers() {
   // Removes all the peers whose sockets have been closed.
   peers_.RemoveClosedPeers();
 

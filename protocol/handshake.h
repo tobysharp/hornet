@@ -19,7 +19,7 @@ class Handshake {
   enum class Role { Inbound, Outbound };
 
   // All of the possible state transitions in the FSM.
-  enum class Transition { None, SendVersion, ReceiveVersion, SendVerack, ReceiveVerack };
+  enum class Transition { None, Begin, SendVersion, ReceiveVersion, SendVerack, ReceiveVerack };
 
   // The actionable information returned by AdvanceState.
   struct Action {
@@ -29,10 +29,7 @@ class Handshake {
 
   // Constructs a Handshake object based on the Role value.
   explicit Handshake(Role role) noexcept
-      : role_(role),
-        machine_(role == Role::Inbound ? s_inbound_machine_ : s_outbound_machine_),
-        state_(
-            {State::Start, role_ == Role::Inbound ? Transition::None : Transition::SendVersion}) {}
+      : role_(role), machine_(role == Role::Inbound ? s_inbound_machine_ : s_outbound_machine_) {}
 
   // Advances (mutates) the internal state of the handshake based on the attempted transition.
   // If the transition is illegal, the function throws an Error. Otherwise, it returns the next
@@ -53,6 +50,7 @@ class Handshake {
  private:
   // All of the FSM's possible states.
   enum class State {
+    None,
     Start,
     VersionSent,
     VersionReceived,
@@ -102,25 +100,32 @@ class Handshake {
 
   // The state transition diagram for outbound connections
   inline static const StateMachine s_outbound_machine_ = {
+      {{State::None, Transition::Begin}, {State::Start, Transition::SendVersion}},
       {{State::Start, Transition::SendVersion}, {State::VersionSent, Transition::None}},
-      {{State::VersionSent, Transition::ReceiveVersion},       {State::VersionBoth, Transition::SendVerack}},
-      {{State::VersionBoth, Transition::ReceiveVerack},       {State::VerackReceived, Transition::SendVerack}},
+      {{State::VersionSent, Transition::ReceiveVersion},
+       {State::VersionBoth, Transition::SendVerack}},
+      {{State::VersionBoth, Transition::ReceiveVerack},
+       {State::VerackReceived, Transition::SendVerack}},
       {{State::VersionBoth, Transition::SendVerack}, {State::VerackSent, Transition::None}},
       {{State::VerackReceived, Transition::SendVerack}, {State::Complete, Transition::None}},
       {{State::VerackSent, Transition::ReceiveVerack}, {State::Complete, Transition::None}}};
 
   // The state transition diagram for inbound connections
   inline static const StateMachine s_inbound_machine_ = {
-      {{State::Start, Transition::ReceiveVersion},       {State::VersionReceived, Transition::SendVersion}},
-      {{State::VersionReceived, Transition::SendVersion},       {State::VersionBoth, Transition::SendVerack}},
-      {{State::VersionBoth, Transition::ReceiveVerack},       {State::VerackReceived, Transition::SendVerack}},
+      {{State::None, Transition::Begin}, {State::Start, Transition::None}},
+      {{State::Start, Transition::ReceiveVersion},
+       {State::VersionReceived, Transition::SendVersion}},
+      {{State::VersionReceived, Transition::SendVersion},
+       {State::VersionBoth, Transition::SendVerack}},
+      {{State::VersionBoth, Transition::ReceiveVerack},
+       {State::VerackReceived, Transition::SendVerack}},
       {{State::VersionBoth, Transition::SendVerack}, {State::VerackSent, Transition::None}},
       {{State::VerackReceived, Transition::SendVerack}, {State::Complete, Transition::None}},
       {{State::VerackSent, Transition::ReceiveVerack}, {State::Complete, Transition::None}}};
 
-  Role role_;                    // The direction of connectivity
-  Sink state_;                   // The current state and available action
-  const StateMachine& machine_;  // The applicable finite state machine
+  Role role_;                                         // The direction of connectivity
+  Sink state_ = {State::None, Transition::Begin};     // The current state and available action
+  const StateMachine& machine_;                       // The applicable finite state machine
 };
 
 }  // namespace hornet::protocol

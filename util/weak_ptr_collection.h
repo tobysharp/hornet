@@ -24,10 +24,8 @@ class WeakPtrIteratorT {
 
   WeakPtrIteratorT& operator++() {
     cur_.reset();
-    while (it_ != end_ && (cur_ = it_->lock()) == nullptr) {
-      ++it_;
-      if (cur_) break;
-    }
+    ++it_;
+    while (it_ != end_ && (cur_ = it_->lock()) == nullptr) ++it_;
     return *this;
   }
 

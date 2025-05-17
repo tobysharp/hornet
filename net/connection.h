@@ -36,6 +36,10 @@ class Connection {
     return sock_;
   }
 
+  Socket& GetSocket() {
+    return sock_;
+  }
+  
   // Reads up to n bytes from the socket into this class's internal buffer, 
   // growing it as necessary. In order to guarantee non-blocking behavior,
   // ensure this method is called after poll() signals POLLIN.

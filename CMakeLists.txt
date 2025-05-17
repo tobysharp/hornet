@@ -9,7 +9,7 @@ add_library(hornet STATIC
    net/bitcoind.cpp
    net/socket.cpp
    node/processor.cpp
-   node/message_loop.cpp
+   node/engine.cpp
 )
 target_include_directories(hornet PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -31,11 +31,13 @@ add_executable(hornet_tests
    protocol/handshake_test.cpp
    protocol/parser_test.cpp
    message/version_test.cpp
+   #message/verack_test.cpp
    net/bitcoind_test.cpp
    net/connection_test.cpp
    net/peer_test.cpp
    net/peer_manager_test.cpp
    net/socket_test.cpp
+   node/engine_test.cpp
 )
 target_link_libraries(hornet_tests PRIVATE hornet gtest_main)
 

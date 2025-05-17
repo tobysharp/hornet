@@ -15,11 +15,19 @@ class Peer {
   Peer(Connection conn, std::string address)
       : conn_(std::move(conn)), address_(std::move(address)), handshake_(protocol::Handshake::Role::Outbound) {}
 
+  bool IsDropped() const {
+    return !conn_.GetSocket().IsOpen();
+  }
+
   const std::string& Address() const { return address_; }
   Connection& GetConnection() { return conn_; }
   const Connection& GetConnection() const { return conn_; }
 
   protocol::Handshake& GetHandshake() { return handshake_; }
+
+  void Drop() {
+    conn_.Drop();
+  }
 
  private:
   Connection conn_;

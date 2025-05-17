@@ -16,6 +16,7 @@ class Processor : public message::Visitor {
  public:
   Processor(const protocol::Factory& factory, Broadcaster& broadcaster);
 
+  void InitiateHandshake(std::shared_ptr<net::Peer> peer);
   void Process(const InboundMessage& msg);
 
   // Message handlers
@@ -23,7 +24,7 @@ class Processor : public message::Visitor {
   void Visit(const message::Version&);
 
  private:
-  void AdvanceHandshake(protocol::Handshake::Transition transition);
+  void AdvanceHandshake(std::shared_ptr<net::Peer> peer, protocol::Handshake::Transition transition);
 
   const InboundMessage* inbound_ = nullptr;
   const protocol::Factory& factory_;

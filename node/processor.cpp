@@ -26,28 +26,39 @@ void Processor::Process(const InboundMessage& msg) {
       p_.inbound_ = nullptr;
     }
     Processor& p_;
-  } guard(*this, &msg);
+  };
 
-  msg.GetMessage().Accept(*this);
+  // Check for liveness of peer, i.e. that it hasn't been removed from PeerManager.
+  if (const auto peer = msg.GetPeer()) {
+    // Check for the socket still being open. It may have been closed by the Connection.
+    if (peer->GetConnection().GetSocket().IsOpen()) {
+      ScopedInboundGuard guard{*this, &msg};
+      // Dispatch the message for processing via the Visitor pattern.
+      msg.GetMessage().Accept(*this);
+    }
+  }
 }
 
 void Processor::Visit(const message::Verack& v) {
-  AdvanceHandshake(protocol::Handshake::Transition::ReceiveVerack);
+  AdvanceHandshake(inbound_->GetPeer(), protocol::Handshake::Transition::ReceiveVerack);
 }
 
 void Processor::Visit(const message::Version& v) {
   // TODO: Validate the version message parameters, and throw if we don't accept it.
-  AdvanceHandshake(protocol::Handshake::Transition::ReceiveVersion);
+  AdvanceHandshake(inbound_->GetPeer(), protocol::Handshake::Transition::ReceiveVersion);
 }
 
-void Processor::AdvanceHandshake(protocol::Handshake::Transition transition) {
-  auto peer = inbound_->GetPeer();
+void Processor::InitiateHandshake(std::shared_ptr<net::Peer> peer) {
+  AdvanceHandshake(peer, protocol::Handshake::Transition::Begin);
+}
+
+void Processor::AdvanceHandshake(std::shared_ptr<net::Peer> peer, protocol::Handshake::Transition transition) {
   auto& handshake = peer->GetHandshake();
-  const auto [next, command] = handshake.AdvanceState(transition);
-  if (!command.empty()) {
-    OutboundMessagePtr outbound = std::make_shared<OutboundMessage>(factory_.Create(command));
+  auto action = handshake.AdvanceState(transition);
+  while (action.next != protocol::Handshake::Transition::None) {
+    OutboundMessagePtr outbound = std::make_shared<OutboundMessage>(factory_.Create(action.command));
     broadcaster_.SendToOne(peer, outbound);
-    handshake.AdvanceState(next);
+    action = handshake.AdvanceState(action.next);
   }
 }
 

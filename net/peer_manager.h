@@ -15,13 +15,14 @@ class PeerManager {
   using PeerList = std::list<std::weak_ptr<Peer>>;
   using PeerCollection = util::WeakPtrCollection<Peer, PeerList>;
 
-  void AddPeer(const std::string& host, uint16_t port) {
+  std::shared_ptr<Peer> AddPeer(const std::string& host, uint16_t port) {
     auto peer = std::make_shared<Peer>(host, port);
     int fd = peer->GetConnection().GetSocket().GetFD();
     peers_.push_back(peer);
     auto back = peers_.end(); --back;
     peers_by_fd_.emplace(fd, Lookup{std::move(peer), back});
     fds_dirty_ = true;
+    return peer;
   }
 
   void RemovePeer(std::shared_ptr<Peer> peer) {
