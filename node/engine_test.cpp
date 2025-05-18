@@ -5,6 +5,7 @@
 #include "net/peer.h"
 #include "node/engine.h"
 #include "protocol/handshake.h"
+#include "util/timeout.h"
 
 #include <gtest/gtest.h>
 
@@ -15,7 +16,10 @@ TEST(EngineTest, TestHandshake) {
     net::Bitcoind node = net::Bitcoind::Launch();
     Engine engine_{node.magic};
     const auto peer = engine_.AddOutboundPeer(net::kLocalhost, node.port);
-    engine_.RunMessageLoop(1000);
+    util::Timeout timeout(1000);  // Wait up to one second for the hanshake to complete.
+    engine_.RunMessageLoop([&](const Engine&) {
+        return timeout.IsExpired() || peer->GetHandshake().IsComplete();
+    });
     EXPECT_TRUE(peer->GetHandshake().IsComplete());
 }
 

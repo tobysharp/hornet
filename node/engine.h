@@ -12,14 +12,21 @@
 #include "node/serialization_memo.h"
 #include "protocol/constants.h"
 #include "protocol/factory.h"
+#include "util/timeout.h"
 
 namespace hornet::node {
 
 class Engine : public Broadcaster {
  public:
+  struct BreakOnTimeout {
+    BreakOnTimeout(int timeout_ms = 0) : timeout_(timeout_ms) {}
+    bool operator()(const Engine&) const { return timeout_.IsExpired(); }
+    util::Timeout timeout_;
+  };
+  using BreakCondition = std::function<bool(const Engine&)>;
+ 
   Engine(protocol::Magic magic);
-
-  void RunMessageLoop(int64_t timeout_ms = -1);
+  void RunMessageLoop(BreakCondition condition = BreakOnTimeout{});
 
   void Abort() {
     abort_ = true;

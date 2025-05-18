@@ -44,15 +44,14 @@ std::shared_ptr<net::Peer> Engine::AddOutboundPeer(const std::string& host, uint
   return peer;
 }
 
-void Engine::RunMessageLoop(int64_t timeout_ms /* = -1 */) {
+void Engine::RunMessageLoop(BreakCondition condition /* = BreakOnTimeout{} */) {
   // We design the message loop in discrete stages with well-defined boundaries between
   // each, so that the various stages can be executed in parallel in pipeline fashion,
   // for example so that last frame's data is being parsed while this frame's data is
   // being read, etc. Beyond this task parallelization, much of the work within each task
   // can also be parallelized and split up among a pool of worker threads for efficiency.
 
-  util::Timeout timeout{timeout_ms};
-  while (!abort_ && !timeout.IsExpired()) {
+  while (!abort_ && !condition(*this)) {
     // 1. Reading.
     ReadSocketsToBuffers(peers_, peers_for_parsing_);
 
