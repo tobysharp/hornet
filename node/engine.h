@@ -9,6 +9,7 @@
 #include "node/inbound_message.h"
 #include "node/outbound_message.h"
 #include "node/processor.h"
+#include "node/serialization_memo.h"
 #include "protocol/constants.h"
 #include "protocol/factory.h"
 
@@ -26,28 +27,28 @@ class Engine : public Broadcaster {
 
   std::shared_ptr<net::Peer> AddOutboundPeer(const std::string& host, uint16_t port);
 
-  virtual void SendToOne(std::shared_ptr<net::Peer> peer, OutboundMessagePtr msg) override;
-  virtual void SendToAll(OutboundMessagePtr msg) override;
+  virtual void SendToOne(std::shared_ptr<net::Peer> peer, OutboundMessage&& msg) override;
+  virtual void SendToAll(OutboundMessage&& msg) override;
 
  private:
-  void ReadSocketsToBuffers();
-  void ParseBuffersToMessageQueues();
-  void ManagePeers();
-  void ProcessMessages();
+  using Inbox = std::queue<InboundMessage>;
+  using OutboundMessageQueue = std::deque<SerializationMemoPtr>;
+  using Outbox = std::map<PeerPtr, OutboundMessageQueue, std::owner_less<PeerPtr>>;
+
+  void ReadSocketsToBuffers(net::PeerManager& peers, std::queue<PeerPtr>& peers_for_parsing);
+  void ParseBuffersToMessages(std::queue<PeerPtr>& peers_for_parsing, Inbox& inbox);
+  void ProcessMessages(Inbox& inbox, Processor& processor);
+  void FrameMessagesToBuffers(Outbox& outbox);
+  void WriteBuffersToSockets(net::PeerManager& peers);
+  void ManagePeers(net::PeerManager& peers);
 
   protocol::Magic magic_;
   net::PeerManager peers_;
   std::atomic<bool> abort_ = false;
-
   std::queue<PeerPtr> peers_for_parsing_;
   protocol::Factory factory_;
-
-  std::queue<InboundMessage> inbox_;
-
+  Inbox inbox_;
   std::unique_ptr<Processor> processor_;
-
-  using OutboundMessageQueue = std::deque<OutboundMessagePtr>;
-  using Outbox = std::map<PeerPtr, OutboundMessageQueue, std::owner_less<PeerPtr>>;
   Outbox outbox_;
 
   // The maximum number of milliseconds to wait per loop iteration for data to arrive.
@@ -63,6 +64,9 @@ class Engine : public Broadcaster {
 
   // The maximum number of messages to process per frame.
   static constexpr size_t kMaxProcessedMessagesPerFrame = 16;
+
+  static constexpr int kPollWriteTimeoutMs = 50;  // 50 ms
+  static constexpr size_t kMaxWriteBuffersPerPeer = 10;
 };
 
 }  // namespace hornet::node

@@ -11,6 +11,7 @@
 #include "node/processor.h"
 #include "protocol/constants.h"
 #include "protocol/factory.h"
+#include "protocol/framer.h"
 #include "protocol/parser.h"
 #include "util/timeout.h"
 
@@ -22,20 +23,23 @@ Engine::Engine(protocol::Magic magic)
   processor_ = std::make_unique<Processor>(factory_, b);
 }
 
-void Engine::SendToOne(std::shared_ptr<net::Peer> peer, OutboundMessagePtr msg) {
-  if (!peer->IsDropped())
-    outbox_[peer].push_back(msg);  // Creates queue if previously non-existent
+void Engine::SendToOne(std::shared_ptr<net::Peer> peer, OutboundMessage&& msg) {
+  if (!peer->IsDropped()) {
+    const SerializationMemoPtr memo = std::make_shared<SerializationMemo>(std::move(msg));
+    outbox_[peer].emplace_back(memo);  // Creates queue if previously non-existent
+  }
 }
 
-void Engine::SendToAll(OutboundMessagePtr msg) {
+void Engine::SendToAll(OutboundMessage&& msg) {
+  const SerializationMemoPtr memo = std::make_shared<SerializationMemo>(std::move(msg));
   for (auto pair : outbox_) {
-    pair.second.push_back(msg);
+    pair.second.emplace_back(memo);
   }
 }
 
 std::shared_ptr<net::Peer> Engine::AddOutboundPeer(const std::string& host, uint16_t port) {
   // TODO: Pass outbound direction to AddPeer also
-  const auto peer = peers_.AddPeer(host, port/*, Peer::Direction::Outbound*/);
+  const auto peer = peers_.AddPeer(host, port /*, Peer::Direction::Outbound*/);
   processor_->InitiateHandshake(peer);
   return peer;
 }
@@ -50,26 +54,30 @@ void Engine::RunMessageLoop(int64_t timeout_ms /* = -1 */) {
   util::Timeout timeout{timeout_ms};
   while (!abort_ && !timeout.IsExpired()) {
     // 1. Reading.
-    ReadSocketsToBuffers();
+    ReadSocketsToBuffers(peers_, peers_for_parsing_);
 
-    // 2. Parsing.
-    ParseBuffersToMessageQueues();
+    // 2. Parsing + Deserializing.
+    ParseBuffersToMessages(peers_for_parsing_, inbox_);
 
     // 3. Message Dispatch / Processing.
-    ProcessMessages();
+    ProcessMessages(inbox_, *processor_);
 
-    // 4. Framing.
+    // 4. Serializing + Framing.
+    FrameMessagesToBuffers(outbox_);
+
     // 5. Writing.
+    WriteBuffersToSockets(peers_);
+
     // 6. Connection Management & Bookkeeping.
-    ManagePeers();
+    ManagePeers(peers_);
   }
 }
 
 // Determine which peers' sockets have data for reading, and iterate over them,
 // reading socket data into local buffers. This can be parallelized over the peers
 // if preferable.
-void Engine::ReadSocketsToBuffers() {
-  for (const auto peer : peers_.PollRead(kPollReadTimeoutMs)) {
+void Engine::ReadSocketsToBuffers(net::PeerManager& peers, std::queue<PeerPtr>& peers_for_parsing) {
+  for (const auto peer : peers.PollRead(kPollReadTimeoutMs)) {
     // Reads bytes from a peer's socket to its internal memory buffer.
     const size_t bytes = peer->GetConnection().ReadToBuffer(kMaxReadBytesPerFrame);
 
@@ -83,7 +91,7 @@ void Engine::ReadSocketsToBuffers() {
     }
 
     // Add this peer to the queue for parsing.
-    peers_for_parsing_.push(peer);
+    peers_for_parsing.push(peer);
   }
   // All the socket reading has now been done for this frame
 }
@@ -91,11 +99,11 @@ void Engine::ReadSocketsToBuffers() {
 // Visit each peer buffer with new data recently arrived, and look to see whether
 // there exists one or more whole messages ready for parsing. If so, parse and store
 // the message in a queue, then eat the bytes in the peer buffer.
-void Engine::ParseBuffersToMessageQueues() {
+void Engine::ParseBuffersToMessages(std::queue<PeerPtr>& peers_for_parsing, Inbox& inbox) {
   protocol::Parser parser(magic_);
-  while (!peers_for_parsing_.empty()) {
-    const std::shared_ptr<net::Peer> peer = peers_for_parsing_.front().lock();
-    peers_for_parsing_.pop();
+  while (!peers_for_parsing.empty()) {
+    const std::shared_ptr<net::Peer> peer = peers_for_parsing.front().lock();
+    peers_for_parsing.pop();
     if (!peer) continue;
 
     bool continue_later = true;
@@ -122,7 +130,7 @@ void Engine::ParseBuffersToMessageQueues() {
         msg->Deserialize(reader);
 
         // Add the deserialized message to the queue for dispatch and processing.
-        inbox_.push({peer, std::move(msg)});
+        inbox.push({peer, std::move(msg)});
       }
     } catch (std::exception& e) {
       // If any peer-specific behavior throws, we will defensively drop the connection,
@@ -133,32 +141,66 @@ void Engine::ParseBuffersToMessageQueues() {
       continue_later = false;
     }
     // Peer may have more complete messages — requeue for next frame
-    if (continue_later) peers_for_parsing_.push(peer);
+    if (continue_later) peers_for_parsing.push(peer);
   }
 }
 
 // Pull messages from the inbound queue and dispatch each one in turn to the processor.
-// OPT: A future optimization could be to distribute work over parallel threads where each concurrent
-// thread represents a different peer.
-void Engine::ProcessMessages() {
+// OPT: A future optimization could be to distribute work over parallel threads where each
+// concurrent thread represents a different peer.
+void Engine::ProcessMessages(Inbox& inbox, Processor& processor) {
   for (size_t processed_count = 0;
-       !inbox_.empty() && processed_count < kMaxProcessedMessagesPerFrame;
-       ++processed_count) {
-    InboundMessage inbound = std::move(inbox_.front());
+       !inbox.empty() && processed_count < kMaxProcessedMessagesPerFrame; ++processed_count) {
+    InboundMessage inbound = std::move(inbox.front());
+    inbox.pop();
     try {
-      processor_->Process(inbound);
-    }
-    catch (std::exception& e) {
+      processor.Process(inbound);
+    } catch (std::exception& e) {
       // On unexpected exception, treat as protocol violation: close socket.
-      if (auto peer = inbound.GetPeer())
-        peer->Drop();
+      if (auto peer = inbound.GetPeer()) peer->Drop();
     }
   }
 }
 
-void Engine::ManagePeers() {
+// Iterates over peers, and over queued work per peer. While each peer has space available and work
+// items waiting, serialize the message if not already done, then queue the serialized buffer to the
+// peer's output.
+void Engine::FrameMessagesToBuffers(Outbox& outbox) {
+  for (auto& [wpeer, queue] : outbox) {
+    const auto peer = wpeer.lock();
+    if (!peer || peer->IsDropped()) continue;
+    try {
+      size_t queue_size = peer->GetConnection().QueuedWriteBufferCount();
+      while (!queue.empty() && queue_size < kMaxWriteBuffersPerPeer) {
+        const auto memo = queue.front();
+        queue.pop_front();  // Pop now so that if we throw an exception during processing, we don't
+                            // repeat the error next frame.
+        peer->GetConnection().EnqueueWrite(memo->GetSerializedBuffer(magic_));
+        ++queue_size;
+      }
+    } catch (std::exception& e) {
+      // Something went wrong -- defensively drop the connection.
+      peer->Drop();
+    }
+  }
+}
+
+// Loops over all active peers that have binary data waiting in buffers ready to be sent,
+// and send the maximum amount per peer without risking blocking.
+void Engine::WriteBuffersToSockets(net::PeerManager& peers) {
+  const auto select = [](const net::Peer& peer) {
+    return peer.GetConnection().QueuedWriteBufferCount() > 0;
+  };
+
+  size_t bytes_written = 0;
+  for (const auto peer : peers.PollWrite(kPollWriteTimeoutMs, select)) {
+    if (peer) bytes_written += peer->GetConnection().ContinueWrite();
+  }
+}
+
+void Engine::ManagePeers(net::PeerManager& peers) {
   // Removes all the peers whose sockets have been closed.
-  peers_.RemoveClosedPeers();
+  peers.RemoveClosedPeers();
 
   // TODO: Other bookkeeping and network tasks.
 }

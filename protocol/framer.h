@@ -46,6 +46,12 @@ class Framer {
     writer_.Clear();
   }
 
+  static std::shared_ptr<std::vector<uint8_t>> FrameToBuffer(Magic magic, const Message& message) {
+    Framer framer{magic};
+    framer.Frame(message);
+    return std::make_shared<std::vector<uint8_t>>(framer.writer_.ReleaseBuffer());
+  }
+
  private:
   Magic magic_;
   encoding::Writer writer_;

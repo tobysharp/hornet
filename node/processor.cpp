@@ -56,8 +56,8 @@ void Processor::AdvanceHandshake(std::shared_ptr<net::Peer> peer, protocol::Hand
   auto& handshake = peer->GetHandshake();
   auto action = handshake.AdvanceState(transition);
   while (action.next != protocol::Handshake::Transition::None) {
-    OutboundMessagePtr outbound = std::make_shared<OutboundMessage>(factory_.Create(action.command));
-    broadcaster_.SendToOne(peer, outbound);
+    OutboundMessage outbound{factory_.Create(action.command)};
+    broadcaster_.SendToOne(peer, std::move(outbound));
     action = handshake.AdvanceState(action.next);
   }
 }

@@ -15,7 +15,7 @@
 
 namespace hornet::net {
 
-Socket::Socket(int fd) : fd_(fd) {
+Socket::Socket(int fd, bool blocking /* = true */) : fd_(fd), is_blocking_(blocking) {
   if (fd_ < 0) {
     throw std::runtime_error("Invalid socket descriptor");
   }
@@ -25,14 +25,16 @@ Socket::~Socket() {
   Close();
 }
 
-Socket::Socket(Socket &&other) noexcept : fd_(other.fd_) {
+Socket::Socket(Socket &&other) noexcept : fd_(other.fd_), is_blocking_(other.is_blocking_) {
   other.fd_ = -1;
+  other.is_blocking_ = true;
 }
 
 Socket &Socket::operator=(Socket &&other) noexcept {
   if (this != &other) {
     Close();
     std::swap(fd_, other.fd_);
+    std::swap(is_blocking_, other.is_blocking_);
   }
   return *this;
 }
@@ -81,7 +83,7 @@ void Socket::Close() {
     }
   }
 
-  return Socket(fd);
+  return Socket(fd, blocking);
 }
 
 // Checks whether data is ready to be read.

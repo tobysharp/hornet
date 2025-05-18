@@ -1,7 +1,9 @@
 #pragma once
 
 #include "net/socket.h"
+#include "util/shared_span.h"
 
+#include <deque>
 #include <vector>
 
 namespace hornet::net {
@@ -91,10 +93,48 @@ class Connection {
     TrimBuffer();
   }
 
+  void EnqueueWrite(util::SharedSpan<const uint8_t> buffer) {
+    if (!buffer || buffer->empty()) return;
+    write_queue_.emplace_back(std::move(buffer));
+  }
+
+  size_t QueuedWriteBufferCount() const {
+    return write_queue_.size();
+  }
+
+  size_t ContinueWrite() {
+    if (!sock_.IsOpen()) return 0;
+    const bool is_blocking = sock_.IsBlocking();
+    size_t bytes_written = 0;
+    do {
+      while (!write_queue_.empty() && write_queue_.front()->empty())
+        write_queue_.pop_front();
+      if (!write_queue_.empty()) {
+        auto& span = write_queue_.front();
+        const auto write = sock_.Write(*span);
+        if (!write) {
+          // Non-blocking socket not ready for writing. It's not an error.
+          break;
+        }
+        else if (*write == 0) {
+          // Failed to write. Must drop the connection now.
+          Drop();
+          return 0;
+        }
+        // Move the write cursor
+        span.Skip(*write);
+        bytes_written += *write;
+        if (span->empty()) write_queue_.pop_front();
+      }
+    } while (!is_blocking && !write_queue_.empty());
+    return bytes_written;
+  }
+
   // Drops the connection by closing the socket and clearing the read buffer.
   void Drop() {
     buffer_.clear();
     read_cursor_ = 0;
+    write_queue_.clear();
     sock_.Close();
   }
 
@@ -114,6 +154,7 @@ class Connection {
   Socket sock_;
   std::vector<uint8_t> buffer_;
   size_t read_cursor_ = 0;
+  std::deque<util::SharedSpan<const uint8_t>> write_queue_;
 };
 
 }  // namespace hornet::net

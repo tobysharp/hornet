@@ -7,6 +7,7 @@ namespace {
 
 TEST(HandshakeTest, OutboundHappyPath) {
   Handshake h(Handshake::Role::Outbound);
+  EXPECT_EQ(h.AdvanceState(Handshake::Transition::Begin).next, Handshake::Transition::SendVersion);
 
   // Start -> SendVersion
   EXPECT_EQ(h.AdvanceState(Handshake::Transition::SendVersion).next, Handshake::Transition::None);
@@ -26,6 +27,7 @@ TEST(HandshakeTest, OutboundHappyPath) {
 
 TEST(HandshakeTest, InboundHappyPath) {
   Handshake h(Handshake::Role::Inbound);
+  EXPECT_EQ(h.AdvanceState(Handshake::Transition::Begin).next, Handshake::Transition::None);
 
   // ReceiveVersion triggers SendVersion
   EXPECT_EQ(h.AdvanceState(Handshake::Transition::ReceiveVersion).next,
@@ -45,27 +47,32 @@ TEST(HandshakeTest, InboundHappyPath) {
 
 TEST(HandshakeTest, OutboundRejectsEarlyVerack) {
   Handshake h(Handshake::Role::Outbound);
+  h.AdvanceState(Handshake::Transition::Begin);
   EXPECT_THROW(h.AdvanceState(Handshake::Transition::ReceiveVerack), Handshake::Error);
 }
 
 TEST(HandshakeTest, InboundRejectsEarlyVerack) {
   Handshake h(Handshake::Role::Inbound);
+  h.AdvanceState(Handshake::Transition::Begin);
   EXPECT_THROW(h.AdvanceState(Handshake::Transition::ReceiveVerack), Handshake::Error);
 }
 
 TEST(HandshakeTest, DuplicateVersionSentFails) {
   Handshake h(Handshake::Role::Outbound);
+  h.AdvanceState(Handshake::Transition::Begin);
   h.AdvanceState(Handshake::Transition::SendVersion);
   EXPECT_THROW(h.AdvanceState(Handshake::Transition::SendVersion), Handshake::Error);
 }
 
 TEST(HandshakeTest, InboundSendingVersionTooEarlyFails) {
   Handshake h(Handshake::Role::Inbound);
+  h.AdvanceState(Handshake::Transition::Begin);
   EXPECT_THROW(h.AdvanceState(Handshake::Transition::SendVersion), Handshake::Error);
 }
 
 TEST(HandshakeTest, VerackBeforeVersionReceivedFails) {
   Handshake h(Handshake::Role::Outbound);
+  h.AdvanceState(Handshake::Transition::Begin);
   h.AdvanceState(Handshake::Transition::SendVersion);
   EXPECT_THROW(h.AdvanceState(Handshake::Transition::SendVerack), Handshake::Error);
 }

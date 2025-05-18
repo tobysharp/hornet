@@ -12,9 +12,14 @@ class OutboundMessage {
   OutboundMessage(std::unique_ptr<const protocol::Message>&& msg)
       : message_(std::move(msg)), construct_time_(std::chrono::steady_clock::now()) {}
 
+  const protocol::Message& GetMessage() const {
+    return *message_;
+  }
+
  private:
   std::unique_ptr<const protocol::Message> message_;
   std::chrono::steady_clock::time_point construct_time_;
+  // TODO: Priority, origination, etc.
 };
 
 using OutboundMessagePtr = std::shared_ptr<OutboundMessage>;

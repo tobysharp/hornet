@@ -153,11 +153,12 @@ class Writer {
   }
 
   // Buffer access
-  const std::vector<uint8_t> &Buffer() const {
+  const std::vector<uint8_t>& Buffer() const {
     return buffer_;
   }
-  std::vector<uint8_t> &Buffer() {
-    return buffer_;
+
+  std::vector<uint8_t>&& ReleaseBuffer() {
+    return std::move(buffer_);
   }
 
   // Clears and resets the internal buffer and seek position

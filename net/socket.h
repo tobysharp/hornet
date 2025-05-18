@@ -14,7 +14,7 @@ class Socket {
   static Socket Connect(const std::string& host, uint16_t port, bool blocking = true);
 
   Socket() : fd_(-1) {}
-  Socket(int fd);
+  Socket(int fd, bool blocking = true);
   ~Socket();
 
   Socket(Socket&& other) noexcept;
@@ -25,7 +25,10 @@ class Socket {
   bool IsOpen() const {
     return fd_ >= 0;
   }
-
+  bool IsBlocking() const {
+    return is_blocking_;
+  }
+  
   std::optional<size_t> Write(std::span<const uint8_t> data) const;
 
   // Reads data from the socket, blocking if data is not currently
@@ -51,6 +54,7 @@ class Socket {
   Socket& operator=(const Socket&) = delete;
 
   int fd_;
+  bool is_blocking_ = true;
 };
 
 }  // namespace hornet::net

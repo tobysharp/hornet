@@ -52,15 +52,28 @@ class PeerManager {
     return ready;
   }
 
+  struct SelectAll {
+    bool operator()(const net::Peer&) const { return true; }
+  };
+
   // Returns an iterable collection of peers that are ready to receive output data.
   // The function will block for up to timeout_ms milliseconds, but will return
   // sooner if any one of the peers is writeable or becomes writeable.
-  PeerCollection PollWrite(int timeout_ms = 0) {
+  template <typename Select = SelectAll>
+  PeerCollection PollWrite(int timeout_ms = 0, Select select = Select{}) {
     RefreshPollFDs();
-    int rc = poll(poll_fds_out_.data(), poll_fds_out_.size(), timeout_ms);
+    std::vector<pollfd> poll_fds_out;
+    for (auto it = peers_.begin(); it != peers_.end(); ++it) {
+      const std::shared_ptr<Peer> peer = *it;
+      const Socket& socket = peer->GetConnection().GetSocket();
+      if (socket.IsOpen() && peer != nullptr && select(*peer)) {
+        poll_fds_out.push_back({socket.GetFD(), POLLOUT, 0});
+      }
+    }
+    int rc = poll(poll_fds_out.data(), poll_fds_out.size(), timeout_ms);
     PeerList ready;
     if (rc > 0) {
-      for (const auto& pfd : poll_fds_out_) {
+      for (const auto& pfd : poll_fds_out) {
         if (pfd.revents & POLLOUT) {
           ready.push_back(peers_by_fd_[pfd.fd].peer);
         }
@@ -85,7 +98,6 @@ class PeerManager {
   void RefreshPollFDs() {
     if (!fds_dirty_) return;
     poll_fds_in_.clear();
-    poll_fds_out_.clear();
     peers_by_fd_.clear();
     for (auto it = peers_.begin(); it != peers_.end(); ++it) {
       const std::shared_ptr<Peer> peer = *it;
@@ -93,7 +105,6 @@ class PeerManager {
       if (socket.IsOpen()) {
         int fd = socket.GetFD();
         poll_fds_in_.push_back({fd, POLLIN, 0});
-        poll_fds_out_.push_back({fd, POLLOUT, 0});
         peers_by_fd_.emplace(fd, Lookup{peer, it});
       }
     }
@@ -112,7 +123,6 @@ class PeerManager {
   std::unordered_map<int, Lookup> peers_by_fd_;
   bool fds_dirty_ = false;
   std::vector<pollfd> poll_fds_in_;
-  std::vector<pollfd> poll_fds_out_;
 };
 
 }  // namespace hornet::net
