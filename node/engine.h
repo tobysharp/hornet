@@ -1,6 +1,8 @@
 #pragma once
 
 #include <atomic>
+#include <deque>
+#include <optional>
 #include <queue>
 
 #include "net/peer.h"
@@ -34,7 +36,7 @@ class Engine : public Broadcaster {
 
   std::shared_ptr<net::Peer> AddOutboundPeer(const std::string& host, uint16_t port);
 
-  virtual void SendToOne(std::shared_ptr<net::Peer> peer, OutboundMessage&& msg) override;
+  virtual void SendToOne(const std::shared_ptr<net::Peer>& peer, OutboundMessage&& msg) override;
   virtual void SendToAll(OutboundMessage&& msg) override;
 
  private:
@@ -55,7 +57,7 @@ class Engine : public Broadcaster {
   std::queue<PeerPtr> peers_for_parsing_;
   protocol::Factory factory_;
   Inbox inbox_;
-  std::unique_ptr<Processor> processor_;
+  std::optional<Processor> processor_;
   Outbox outbox_;
 
   // The maximum number of milliseconds to wait per loop iteration for data to arrive.

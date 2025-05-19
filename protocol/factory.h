@@ -35,8 +35,7 @@ class Factory final {
   std::unique_ptr<Message> Create(const std::string_view &command) const {
     std::string name{command};
     const auto find = map_.find(name);
-    if (find == map_.end())
-      throw Error{"No such message type (" + name + ") registered in the factory."};
+    if (find == map_.end()) return nullptr;
     return find->second();
   }
 

@@ -19,11 +19,10 @@ namespace hornet::node {
 
 Engine::Engine(protocol::Magic magic)
     : Broadcaster(), magic_(magic), factory_(message::CreateMessageFactory()) {
-  Broadcaster& b = static_cast<Broadcaster&>(*this);
-  processor_ = std::make_unique<Processor>(factory_, b);
+  processor_.emplace(factory_, static_cast<Broadcaster&>(*this));
 }
 
-void Engine::SendToOne(std::shared_ptr<net::Peer> peer, OutboundMessage&& msg) {
+void Engine::SendToOne(const std::shared_ptr<net::Peer>& peer, OutboundMessage&& msg) {
   if (!peer->IsDropped()) {
     const SerializationMemoPtr memo = std::make_shared<SerializationMemo>(std::move(msg));
     outbox_[peer].emplace_back(memo);  // Creates queue if previously non-existent
@@ -122,14 +121,16 @@ void Engine::ParseBuffersToMessages(std::queue<PeerPtr>& peers_for_parsing, Inbo
         peer->GetConnection().ConsumeBufferedData(protocol::kHeaderLength + parsed.payload.size());
 
         // Instantiate a protocol::Message object of the correct derived type.
-        auto msg = factory_.Create(parsed.header.command);
+        if (auto msg = factory_.Create(parsed.header.command)) {
+          // Deserialize the message from the payload.
+          encoding::Reader reader{parsed.payload};
+          msg->Deserialize(reader);
 
-        // Deserialize the message from the payload.
-        encoding::Reader reader{parsed.payload};
-        msg->Deserialize(reader);
-
-        // Add the deserialized message to the queue for dispatch and processing.
-        inbox.push({peer, std::move(msg)});
+          // Add the deserialized message to the queue for dispatch and processing.
+          inbox.push({peer, std::move(msg)});
+        } else {
+          // Unrecognized message command.
+        }
       }
     } catch (std::exception& e) {
       // If any peer-specific behavior throws, we will defensively drop the connection,

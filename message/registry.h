@@ -11,6 +11,7 @@ inline void RegisterCoreMessages(protocol::Factory &factory) {
   // to instantiate on parsing prior to deserialization.
   factory.Register<Verack>();
   factory.Register<Version>();
+  // TODO: sendcmpct, ping, feefilter, etc.
 }
 
 // Returns a message factory initialized with all the message

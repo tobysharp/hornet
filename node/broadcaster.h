@@ -12,7 +12,7 @@ namespace hornet::node {
 class Broadcaster {
  public:
   virtual ~Broadcaster() {}
-  virtual void SendToOne(std::shared_ptr<net::Peer> peer, OutboundMessage&& msg) = 0;
+  virtual void SendToOne(const std::shared_ptr<net::Peer>& peer, OutboundMessage&& msg) = 0;
   virtual void SendToAll(OutboundMessage&& msg) = 0;
 };
 

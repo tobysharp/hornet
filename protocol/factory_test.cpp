@@ -18,10 +18,10 @@ TEST(FactoryTest, CanCreateRegisteredMessage) {
   EXPECT_NE(dynamic_cast<message::Version*>(msg.get()), nullptr);
 }
 
-TEST(FactoryTest, ThrowsOnUnknownMessage) {
+TEST(FactoryTest, NoThrowOnUnknownMessage) {
   Factory factory = message::CreateMessageFactory();
 
-  EXPECT_THROW(factory.Create("nonexistent"), Factory::Error);
+  EXPECT_EQ(factory.Create("nonexistent"), nullptr);
 }
 
 }  // namespace
