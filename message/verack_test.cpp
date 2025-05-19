@@ -23,24 +23,10 @@ namespace {
 TEST(VerackMessageTest, TestVerack) {
   Verack m;
   EXPECT_EQ(m.GetName(), "verack");
-}
 
-TEST(VerackMessageTest, TestSendVerack) {
-  // Launch a local bitcoind node instance if necessary, and connect
-  net::Bitcoind node = net::Bitcoind::Launch();
-  net::Connection connection{net::kLocalhost, node.port, node.magic};
-
-  // Send a version message
-  connection.SendMessage(Version{});
-  const auto version = connection.NextMessage();
-  ASSERT_NE(version, nullptr);
-  EXPECT_TRUE(version->GetName() == "version");
-
-  // Send verack message
-  connection.SendMessage(Verack{});
-  const auto verack = connection.NextMessage();
-  ASSERT_NE(verack, nullptr);
-  EXPECT_EQ(verack->GetName(), "verack");
+  encoding::Writer writer;
+  m.Serialize(writer);
+  EXPECT_EQ(writer.Buffer().size(), 0);
 }
 
 }  // namespace

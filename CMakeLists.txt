@@ -31,7 +31,7 @@ add_executable(hornet_tests
    protocol/handshake_test.cpp
    protocol/parser_test.cpp
    message/version_test.cpp
-   #message/verack_test.cpp
+   message/verack_test.cpp
    net/bitcoind_test.cpp
    net/connection_test.cpp
    net/peer_test.cpp
