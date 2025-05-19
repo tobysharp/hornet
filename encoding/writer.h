@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "encoding/endian.h"
-#include "types.h"
 
 namespace hornet::encoding {
 

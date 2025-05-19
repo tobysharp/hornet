@@ -4,7 +4,6 @@
 #include <cstring>
 #include <iostream>
 
-#include "types.h"
 #include "crypto/sha256.h"
 
 #include <gtest/gtest.h>

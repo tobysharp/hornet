@@ -3,12 +3,12 @@
 #include <array>
 #include <string>
 
-#include "types.h"
 #include "encoding/reader.h"
 #include "encoding/transfer.h"
 #include "encoding/writer.h"
 #include "message/visitor.h"
 #include "protocol/message.h"
+#include "util/as_span.h"
 
 namespace hornet::message {
 
@@ -52,8 +52,8 @@ class Version : public protocol::Message {
     TransferLE4(s, m.version);
     TransferLE8(s, m.services);
     TransferLE8(s, m.timestamp);
-    TransferBytes(s, AsSpan(m.addr_recv));
-    TransferBytes(s, AsSpan(m.addr_from));
+    TransferBytes(s, util::AsSpan(m.addr_recv));
+    TransferBytes(s, util::AsSpan(m.addr_from));
     TransferLE8(s, m.nonce);
     TransferVarString(s, m.user_agent);
     TransferLE4(s, m.start_height);

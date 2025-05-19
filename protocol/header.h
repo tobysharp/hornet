@@ -6,7 +6,6 @@
 #include "encoding/reader.h"
 #include "encoding/writer.h"
 #include "protocol/constants.h"
-#include "types.h"
 
 namespace hornet::protocol {
 
