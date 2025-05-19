@@ -30,6 +30,7 @@ inline constexpr size_t kChecksumLength = 4;
 
 inline constexpr int32_t kCurrentVersion = 70015;
 inline constexpr int32_t kMinSupportedVersion = 70014;
+inline constexpr int32_t kMinVersionForSendCompact = 70014;
 
 // The maximum number of bytes accepted for an incoming message payload.
 // See MAX_PROTOCOL_MESSAGE_LENGTH in https://github.com/bitcoin/bitcoin/blob/master/src/net.h.

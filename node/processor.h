@@ -26,8 +26,10 @@ class Processor : public message::Visitor {
   void Visit(const message::Version&);
 
  private:
-  void AdvanceHandshake(std::shared_ptr<net::Peer> peer, protocol::Handshake::Transition transition);
-  protocol::Capabilities& GetPeerCapabilities() { 
+  void AdvanceHandshake(std::shared_ptr<net::Peer> peer,
+                        protocol::Handshake::Transition transition);
+  void SendPeerPreferences();
+  protocol::Capabilities& GetPeerCapabilities() {
     return inbound_->GetPeer()->GetCapabilities();
   }
   const InboundMessage* inbound_ = nullptr;

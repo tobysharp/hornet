@@ -61,22 +61,39 @@ void Processor::Visit(const message::Version& v) {
   if (v.version < protocol::kMinSupportedVersion)
     util::ThrowRuntimeError("Received unsupported protocol version number ", v.version, ".");
   
+  // The peer's version number is sent to the minimum of the two exchanged versions.
   GetPeerCapabilities().SetVersion(std::min(protocol::kCurrentVersion, v.version));
   AdvanceHandshake(inbound_->GetPeer(), protocol::Handshake::Transition::ReceiveVersion);
 }
 
+// Sets the Handshake state machine into the Start state, ready to begin negotiation.
 void Processor::InitiateHandshake(std::shared_ptr<net::Peer> peer) {
   AdvanceHandshake(peer, protocol::Handshake::Transition::Begin);
 }
 
+// Advances the Handshake state machine and performs any necessary resulting actions.
 void Processor::AdvanceHandshake(std::shared_ptr<net::Peer> peer,
                                  protocol::Handshake::Transition transition) {
   auto& handshake = peer->GetHandshake();
+
+  // Run the state machine forward until we complete or must wait for new input.
   auto action = handshake.AdvanceState(transition);
   while (action.next != protocol::Handshake::Transition::None) {
     OutboundMessage outbound{factory_.Create(action.command)};
     broadcaster_.SendToOne(peer, std::move(outbound));
     action = handshake.AdvanceState(action.next);
+  }
+
+  // Once the handshake is complete, send our preference notifications.
+  if (handshake.IsComplete())
+    SendPeerPreferences();
+}
+
+void Processor::SendPeerPreferences() {
+  // Request compact blocks if available
+  if (GetPeerCapabilities().GetVersion() >= protocol::kMinVersionForSendCompact) {
+    OutboundMessage sendcmpct{std::make_unique<message::SendCompact>()};
+    broadcaster_.SendToOne(inbound_->GetPeer(), std::move(sendcmpct));
   }
 }
 
