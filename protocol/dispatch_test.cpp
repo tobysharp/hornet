@@ -2,6 +2,7 @@
 
 #include "message/registry.h"
 #include "message/version.h"
+#include "protocol/constants.h"
 #include "protocol/framer.h"
 #include "protocol/message.h"
 
@@ -12,7 +13,7 @@ namespace {
 
 TEST(DispatchTest, ParsesAndDeserializesVersionMessage) {
   message::Version original;
-  original.version = 70015;
+  original.version = protocol::kCurrentVersion;
   original.services = 0x01;
   original.timestamp = 1700000000;
   original.addr_recv.fill(0xAA);

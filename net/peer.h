@@ -4,6 +4,7 @@
 
 #include "net/connection.h"
 #include "net/constants.h"
+#include "protocol/capabilities.h"
 #include "protocol/handshake.h"
 
 namespace hornet::net {
@@ -25,6 +26,9 @@ class Peer {
 
   protocol::Handshake& GetHandshake() { return handshake_; }
 
+  protocol::Capabilities& GetCapabilities() { return capabilities_; }
+  const protocol::Capabilities& GetCapabilities() const { return capabilities_; }
+
   void Drop() {
     conn_.Drop();
   }
@@ -33,15 +37,7 @@ class Peer {
   Connection conn_;
   std::string address_;
   protocol::Handshake handshake_;
-
-  // TODO: 
-  // Magic?
-  // Queues parsed messages and outgoing jobs
-  // May track timestamps, misbehavior score, peer type (inbound/outbound)
-  // Bridges transport <-> protocol <-> application
-  // Possibly stores last send/recv time, peer ID, services, ping RTT, etc.
-  // std::deque<Message> inbound
-  // std::deque<SendJob> outbound
+  protocol::Capabilities capabilities_;
 };
 
 }  // namespace hornet::net

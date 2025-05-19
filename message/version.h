@@ -7,6 +7,7 @@
 #include "encoding/transfer.h"
 #include "encoding/writer.h"
 #include "message/visitor.h"
+#include "protocol/constants.h"
 #include "protocol/message.h"
 #include "util/as_span.h"
 
@@ -14,7 +15,7 @@ namespace hornet::message {
 
 class Version : public protocol::Message {
  public:
-  int32_t version = 70015;
+  int32_t version = protocol::kCurrentVersion;
   uint64_t services = 0;
   int64_t timestamp = 0;
   std::array<uint8_t, 26> addr_recv{};

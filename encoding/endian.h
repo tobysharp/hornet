@@ -4,7 +4,10 @@
 #include <bit>
 #include <cstdint>
 #include <numeric>
+#include <sstream>
 #include <stdexcept>
+
+#include "util/throw.h"
 
 namespace hornet::encoding {
 
@@ -45,7 +48,8 @@ inline T BigEndianToNative(const T le) {
 template <std::integral To, std::integral From>
 To NarrowOrThrow(From value) {
   if (value > std::numeric_limits<To>::max())
-    throw std::out_of_range("Data lost in type conversion.");
+    util::ThrowOutOfRange("Data lost in type conversion of value ", value, ".");
+
   return static_cast<To>(value);
 }
 

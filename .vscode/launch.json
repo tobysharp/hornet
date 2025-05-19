@@ -1,23 +1,26 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
-    "configurations": [
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Unit Tests",
+      "type": "cppdbg",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "setupCommands": [
         {
-            "version": "0.2.0",
-            "configurations": [
-              {
-                "name": "Debug Unit Tests",
-                "type": "lldb",
-                "request": "launch",
-                "program": "${workspaceFolder}/build/hornet_tests",
-                "args": [],
-                "cwd": "${workspaceFolder}/build",
-                "stopAtEntry": false
-              }
-            ]
-          }
-          
-    ]
+          "description": "Enable pretty-printing",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ],
+      "request": "launch",
+      "program": "${workspaceFolder}/build/hornet_tests",
+      "args": [],
+      "cwd": "${workspaceFolder}/build",
+      "stopAtEntry": false,
+      "console": "integratedTerminal"
+    }
+  ]
 }

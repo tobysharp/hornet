@@ -34,13 +34,17 @@ class Parser {
   // Parses (unframes) a buffer to extract command and payload.
   ParsedMessage Parse(std::span<const uint8_t> buffer) const {
     // Validate buffer holds enough data for header.
-    if (buffer.size() < kHeaderLength) throw Error("Message too short: requires 24-byte header.");
+    if (buffer.size() < kHeaderLength) {
+      throw Error("Message too short: requires 24-byte header.");
+    }
 
     // Read the header.
     const Header header = ReadHeader(buffer);
 
     // Validate magic.
-    if (header.magic != magic_) throw Error("Invalid magic bytes.");
+    if (header.magic != magic_) {
+      throw Error("Invalid magic bytes.");
+    }
 
     // Validate buffer length -- incomplete messages not allowed here.
     if (header.bytes > buffer.size() - kHeaderLength) {

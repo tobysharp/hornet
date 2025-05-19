@@ -1,5 +1,6 @@
 #pragma once
 
+#include "message/sendcmpct.h"
 #include "message/verack.h"
 #include "message/version.h"
 #include "protocol/factory.h"
@@ -11,7 +12,8 @@ inline void RegisterCoreMessages(protocol::Factory &factory) {
   // to instantiate on parsing prior to deserialization.
   factory.Register<Verack>();
   factory.Register<Version>();
-  // TODO: sendcmpct, ping, feefilter, etc.
+  factory.Register<SendCompact>();
+  // TODO: ping, feefilter, etc.
 }
 
 // Returns a message factory initialized with all the message

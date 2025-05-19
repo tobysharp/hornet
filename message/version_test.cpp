@@ -18,7 +18,7 @@ namespace {
 
 TEST(VersionTest, SerializesCorrectly) {
   Version m;
-  m.version = 70015;
+  m.version = protocol::kCurrentVersion;
   m.services = 1;
   m.timestamp = 1234567890;
   m.addr_recv.fill(0xAA);
@@ -47,7 +47,7 @@ TEST(VersionTest, SerializesCorrectly) {
   // Check payload prefix
   size_t payload_offset = 24;
   uint32_t v = *reinterpret_cast<const uint32_t*>(&buf[payload_offset]);
-  EXPECT_EQ(v, 70015u);
+  EXPECT_EQ(v, protocol::kCurrentVersion);
 
   uint64_t services = *reinterpret_cast<const uint64_t*>(&buf[payload_offset + 4]);
   EXPECT_EQ(services, 1u);
@@ -55,7 +55,7 @@ TEST(VersionTest, SerializesCorrectly) {
 
 TEST(VersionTest, RoundTripSerialization) {
   Version original;
-  original.version = 70015;
+  original.version = protocol::kCurrentVersion;
   original.services = 1;
   original.timestamp = 1234567890;
   original.addr_recv.fill(0xAA);
