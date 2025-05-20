@@ -7,6 +7,8 @@
 #include "encoding/reader.h"
 #include "encoding/writer.h"
 
+namespace hornet::encoding {
+
 template <typename Streamer, std::integral T>
 inline void TransferLE2(Streamer &s, T &field) {
   if constexpr (std::is_const_v<T>)
@@ -62,3 +64,5 @@ inline void TransferBool(Streamer &s, Bool &field) {
   else
     s.ReadBool(field);
 }
+
+}  // namespace hornet::encoding

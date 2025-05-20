@@ -13,7 +13,7 @@ inline void RegisterCoreMessages(protocol::Factory &factory) {
   factory.Register<Verack>();
   factory.Register<Version>();
   factory.Register<SendCompact>();
-  // TODO: ping, feefilter, etc.
+  // TODO: feefilter, etc.
 }
 
 // Returns a message factory initialized with all the message

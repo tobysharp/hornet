@@ -1,6 +1,8 @@
 #include <queue>
 #include <utility>
 
+#include "message/ping.h"
+#include "message/pong.h"
 #include "message/registry.h"
 #include "message/verack.h"
 #include "message/version.h"
@@ -40,6 +42,10 @@ void Processor::Process(const InboundMessage& msg) {
   }
 }
 
+void Processor::Visit(const message::Ping& ping) {
+  Reply<message::Pong>(ping.GetNonce());
+}
+
 void Processor::Visit(const message::SendCompact& sendcmpct) {
   // The sendcmpct message was introduced in BIP-152. Details here:
   // https://github.com/bitcoin/bips/blob/master/bip-0152.mediawiki
@@ -54,7 +60,7 @@ void Processor::Visit(const message::SendCompact& sendcmpct) {
 }
 
 void Processor::Visit(const message::Verack& v) {
-  AdvanceHandshake(inbound_->GetPeer(), protocol::Handshake::Transition::ReceiveVerack);
+  AdvanceHandshake(GetPeer(), protocol::Handshake::Transition::ReceiveVerack);
 }
 
 void Processor::Visit(const message::Version& v) {
@@ -63,7 +69,7 @@ void Processor::Visit(const message::Version& v) {
   
   // The peer's version number is sent to the minimum of the two exchanged versions.
   GetPeerCapabilities().SetVersion(std::min(protocol::kCurrentVersion, v.version));
-  AdvanceHandshake(inbound_->GetPeer(), protocol::Handshake::Transition::ReceiveVersion);
+  AdvanceHandshake(GetPeer(), protocol::Handshake::Transition::ReceiveVersion);
 }
 
 // Sets the Handshake state machine into the Start state, ready to begin negotiation.
@@ -79,8 +85,7 @@ void Processor::AdvanceHandshake(std::shared_ptr<net::Peer> peer,
   // Run the state machine forward until we complete or must wait for new input.
   auto action = handshake.AdvanceState(transition);
   while (action.next != protocol::Handshake::Transition::None) {
-    OutboundMessage outbound{factory_.Create(action.command)};
-    broadcaster_.SendToOne(peer, std::move(outbound));
+    SendMessage(peer, factory_.Create(action.command));
     action = handshake.AdvanceState(action.next);
   }
 
@@ -91,10 +96,8 @@ void Processor::AdvanceHandshake(std::shared_ptr<net::Peer> peer,
 
 void Processor::SendPeerPreferences() {
   // Request compact blocks if available
-  if (GetPeerCapabilities().GetVersion() >= protocol::kMinVersionForSendCompact) {
-    OutboundMessage sendcmpct{std::make_unique<message::SendCompact>()};
-    broadcaster_.SendToOne(inbound_->GetPeer(), std::move(sendcmpct));
-  }
+  if (GetPeerCapabilities().GetVersion() >= protocol::kMinVersionForSendCompact)
+    Reply<message::SendCompact>();
 }
 
 }  // namespace hornet::node
