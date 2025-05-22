@@ -67,4 +67,19 @@ inline std::ostream& operator<<(std::ostream& os, const bytes32_t& h) {
   return os;
 }
 
+constexpr uint8_t HexValue(const char c) {
+  return 
+    (c >= '0' && c <= '9') ? c - '0' :
+    (c >= 'a' && c <= 'f') ? c - 'a' :
+    (c >= 'A' && c <= 'F') ? c - 'A' :
+    throw std::invalid_argument("Invalid hex digit");
+}
+
+constexpr bytes32_t ParseHex32(const char (&hex)[32*2 + 1]) {
+  bytes32_t out;
+  for (size_t i = 0; i < 32; ++i)
+    out[i] = (HexValue(hex[2*i]) << 4) | HexValue(hex[2*i+1]);
+  return out;
+}
+
 }  // namespace hornet::crypto

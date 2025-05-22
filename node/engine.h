@@ -12,6 +12,7 @@
 #include "node/outbound_message.h"
 #include "node/processor.h"
 #include "node/serialization_memo.h"
+#include "node/sync_manager.h"
 #include "protocol/constants.h"
 #include "protocol/factory.h"
 #include "util/timeout.h"
@@ -46,7 +47,7 @@ class Engine : public Broadcaster {
 
   void ReadSocketsToBuffers(net::PeerManager& peers, std::queue<PeerPtr>& peers_for_parsing);
   void ParseBuffersToMessages(std::queue<PeerPtr>& peers_for_parsing, Inbox& inbox);
-  void ProcessMessages(Inbox& inbox, Processor& processor);
+  void ProcessMessages(Inbox& inbox);
   void FrameMessagesToBuffers(Outbox& outbox);
   void WriteBuffersToSockets(net::PeerManager& peers);
   void ManagePeers(net::PeerManager& peers);
@@ -59,6 +60,7 @@ class Engine : public Broadcaster {
   Inbox inbox_;
   std::optional<Processor> processor_;
   Outbox outbox_;
+  std::optional<SyncManager> sync_manager_;
 
   // The maximum number of milliseconds to wait per loop iteration for data to arrive.
   // Smaller values lead to more spinning in the message loop during inactivity, while

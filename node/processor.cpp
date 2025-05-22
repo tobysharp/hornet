@@ -16,31 +16,7 @@
 namespace hornet::node {
 
 Processor::Processor(const protocol::Factory& factory, Broadcaster& broadcaster)
-    : factory_(factory), broadcaster_(broadcaster) {}
-
-void Processor::Process(const InboundMessage& msg) {
-  // Use an RAII pattern to guarantee inbound_ is valid if and only if we're inside
-  // one of the Visit methods.
-  struct ScopedInboundGuard {
-    ScopedInboundGuard(Processor& p, const InboundMessage* msg) : p_(p) {
-      p_.inbound_ = msg;
-    }
-    ~ScopedInboundGuard() {
-      p_.inbound_ = nullptr;
-    }
-    Processor& p_;
-  };
-
-  // Check for liveness of peer, i.e. that it hasn't been removed from PeerManager.
-  if (const auto peer = msg.GetPeer()) {
-    // Check for the socket still being open. It may have been closed by the Connection.
-    if (peer->GetConnection().GetSocket().IsOpen()) {
-      ScopedInboundGuard guard{*this, &msg};
-      // Dispatch the message for processing via the Visitor pattern.
-      msg.GetMessage().Accept(*this);
-    }
-  }
-}
+    : InboundHandler(&broadcaster), factory_(factory) {}
 
 void Processor::Visit(const message::Ping& ping) {
   Reply<message::Pong>(ping.GetNonce());
@@ -69,6 +45,8 @@ void Processor::Visit(const message::Version& v) {
   
   // The peer's version number is sent to the minimum of the two exchanged versions.
   GetPeerCapabilities().SetVersion(std::min(protocol::kCurrentVersion, v.version));
+  GetPeerCapabilities().SetStartHeight(v.start_height);
+
   AdvanceHandshake(GetPeer(), protocol::Handshake::Transition::ReceiveVersion);
 }
 
@@ -85,13 +63,15 @@ void Processor::AdvanceHandshake(std::shared_ptr<net::Peer> peer,
   // Run the state machine forward until we complete or must wait for new input.
   auto action = handshake.AdvanceState(transition);
   while (action.next != protocol::Handshake::Transition::None) {
-    SendMessage(peer, factory_.Create(action.command));
+    Send(peer, factory_.Create(action.command));
     action = handshake.AdvanceState(action.next);
   }
 
   // Once the handshake is complete, send our preference notifications.
-  if (handshake.IsComplete())
+  if (handshake.IsComplete()) {
     SendPeerPreferences();
+    //sync_manager_.OnHandshakeComplete(GetPeer());
+  }
 }
 
 void Processor::SendPeerPreferences() {

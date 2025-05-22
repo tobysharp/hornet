@@ -19,7 +19,8 @@ namespace hornet::node {
 
 Engine::Engine(protocol::Magic magic)
     : Broadcaster(), magic_(magic), factory_(message::CreateMessageFactory()) {
-  processor_.emplace(factory_, static_cast<Broadcaster&>(*this));
+  processor_.emplace(factory_, *this);
+  sync_manager_.emplace(*this);
 }
 
 void Engine::SendToOne(const std::shared_ptr<net::Peer>& peer, OutboundMessage&& msg) {
@@ -58,7 +59,7 @@ void Engine::RunMessageLoop(BreakCondition condition /* = BreakOnTimeout{} */) {
     ParseBuffersToMessages(peers_for_parsing_, inbox_);
 
     // 3. Message Dispatch / Processing.
-    ProcessMessages(inbox_, *processor_);
+    ProcessMessages(inbox_);
 
     // 4. Serializing + Framing.
     FrameMessagesToBuffers(outbox_);
@@ -148,13 +149,14 @@ void Engine::ParseBuffersToMessages(std::queue<PeerPtr>& peers_for_parsing, Inbo
 // Pull messages from the inbound queue and dispatch each one in turn to the processor.
 // OPT: A future optimization could be to distribute work over parallel threads where each
 // concurrent thread represents a different peer.
-void Engine::ProcessMessages(Inbox& inbox, Processor& processor) {
+void Engine::ProcessMessages(Inbox& inbox) {
   for (size_t processed_count = 0;
        !inbox.empty() && processed_count < kMaxProcessedMessagesPerFrame; ++processed_count) {
     InboundMessage inbound = std::move(inbox.front());
     inbox.pop();
     try {
-      processor.Process(inbound);
+      processor_->Process(inbound);
+      sync_manager_->Process(inbound);
     } catch (std::exception& e) {
       // On unexpected exception, treat as protocol violation: close socket.
       if (auto peer = inbound.GetPeer()) peer->Drop();
