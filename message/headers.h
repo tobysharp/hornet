@@ -37,7 +37,9 @@ class Headers : public protocol::Message {
     for (auto& header : block_headers_)
         header.Deserialize(r);
   }
-
+  virtual void PrintTo(std::ostream& os) const override {
+    os << "Headers{ block_headers.size = " << block_headers_.size() << " }";
+  }
  private:
   std::vector<protocol::BlockHeader> block_headers_;
 };

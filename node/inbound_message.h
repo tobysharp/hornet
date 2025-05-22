@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <memory>
+#include <ostream>
 
 #include "net/peer.h"
 #include "protocol/message.h"
@@ -21,6 +22,11 @@ class InboundMessage {
 
   const protocol::Message& GetMessage() const {
     return *message_;
+  }
+
+  friend std::ostream& operator<<(std::ostream& os, const InboundMessage& m) {
+    return os << "{ peer.fd = " << m.peer_.lock()->GetConnection().GetSocket().GetFD()
+              << ", message = " << *m.message_ << " }";
   }
 
  private:

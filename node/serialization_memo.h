@@ -27,6 +27,8 @@ class SerializationMemo {
     return serialized_;
   }
 
+  const OutboundMessage& GetOutbound() const { return *message_; }
+  
  private:
   std::optional<OutboundMessage> message_;
   std::shared_ptr<const std::vector<uint8_t>> serialized_;

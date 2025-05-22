@@ -13,6 +13,7 @@
 #include "protocol/factory.h"
 #include "protocol/framer.h"
 #include "protocol/parser.h"
+#include "util/log.h"
 #include "util/timeout.h"
 
 namespace hornet::node {
@@ -27,6 +28,7 @@ void Engine::SendToOne(const std::shared_ptr<net::Peer>& peer, OutboundMessage&&
   if (!peer->IsDropped()) {
     const SerializationMemoPtr memo = std::make_shared<SerializationMemo>(std::move(msg));
     outbox_[peer].emplace_back(memo);  // Creates queue if previously non-existent
+    LogInfo() << "Sent: peer = " << *peer << ", msg = " << memo->GetOutbound();
   }
 }
 
@@ -34,6 +36,7 @@ void Engine::SendToAll(OutboundMessage&& msg) {
   const SerializationMemoPtr memo = std::make_shared<SerializationMemo>(std::move(msg));
   for (auto pair : outbox_) {
     pair.second.emplace_back(memo);
+    LogInfo() << "Sent: peer = " << *pair.first.lock() << ", msg = " << memo->GetOutbound();
   }
 }
 
@@ -156,6 +159,7 @@ void Engine::ProcessMessages(Inbox& inbox) {
     InboundMessage inbound = std::move(inbox.front());
     inbox.pop();
     try {
+      LogInfo() << "Received: " << inbound;
       processor_->Process(inbound);
       sync_manager_->Process(inbound);
     } catch (std::exception& e) {

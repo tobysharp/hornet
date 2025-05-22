@@ -16,6 +16,9 @@ class OutboundMessage {
     return *message_;
   }
 
+  friend std::ostream& operator <<(std::ostream& os, const OutboundMessage& m) {
+    return os << "{ message = " << *m.message_ << " }";
+  }
  private:
   std::unique_ptr<const protocol::Message> message_;
   std::chrono::steady_clock::time_point construct_time_;

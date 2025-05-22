@@ -34,7 +34,6 @@ class SyncManager : public InboundHandler {
 
   virtual void Visit(const message::Headers& headers) override {
     if (!IsSyncPeer()) return;
-    std::cout << "Headers size " << headers.GetBlockHeaders().size() << std::endl;
   }
 
  private:

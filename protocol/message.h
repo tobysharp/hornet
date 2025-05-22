@@ -1,6 +1,8 @@
 #pragma once
 
 #include <memory>
+#include <ostream>
+#include <sstream>
 #include <stdexcept>
 
 namespace hornet {
@@ -24,6 +26,18 @@ class Message {
   virtual void Deserialize(encoding::Reader& r) {}
   virtual std::string GetName() const = 0;
   virtual void Accept(message::Visitor& v) const = 0;
+  virtual void PrintTo(std::ostream& os) const {
+    os << GetName();  // Fallback if not overridden.
+  }
+  std::string ToString() const {
+    std::ostringstream os;
+    PrintTo(os);
+    return os.str();
+  }
+  friend std::ostream& operator <<(std::ostream& os, const Message& msg) {
+    msg.PrintTo(os);
+    return os;
+  }
 };
 
 template <typename T>

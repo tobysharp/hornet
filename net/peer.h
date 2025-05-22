@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ostream>
 #include <string>
 
 #include "net/connection.h"
@@ -33,6 +34,9 @@ class Peer {
     conn_.Drop();
   }
 
+  friend std::ostream& operator <<(std::ostream& os, const Peer& peer) {
+    return os << "{ fd = " << peer.conn_.GetSocket().GetFD() << " }";
+  }
  private:
   Connection conn_;
   std::string address_;
