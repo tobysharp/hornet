@@ -105,8 +105,8 @@ void Engine::ParseBuffersToMessages(std::queue<PeerPtr>& peers_for_parsing, Inbo
     peers_for_parsing.pop();
     if (!peer) continue;
 
-    bool continue_later = true;
     try {
+      bool continue_later = true;
       for (size_t count = 0; count < kMaxParsedMessagesPerFrame; ++count) {
         const auto unparsed = peer->GetConnection().PeekBufferedData();
         if (!parser.IsCompleteMessage(unparsed)) {
@@ -133,16 +133,17 @@ void Engine::ParseBuffersToMessages(std::queue<PeerPtr>& peers_for_parsing, Inbo
           // Unrecognized message command.
         }
       }
+      // Allow the connection's input buffer to be trimmed
+      peer->GetConnection().TrimBufferedData();
+      // Peer may have more complete messages — requeue for next frame
+      if (continue_later) peers_for_parsing.push(peer);
     } catch (std::exception& e) {
       // If any peer-specific behavior throws, we will defensively drop the connection,
       // marking the peer for removal. This also clears the connection's read buffer,
       // preventing looping on poisoned data.
       // TODO: Log error
       peer->Drop();
-      continue_later = false;
-    }
-    // Peer may have more complete messages — requeue for next frame
-    if (continue_later) peers_for_parsing.push(peer);
+   }
   }
 }
 

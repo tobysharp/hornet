@@ -11,6 +11,7 @@ namespace hornet::message {
 
 class GetHeaders : public protocol::Message {
  public:
+  GetHeaders() : version_(protocol::kCurrentVersion) {}
   explicit GetHeaders(int version) : version_(version) {}
 
   void AddLocatorHash(const crypto::bytes32_t& hash) {

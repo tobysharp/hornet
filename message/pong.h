@@ -9,7 +9,7 @@ namespace hornet::message {
 
 class Pong : public protocol::Message {
  public:
-  Pong(uint64_t nonce) : nonce_(nonce) {}
+  Pong(uint64_t nonce = 0) : nonce_(nonce) {}
 
   uint64_t GetNonce() const {
     return nonce_;

@@ -90,7 +90,6 @@ class Connection {
 
   void ConsumeBufferedData(size_t bytes) {
     read_cursor_ = std::min(read_cursor_ + bytes, buffer_.size());
-    TrimBuffer();
   }
 
   void EnqueueWrite(util::SharedSpan<const uint8_t> buffer) {
@@ -138,8 +137,7 @@ class Connection {
     sock_.Close();
   }
 
- private:
-  void TrimBuffer() {
+  void TrimBufferedData() {
     if (read_cursor_ == 0) return;
 
     if (read_cursor_ == buffer_.size()) {
@@ -150,6 +148,7 @@ class Connection {
         read_cursor_ = 0;
     }
   }
+ private:
 
   Socket sock_;
   std::vector<uint8_t> buffer_;

@@ -2,8 +2,9 @@
 
 namespace hornet::message {
 
-  class GetHeaders;
-  class Ping;
+class GetHeaders;
+class Headers;
+class Ping;
 class Pong;
 class SendCompact;
 class Verack;
@@ -13,6 +14,7 @@ class Visitor {
  public:
   virtual ~Visitor() {}
   virtual void Visit(const GetHeaders&) {}
+  virtual void Visit(const Headers&) {}
   virtual void Visit(const Ping&) {}
   virtual void Visit(const Pong&) {}
   virtual void Visit(const SendCompact&) {}

@@ -49,6 +49,14 @@ inline void TransferBytes(Streamer &s, std::span<T> field) {
     s.ReadBytes(field);
 }
 
+template <typename Streamer, std::unsigned_integral T>
+inline void TransferVarInt(Streamer &s, T &field) {
+  if constexpr (std::is_const_v<T>)
+    s.WriteVarInt(field);
+  else
+    s.ReadVarInt(field);
+}
+
 template <typename Streamer, typename String>
 inline void TransferVarString(Streamer &s, String &field) {
   if constexpr (std::is_const_v<String>)

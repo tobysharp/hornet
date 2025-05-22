@@ -1,6 +1,7 @@
 #pragma once
 
 #include "message/getheaders.h"
+#include "message/headers.h"
 #include "message/verack.h"
 #include "node/broadcaster.h"
 #include "node/inbound_handler.h"
@@ -31,9 +32,18 @@ class SyncManager : public InboundHandler {
         OnHandshakeCompleted(GetPeer());
   }
 
+  virtual void Visit(const message::Headers& headers) override {
+    if (!IsSyncPeer()) return;
+    std::cout << "Headers size " << headers.GetBlockHeaders().size() << std::endl;
+  }
+
  private:
-  std::shared_ptr<net::Peer> GetSync() {
+  std::shared_ptr<net::Peer> GetSync() const {
     return sync_.lock();
+  }
+  bool IsSyncPeer() const {
+    const auto sync = GetSync();
+    return sync && (sync == GetPeer());
   }
   template <typename T, typename... Args>
   void Send(Args... args) {

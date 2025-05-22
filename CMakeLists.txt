@@ -38,6 +38,7 @@ add_executable(hornet_tests
    net/peer_manager_test.cpp
    net/socket_test.cpp
    node/engine_test.cpp
+   node/sync_manager_test.cpp
 )
 target_link_libraries(hornet_tests PRIVATE hornet gtest_main)
 
