@@ -25,11 +25,6 @@ add_executable(hornet_tests
    crypto/hash_test.cpp
    encoding/reader_test.cpp
    encoding/writer_test.cpp
-   protocol/dispatch_test.cpp
-   protocol/factory_test.cpp
-   protocol/framer_test.cpp
-   protocol/handshake_test.cpp
-   protocol/parser_test.cpp
    message/version_test.cpp
    message/verack_test.cpp
    net/bitcoind_test.cpp
@@ -39,6 +34,12 @@ add_executable(hornet_tests
    net/socket_test.cpp
    node/engine_test.cpp
    node/sync_manager_test.cpp
+   protocol/block_header_test.cpp
+   protocol/dispatch_test.cpp
+   protocol/factory_test.cpp
+   protocol/framer_test.cpp
+   protocol/handshake_test.cpp
+   protocol/parser_test.cpp
 )
 target_link_libraries(hornet_tests PRIVATE hornet gtest_main)
 

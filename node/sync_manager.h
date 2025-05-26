@@ -1,10 +1,13 @@
 #pragma once
 
+#include <chrono>
+
 #include "message/getheaders.h"
 #include "message/headers.h"
 #include "message/verack.h"
 #include "node/broadcaster.h"
 #include "node/inbound_handler.h"
+#include "protocol/constants.h"
 
 namespace hornet::node {
 
@@ -33,7 +36,25 @@ class SyncManager : public InboundHandler {
   }
 
   virtual void Visit(const message::Headers& headers) override {
+    // TODO: Request Tracking:
+    // When we send outbound request messages like getheaders, ping, etc.,
+    // when the outbound message is serialized, instead of deleting it, we
+    // add it to a request tracking map, by peer. Then, when a request response
+    // message like headers, pong, etc. arrives, we search in the tracking map
+    // for a matching request issued to the same peer. If found, we remove the
+    // request from the map and continue to process the response. Otherwise, we
+    // ignore the inbound message, or penalize/disconnect the peer. 
+    // In protocol::Message, we add
+    //      virtual bool IsTrackedRequest() const { return false; }
+    //      virtual bool IsMatchingRequest(const Message* request) const { return false; }
+    // And we add a new RequestTracker class with, e.g.
+    //      void Track(const OutboundMessage&);
+    //      bool Match(const InboundMessage&);
+    // However, we will defer implementing this until after header sync and validation.
+    // For now, we will assume that if the message comes from our sync peer, it's good.
     if (!IsSyncPeer()) return;
+
+
   }
 
  private:

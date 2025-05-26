@@ -47,6 +47,18 @@ static constexpr size_t kMaxBlockHeaders = 2000;
 inline constexpr size_t kMaxMessageSize = 4'000'000;
 
 inline constexpr Hash kGenesisHash =
-    crypto::ParseHex32("000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f");
+    crypto::ParseHex32ToLE("000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f");
 
 }  // namespace hornet::protocol
+
+namespace std {
+template <>
+struct hash<hornet::protocol::Hash> {
+  size_t operator()(const hornet::protocol::Hash& h) const noexcept {
+    static_assert(sizeof(hornet::protocol::Hash) == 32);
+    size_t result;
+    std::memcpy(&result, h.data(), sizeof(result));
+    return result;
+  }
+};
+}  // namespace std

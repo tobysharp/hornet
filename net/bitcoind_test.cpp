@@ -20,13 +20,13 @@ void SwapVersionMessages(Network network) {
   Bitcoind node = Bitcoind::Launch(network);
 
   // Try connecting to it
-  Socket sock = Socket::Connect(kLocalhost, node.port);
+  Socket sock = Socket::Connect(kLocalhost, node.GetPort());
 
   // Send a version message
-  sock.Write(FrameMessage(node.magic, message::Version{}));
+  sock.Write(FrameMessage(node.GetMagic(), message::Version{}));
 
   // Receive a version message
-  const auto msgin = ReceiveMessage<message::Version>(sock, node.magic);
+  const auto msgin = ReceiveMessage<message::Version>(sock, node.GetMagic());
   EXPECT_TRUE(msgin->GetName() == "version");
 }
 

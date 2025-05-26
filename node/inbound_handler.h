@@ -33,6 +33,7 @@ class InboundHandler : public message::Visitor {
   }
 
  protected:
+  // Returns the peer that sent the current message.
   std::shared_ptr<net::Peer> GetPeer() const {
     return inbound_->GetPeer();
   }

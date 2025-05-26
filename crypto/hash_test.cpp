@@ -19,12 +19,37 @@ TEST(HashTest, Sha256HashOfKnownString) {
   EXPECT_EQ(oss.str(), expected);
 }
 
-TEST(Sha256Test, DoubleSha256HashOfKnownString) {
+TEST(HashTest, DoubleSha256HashOfKnownString) {
   const std::string input = "hello";
   const std::string expected = "9595c9df90075148eb06860365df33584b75bff782a510c6cd4883a419833d50";
   std::ostringstream oss;
   oss << DoubleSha256(input);
   EXPECT_EQ(oss.str(), expected);
+}
+
+TEST(HashTest, ValidHexDigits) {
+  EXPECT_EQ(HexValue('0'), 0);
+  EXPECT_EQ(HexValue('9'), 9);
+  EXPECT_EQ(HexValue('a'), 10);
+  EXPECT_EQ(HexValue('f'), 15);
+  EXPECT_EQ(HexValue('A'), 10);
+  EXPECT_EQ(HexValue('F'), 15);
+}
+
+TEST(HashTest, InvalidHexDigitThrows) {
+  EXPECT_THROW(HexValue('g'), std::invalid_argument);
+  EXPECT_THROW(HexValue('!'), std::invalid_argument);
+  EXPECT_THROW(HexValue('z'), std::invalid_argument);
+}
+
+TEST(HashTest, GenesisMerkleRootHash) {
+  constexpr auto bytes = ParseHex32ToLE("4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b");
+  // Check first few bytes (reversed)
+  EXPECT_EQ(bytes[0], 0x3b);
+  EXPECT_EQ(bytes[1], 0xa3);
+  EXPECT_EQ(bytes[2], 0xed);
+  EXPECT_EQ(bytes[3], 0xfd);
+  EXPECT_EQ(bytes[31], 0x4a);  // Originally first hex byte
 }
 
 }  // namespace
