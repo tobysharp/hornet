@@ -8,7 +8,7 @@
 #include "encoding/writer.h"
 #include "encoding/transfer.h"
 #include "protocol/constants.h"
-#include "protocol/difficulty.h"
+#include "protocol/target.h"
 #include "util/throw.h"
 
 namespace hornet::protocol {
