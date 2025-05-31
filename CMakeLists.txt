@@ -40,6 +40,7 @@ add_executable(hornet_tests
    protocol/framer_test.cpp
    protocol/handshake_test.cpp
    protocol/parser_test.cpp
+   util/big_uint_test.cpp
 )
 target_link_libraries(hornet_tests PRIVATE hornet gtest_main)
 
