@@ -17,7 +17,7 @@ namespace {
 
 void SwapVersionMessages(Network network) {
   // Launch bitcoind on regtest
-  Bitcoind node = Bitcoind::Launch(network);
+  Bitcoind node = Bitcoind::ConnectOrLaunch(network);
 
   // Try connecting to it
   Socket sock = Socket::Connect(kLocalhost, node.GetPort());
@@ -34,11 +34,11 @@ TEST(BitcoindTest, SwapVersionMessagesRegtest) {
   SwapVersionMessages(Network::Regtest);
 }
 
-TEST(BitcoindTest, SwapVersionMessagesTestnett) {
+TEST(BitcoindTest, SwapVersionMessagesTestnet) {
   SwapVersionMessages(Network::Testnet);
 }
 
-TEST(BitcoindTest, SwapVersionMessagesMainnett) {
+TEST(BitcoindTest, SwapVersionMessagesMainnet) {
   SwapVersionMessages(Network::Mainnet);
 }
 

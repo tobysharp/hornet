@@ -9,17 +9,26 @@
 #include "encoding/transfer.h"
 #include "protocol/constants.h"
 #include "protocol/target.h"
+#include "protocol/work.h"
 #include "util/throw.h"
+#include "util/big_uint.h"
 
 namespace hornet::protocol {
 
 class BlockHeader {
  public:
-  bool IsProofOfWorkValid() const {
-    return IsProofOfWork(GetHash(), bits_);
+  // Determines whether the hash meets the required target constraints.
+  bool IsProofOfWork() const {
+    return Target::FromHash(GetHash()) <= Target::FromBits(bits_);
+  }
+
+  // Returns the expected amount of work done to achieve the hash target.
+  Work GetWork() const {
+    return Work::FromBits(bits_);
   }
 
   const Hash& GetPreviousBlockHash() const { return prev_block_; }
+
   void Serialize(encoding::Writer& w) const {
     Transfer(w, *this);
   }

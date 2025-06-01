@@ -71,7 +71,7 @@ Bitcoind Bitcoind::Launch(Network network /* = Network::Regtest */) {
   } else if (pid == 0) {
     // Child process: build argument list
     std::vector<std::string> args = {"bitcoind", "-listen=1", "-datadir=" + instance.datadir,
-                                     "-debug=net", "-server=1", "-printtoconsole=0"};
+                                     "-debug=net", "-server=1"/*, "-printtoconsole=0"*/};
                              
     if (network == Network::Testnet) args.push_back("-testnet");
     if (network == Network::Regtest) args.push_back("-regtest");

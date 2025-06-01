@@ -46,6 +46,8 @@ static constexpr size_t kMaxBlockHeaders = 2000;
 // See MAX_PROTOCOL_MESSAGE_LENGTH in https://github.com/bitcoin/bitcoin/blob/master/src/net.h.
 inline constexpr size_t kMaxMessageSize = 4'000'000;
 
+inline constexpr uint32_t kMaxTargetBits = 0x1D00FFFF;
+
 inline constexpr Hash kGenesisHash =
     crypto::ParseHex32ToLE("000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f");
 

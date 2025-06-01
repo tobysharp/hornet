@@ -12,9 +12,11 @@ add_library(hornet STATIC
    node/engine.cpp
 )
 target_include_directories(hornet PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_features(hornet PRIVATE cxx_std_20)
 
 # Main app (optional)
 add_executable(btchornet main.cpp)
+target_compile_features(btchornet PRIVATE cxx_std_20)
 target_link_libraries(btchornet PRIVATE hornet)
 
 # GoogleTest submodule
@@ -42,6 +44,7 @@ add_executable(hornet_tests
    protocol/parser_test.cpp
    util/big_uint_test.cpp
 )
+target_compile_features(hornet_tests PRIVATE cxx_std_20)
 target_link_libraries(hornet_tests PRIVATE hornet gtest_main)
 
 include(GoogleTest)

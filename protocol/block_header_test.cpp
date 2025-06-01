@@ -17,7 +17,7 @@ TEST(BlockHeader, GenesisBlockHashMatches) {
   header.SetBits(0x1d00ffff);
   header.SetNonce(2083236893);
   EXPECT_EQ(header.GetHash(), kGenesisHash);
-  EXPECT_FALSE(header.IsProofOfWorkValid());
+  EXPECT_FALSE(!header.IsProofOfWork());
 }
 
 }  // namespace

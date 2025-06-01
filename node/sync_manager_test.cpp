@@ -23,7 +23,7 @@ TEST(SyncManagerTest, TestGetHeaders) {
 }
 
 TEST(SyncManagerTest, TestMainnetSyncHeaders) {
-    net::Bitcoind node = net::Bitcoind::ConnectOrLaunch(net::Network::Mainnet);
+    net::Bitcoind node = net::Bitcoind::Connect(net::Network::Mainnet);
     Engine engine{node.GetMagic()};
     const auto peer = engine.AddOutboundPeer(net::kLocalhost, node.GetPort());
     // engine.RunMessageLoop([&](const Engine&) {
