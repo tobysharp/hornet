@@ -28,7 +28,7 @@ class BigUint {
 
   explicit constexpr BigUint(std::array<T, kWords>&& array) : words_(std::move(array)) {}
 
-  constexpr BigUint(T word) {
+  constexpr explicit BigUint(T word) {
     words_ = {};
     words_[0] = word;
   }

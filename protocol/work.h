@@ -5,6 +5,7 @@
 
 namespace hornet::protocol {
 
+// Represents the amount of work done to achieve a given target.
 class Work {
  public:
   constexpr Work() = default;
@@ -12,13 +13,15 @@ class Work {
   constexpr Work(Work&&) = default;
   constexpr Work(Uint256 value) : value_(std::move(value)) {}
 
-  constexpr Work& operator=(const Work&) = default;
-  constexpr Work& operator=(Work&&) = default;
-
+  // Return a Work object from a compact "bits" representation of a target.
   static constexpr Work FromBits(uint32_t bits) {
     return Target::FromBits(bits).GetWork();
   }
 
+  // Exposes only the operators that are appropriate for work done.
+
+  constexpr Work& operator=(const Work&) = default;
+  constexpr Work& operator=(Work&&) = default;
   constexpr Work operator+(const Work& rhs) const {
     return value_ + rhs.value_;
   }
