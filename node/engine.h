@@ -35,6 +35,8 @@ class Engine : public Broadcaster {
     abort_ = true;
   }
 
+  const SyncManager& GetSyncManager() const { return *sync_manager_; }
+
   std::shared_ptr<net::Peer> AddOutboundPeer(const std::string& host, uint16_t port);
 
   virtual void SendToOne(const std::shared_ptr<net::Peer>& peer, OutboundMessage&& msg) override;

@@ -17,7 +17,7 @@
       ],
       "request": "launch",
       "program": "${workspaceFolder}/build/hornet_tests",
-      "args": [],
+      "args": ["--gtest_filter=SyncManagerTest.TestMainnetSyncHeaders"],
       "cwd": "${workspaceFolder}/build",
       "stopAtEntry": false,
       "console": "integratedTerminal"

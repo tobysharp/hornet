@@ -2,6 +2,7 @@
 
 #include <chrono>
 
+#include "data/header_sync.h"
 #include "message/getheaders.h"
 #include "message/headers.h"
 #include "message/verack.h"
@@ -54,8 +55,15 @@ class SyncManager : public InboundHandler {
     // For now, we will assume that if the message comes from our sync peer, it's good.
     if (!IsSyncPeer()) return;
 
-
+    const int accepted = headers_.Accept(headers.GetBlockHeaders());
+    if (accepted == protocol::kMaxBlockHeaders) {
+      message::GetHeaders getheaders(GetPeer()->GetCapabilities().GetVersion());
+      getheaders.AddLocatorHash(headers.GetBlockHeaders().back().GetHash());
+      Send(std::move(getheaders));
+    }
   }
+
+  const data::HeaderSync& GetHeaderSync() const { return headers_; }
 
  private:
   std::shared_ptr<net::Peer> GetSync() const {
@@ -76,8 +84,9 @@ class SyncManager : public InboundHandler {
         broadcaster_->SendMessage<T>(sync, std::make_unique<T>(std::move(msg)));
   }
 
-  // The peer used for timechain synchronization requests.
-  std::weak_ptr<net::Peer> sync_;
+ 
+  std::weak_ptr<net::Peer> sync_;  // The peer used for timechain synchronization requests.
+  data::HeaderSync headers_;
 };
 
 }  // namespace hornet::node

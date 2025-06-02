@@ -78,7 +78,7 @@ class LogContext {
 
   mutable std::mutex mutex_;
   std::ofstream file_;
-  std::atomic<LogLevel> max_level_ = LogLevel::Info;
+  std::atomic<LogLevel> max_level_ = LogLevel::HORNET_MAX_LOG_LEVEL;
   std::atomic<bool> to_stdout_ = true;
 };
 

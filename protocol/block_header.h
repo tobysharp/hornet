@@ -19,7 +19,7 @@ class BlockHeader {
  public:
   // Determines whether the hash meets the required target constraints.
   bool IsProofOfWork() const {
-    return Target::FromHash(GetHash()) <= Target::FromBits(bits_);
+    return GetHash() <= Target::FromBits(bits_);
   }
 
   // Returns the expected amount of work done to achieve the hash target.
@@ -27,7 +27,12 @@ class BlockHeader {
     return Work::FromBits(bits_);
   }
 
+  int GetVersion() const { return version_; }
   const Hash& GetPreviousBlockHash() const { return prev_block_; }
+  const Hash& GetMerkleRoot() const { return merkle_root_; }
+  uint32_t GetTimestamp() const { return timestamp_; }
+  uint32_t GetBits() const { return bits_; }
+  uint32_t GetNonce() const { return nonce_; }
 
   void Serialize(encoding::Writer& w) const {
     Transfer(w, *this);
