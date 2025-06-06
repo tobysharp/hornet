@@ -10,7 +10,7 @@
 namespace hornet::util {
 
 // Reperesents a multi-word unsigned integer, stored in little-endian order.
-template <size_t kBits, std::unsigned_integral T = uint64_t>
+template <int kBits, std::unsigned_integral T = uint64_t>
 class BigUint {
  public:
   using Word = T;
@@ -236,14 +236,15 @@ class BigUint {
   std::array<T, kWords> words_;
 };
 
-inline constexpr uint8_t HexValue(const char c) {
-  return (c >= '0' && c <= '9')   ? c - '0'
-         : (c >= 'a' && c <= 'f') ? c - 'a' + 0xA
-         : (c >= 'A' && c <= 'F') ? c - 'A' + 0xA
-                                  : throw std::invalid_argument("Invalid hex digit");
+constexpr uint8_t HexValue(const char c) {
+  return 
+    (c >= '0' && c <= '9') ? static_cast<uint8_t>(c - '0') :
+    (c >= 'a' && c <= 'f') ? static_cast<uint8_t>(c - 'a' + 0xA):
+    (c >= 'A' && c <= 'F') ? static_cast<uint8_t>(c - 'A' + 0xA):
+    throw std::invalid_argument("Invalid hex digit");
 }
 
-template <std::unsigned_integral T>
+template <std::unsigned_integral T = uint8_t>
 inline constexpr std::array<T, 32 / sizeof(T)> ParseHex32(const char (&hex)[32 * 2 + 1]) {
   constexpr int kBytesPerWord = sizeof(T);
   constexpr int kWords = 32 / kBytesPerWord;

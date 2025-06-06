@@ -147,7 +147,7 @@ class Writer {
   // Sets the internal seek position to allow overwriting
   size_t SeekPos(size_t offset) {
     const size_t old = GetPos();
-    pos_ = buffer_.begin() + offset;
+    pos_ = buffer_.begin() + static_cast<intptr_t>(offset);
     return old;
   }
 

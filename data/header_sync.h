@@ -21,7 +21,7 @@ class HeaderSync {
     // Step 2: Add all headers
     int count = 0;
     headers_.reserve(headers_.size() + headers.size());
-    for (; count < headers.size(); ++count) {
+    for (; static_cast<size_t>(count) < headers.size(); ++count) {
       if (!Accept(headers[count], hashes[count]))
         break;
     }

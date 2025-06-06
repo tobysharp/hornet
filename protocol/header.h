@@ -10,10 +10,10 @@
 namespace hornet::protocol {
 
 struct Header {
-  Magic magic;
+  Magic magic = Magic::None;
   std::string command;
-  uint32_t bytes;
-  std::array<uint8_t, kChecksumLength> checksum;
+  uint32_t bytes = 0;
+  std::array<uint8_t, kChecksumLength> checksum = {};
 
   void Serialize(encoding::Writer& w) const {
     w.WriteLE4(static_cast<uint32_t>(magic));

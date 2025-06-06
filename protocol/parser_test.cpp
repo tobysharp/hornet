@@ -27,7 +27,7 @@ class DummyMessage : public Message {
   std::string GetName() const override {
     return "ping";
   }
-  void Accept(message::Visitor& v) const override {}
+  void Accept(message::Visitor&) const override {}
 };
 
 TEST(ParserTest, ParsesValidMessage) {

@@ -199,7 +199,7 @@ void Engine::WriteBuffersToSockets(net::PeerManager& peers) {
     return peer.GetConnection().QueuedWriteBufferCount() > 0;
   };
 
-  size_t bytes_written = 0;
+  [[maybe_unused]] size_t bytes_written = 0;
   for (const auto peer : peers.PollWrite(kPollWriteTimeoutMs, select)) {
     if (peer) bytes_written += peer->GetConnection().ContinueWrite();
   }

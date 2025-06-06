@@ -1,6 +1,7 @@
 #pragma once
 
 #include "crypto/hash.h"
+#include "util/big_uint.h"
 
 namespace hornet::protocol {
 
@@ -8,7 +9,7 @@ namespace hornet::protocol {
 using Hash = crypto::bytes32_t;
 
 inline constexpr Hash kGenesisHash =
-    crypto::ParseHex32ToLE("000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f");
+    util::ParseHex32("000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f");
 
 }  // namespace hornet::protocol 
 

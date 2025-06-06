@@ -11,7 +11,8 @@ enum class Magic : uint32_t {
   Regtest = 0xDAB5BFFA,  // testnet/regnet
   Testnet = 0x0709110B,  // testnet3
   Signet = 0x40CF030A,   // signet
-  Namecoin = 0xFEB4BEF9  // namecoin
+  Namecoin = 0xFEB4BEF9, // namecoin
+  None = 0xFFFFFFFF
 };
 
 enum class HandshakeState {

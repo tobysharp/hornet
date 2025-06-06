@@ -5,6 +5,7 @@
 #include <iostream>
 
 #include "crypto/sha256.h"
+#include "util/big_uint.h"
 
 #include <gtest/gtest.h>
 
@@ -28,6 +29,7 @@ TEST(HashTest, DoubleSha256HashOfKnownString) {
 }
 
 TEST(HashTest, ValidHexDigits) {
+  using namespace hornet::util;
   EXPECT_EQ(HexValue('0'), 0);
   EXPECT_EQ(HexValue('9'), 9);
   EXPECT_EQ(HexValue('a'), 10);
@@ -37,13 +39,15 @@ TEST(HashTest, ValidHexDigits) {
 }
 
 TEST(HashTest, InvalidHexDigitThrows) {
+  using namespace hornet::util;
   EXPECT_THROW(HexValue('g'), std::invalid_argument);
   EXPECT_THROW(HexValue('!'), std::invalid_argument);
   EXPECT_THROW(HexValue('z'), std::invalid_argument);
 }
 
 TEST(HashTest, GenesisMerkleRootHash) {
-  constexpr auto bytes = ParseHex32ToLE("4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b");
+  using namespace hornet::util;
+  constexpr auto bytes = ParseHex32("4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b");
   // Check first few bytes (reversed)
   EXPECT_EQ(bytes[0], 0x3b);
   EXPECT_EQ(bytes[1], 0xa3);

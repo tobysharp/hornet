@@ -4,7 +4,7 @@ project(hornet_node LANGUAGES CXX)
 if(MSVC)
     add_compile_options(/W4)
 else()
-    add_compile_options(-Wall -Wextra -Wpedantic -Wsign-conversion)
+    add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
 set(CMAKE_CXX_STANDARD 20)

@@ -22,8 +22,8 @@ namespace protocol {
 class Message {
  public:
   virtual ~Message() = default;
-  virtual void Serialize(encoding::Writer& w) const {}
-  virtual void Deserialize(encoding::Reader& r) {}
+  virtual void Serialize(encoding::Writer&) const {}
+  virtual void Deserialize(encoding::Reader&) {}
   virtual std::string GetName() const = 0;
   virtual void Accept(message::Visitor& v) const = 0;
   virtual void PrintTo(std::ostream& os) const {

@@ -50,7 +50,6 @@ TEST(PeerManagerTest, AddAndRemovePeer) {
   EXPECT_EQ(peer->Address(), "127.0.0.1");
   peer->GetConnection().Write(std::array<uint8_t, 1>{'x'});
 
-  const int fd = peer->GetConnection().GetSocket().GetFD();
   manager.RemovePeer(peer);
 
   server_thread.join();

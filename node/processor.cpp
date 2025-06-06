@@ -35,7 +35,7 @@ void Processor::Visit(const message::SendCompact& sendcmpct) {
   GetPeerCapabilities().SetCompactBlocks(sendcmpct.IsCompact());
 }
 
-void Processor::Visit(const message::Verack& v) {
+void Processor::Visit(const message::Verack&) {
   AdvanceHandshake(GetPeer(), protocol::Handshake::Transition::ReceiveVerack);
 }
 

@@ -47,10 +47,12 @@ inline T BigEndianToNative(const T le) {
 
 template <std::integral To, std::integral From>
 To NarrowOrThrow(From value) {
-  if (value > std::numeric_limits<To>::max())
+  To convert = static_cast<To>(value);
+  From compare = static_cast<From>(convert);
+  if (value != compare)
     util::ThrowOutOfRange("Data lost in type conversion of value ", value, ".");
 
-  return static_cast<To>(value);
+  return convert;
 }
 
 }  // namespace hornet::encoding

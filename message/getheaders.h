@@ -49,7 +49,7 @@ class GetHeaders : public protocol::Message {
   }
 
  private:
-  uint32_t version_;
+  int version_;
   std::vector<crypto::bytes32_t> locator_hashes_;
   crypto::bytes32_t stop_hash_ = {};
 };
