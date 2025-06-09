@@ -6,6 +6,7 @@
 
 #include "crypto/sha256.h"
 #include "util/big_uint.h"
+#include "util/hex.h"
 
 #include <gtest/gtest.h>
 
@@ -30,24 +31,17 @@ TEST(HashTest, DoubleSha256HashOfKnownString) {
 
 TEST(HashTest, ValidHexDigits) {
   using namespace hornet::util;
-  EXPECT_EQ(HexValue('0'), 0);
-  EXPECT_EQ(HexValue('9'), 9);
-  EXPECT_EQ(HexValue('a'), 10);
-  EXPECT_EQ(HexValue('f'), 15);
-  EXPECT_EQ(HexValue('A'), 10);
-  EXPECT_EQ(HexValue('F'), 15);
-}
-
-TEST(HashTest, InvalidHexDigitThrows) {
-  using namespace hornet::util;
-  EXPECT_THROW(HexValue('g'), std::invalid_argument);
-  EXPECT_THROW(HexValue('!'), std::invalid_argument);
-  EXPECT_THROW(HexValue('z'), std::invalid_argument);
+  EXPECT_EQ(HexValue<'0'>(), 0);
+  EXPECT_EQ(HexValue<'9'>(), 9);
+  EXPECT_EQ(HexValue<'a'>(), 10);
+  EXPECT_EQ(HexValue<'f'>(), 15);
+  EXPECT_EQ(HexValue<'A'>(), 10);
+  EXPECT_EQ(HexValue<'F'>(), 15);
 }
 
 TEST(HashTest, GenesisMerkleRootHash) {
   using namespace hornet::util;
-  constexpr auto bytes = ParseHex32("4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b");
+  constexpr auto bytes = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"_h;
   // Check first few bytes (reversed)
   EXPECT_EQ(bytes[0], 0x3b);
   EXPECT_EQ(bytes[1], 0xa3);

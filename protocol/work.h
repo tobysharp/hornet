@@ -15,7 +15,7 @@ class Work {
 
   // Return a Work object from a compact "bits" representation of a target.
   static constexpr Work FromBits(uint32_t bits) {
-    return Target::FromBits(bits).GetWork();
+    return Target::FromCompact(bits).GetWork();
   }
 
   // Exposes only the operators that are appropriate for work done.

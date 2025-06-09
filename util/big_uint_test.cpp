@@ -470,5 +470,56 @@ TEST_F(BigUintTest, Uint256Subtraction) {
   EXPECT_EQ(a - b, expected);
 }
 
+TEST_F(BigUintTest, MultiplyByWord) {
+  using U = Uint256;
+
+  // 1 * 0 = 0
+  EXPECT_EQ(U{1} * 0u, U::Zero());
+
+  // 0 * N = 0
+  EXPECT_EQ(U{0} * 12345u, U::Zero());
+
+  // 1 * N = N
+  EXPECT_EQ(U{1} * 42u, U{42});
+
+  // N * 1 = N
+  U a{123456789u};
+  EXPECT_EQ(a * 1u, a);
+
+  // Accumulate result with *=
+  U b{0xFFFFFFFFFFFFFFFF};
+  b *= 2u;
+  EXPECT_EQ(b.Words()[0], 0xFFFFFFFFFFFFFFFEu);
+  EXPECT_EQ(b.Words()[1], 1u);
+  for (int i = 2; i < U::kWords; ++i)
+    EXPECT_EQ(b.Words()[i], 0u);
+}
+
+TEST_F(BigUintTest, DivideByWord) {
+  using U = Uint256;
+
+  // N / 1 = N
+  U a{987654321u};
+  EXPECT_EQ(a / 1u, a);
+
+  // N / N = 1
+  U b{12345u};
+  EXPECT_EQ(b / 12345u, U{1});
+
+  // N / (larger number) = 0
+  EXPECT_EQ(U{1000} / 1000000u, U::Zero());
+
+  // Full limb division
+  U c{0xFFFFFFFFFFFFFFFF};
+  c.Words()[1] = 1;
+  EXPECT_EQ(c / 2u, U{0xFFFFFFFFFFFFFFFF});
+  EXPECT_EQ((c / 2u).Words()[1], 0u);
+
+  // In-place division
+  U d{1209600u * 42};
+  d /= 1209600u;
+  EXPECT_EQ(d, U{42u});
+}
+
 }  // namespace
 }  // namespace hornet::util

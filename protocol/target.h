@@ -19,7 +19,7 @@ class Target {
   constexpr Target(Uint256 value) : value_(std::move(value)) {}
 
   // Expands a compact representation of target to a little-endian byte array.
-  inline static constexpr Target FromBits(uint32_t bits) {
+  inline static constexpr Target FromCompact(uint32_t bits) {
     // This compact "bits" is a float-like representation of a 256-bit target.
     // The high 8 bits store the exponent, while the low 23 bits store the mantissa.
     // The intended value is given by:
@@ -41,7 +41,7 @@ class Target {
                                            (exponent == 33 && mantissa > 0xFFFF));
     if (negative || mantissa == 0 || overflow) {
       // It's unforunate that for error conditions there isn't a value that we can return that
-      // will fail the PoW test (hash <= target) for all hashes, since target is always unsigned. 
+      // will fail the PoW test (hash <= target) for all hashes, since target is always unsigned.
       // Therefore we return an empty std::optional in this case.
       return {};
     }
@@ -66,6 +66,11 @@ class Target {
     return value_ && *this <= Maximum();
   }
 
+  inline constexpr const Uint256& Value() const {
+    if (!value_) util::ThrowRuntimeError("Target value empty.");
+    return *value_;
+  }
+
   // Returns the amount of work that must be done to achieve this target.
   inline Uint256 GetWork() const {
     if (!value_) return Uint256::Zero();
@@ -83,11 +88,11 @@ class Target {
     return (~*value_ / (*value_ + 1u)) + 1u;
   }
 
-  inline friend constexpr bool operator <=(Hash hash, const Target& rhs) {
+  inline friend constexpr bool operator<=(Hash hash, const Target& rhs) {
     return rhs.value_ ? Uint256{std::move(hash)} <= rhs.value_ : false;
   }
 
-  inline friend constexpr bool operator <=(const Target& lhs, const Target& rhs) {
+  inline friend constexpr bool operator<=(const Target& lhs, const Target& rhs) {
     return lhs.value_ && rhs.value_ && lhs.value_ <= rhs.value_;
   }
 
@@ -95,7 +100,7 @@ class Target {
   std::optional<Uint256> value_;
 };
 
-static constexpr Target kMaxProtocolTarget = Target::FromBits(kMaxTargetBits);
+static constexpr Target kMaxProtocolTarget = Target::FromCompact(kMaxCompactTarget);
 
 inline /* static */ constexpr Target Target::Maximum() {
   return kMaxProtocolTarget;

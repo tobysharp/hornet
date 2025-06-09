@@ -19,7 +19,7 @@ class BlockHeader {
  public:
   // Determines whether the hash meets the required target constraints.
   bool IsProofOfWork() const {
-    return GetHash() <= Target::FromBits(bits_);
+    return GetHash() <= Target::FromCompact(bits_);
   }
 
   // Returns the expected amount of work done to achieve the hash target.

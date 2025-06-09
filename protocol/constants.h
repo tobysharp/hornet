@@ -43,6 +43,6 @@ static constexpr size_t kMaxBlockHeaders = 2000;
 // See MAX_PROTOCOL_MESSAGE_LENGTH in https://github.com/bitcoin/bitcoin/blob/master/src/net.h.
 inline constexpr size_t kMaxMessageSize = 4'000'000;
 
-inline constexpr uint32_t kMaxTargetBits = 0x1D00FFFF;
+inline constexpr uint32_t kMaxCompactTarget = 0x1D00FFFF;
 
 }  // namespace hornet::protocol
