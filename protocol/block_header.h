@@ -31,7 +31,7 @@ class BlockHeader {
   const Hash& GetPreviousBlockHash() const { return prev_block_; }
   const Hash& GetMerkleRoot() const { return merkle_root_; }
   uint32_t GetTimestamp() const { return timestamp_; }
-  uint32_t GetBits() const { return bits_; }
+  uint32_t GetCompactTarget() const { return bits_; }
   uint32_t GetNonce() const { return nonce_; }
 
   void Serialize(encoding::Writer& w) const {
@@ -42,7 +42,7 @@ class BlockHeader {
   void SetPreviousBlockHash(Hash hash) { prev_block_ = std::move(hash); }
   void SetMerkleRoot(Hash hash) { merkle_root_ = std::move(hash); }
   void SetTimestamp(uint32_t timestamp) { timestamp_ = timestamp; }
-  void SetBits(uint32_t bits) { bits_ = bits; }
+  void SetCompactTarget(uint32_t bits) { bits_ = bits; }
   void SetNonce(uint32_t nonce) { nonce_ = nonce; }
 
   void Deserialize(encoding::Reader& r) {

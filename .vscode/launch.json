@@ -17,7 +17,7 @@
       ],
       "request": "launch",
       "program": "${workspaceFolder}/build/hornet_tests",
-      "args": ["--gtest_filter=SyncManagerTest.TestMainnetSyncHeaders"],
+      "args": ["--gtest_filter=HashTest.GenesisMerkleRootHash"],
       "cwd": "${workspaceFolder}/build",
       "stopAtEntry": false,
       "console": "integratedTerminal"

@@ -76,6 +76,9 @@
         "netfwd": "cpp",
         "socket": "cpp",
         "timer": "cpp",
-        "future": "cpp"
+        "future": "cpp",
+        "bitset": "cpp",
+        "__verbose_abort": "cpp",
+        "ios": "cpp"
     }
 }

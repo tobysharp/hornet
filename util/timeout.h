@@ -7,27 +7,44 @@ namespace hornet::util {
 
 class Timeout {
  public:
-    Timeout(int64_t timeout_ms) :
+    constexpr Timeout(int64_t timeout_ms) :
      timeout_ms_(timeout_ms),
      initial_time_(std::chrono::high_resolution_clock::now()),
      expiry_time_(initial_time_ + std::chrono::milliseconds{timeout_ms})
     {
     }
+    constexpr Timeout(const Timeout&) = default;
+    constexpr Timeout(Timeout&&) = default;
+
+    static constexpr Timeout Immediate() {
+        return 0;
+    }
+
+    static constexpr Timeout Infinite() {
+        return -1;
+    }
+
+    constexpr bool IsInfinite() const {
+        return timeout_ms_ < 0;
+    }
+
+    constexpr bool IsImmediate() const {
+        return timeout_ms_ == 0;
+    }
 
     bool IsExpired() const {
-        if (timeout_ms_ < 0) return false;
-        if (timeout_ms_ == 0) return true;
+        if (IsInfinite()) return false;
+        if (IsImmediate()) return true;
         return std::chrono::high_resolution_clock::now() >= expiry_time_;
     }
 
-    int RemainingMs() const {
+    std::chrono::milliseconds RemainingMs() const {
         using namespace std::chrono_literals;
-        if (timeout_ms_ < 0) return -1;
-        if (timeout_ms_ == 0) return 0;
-        int64_t ms = std::max(0ms, std::chrono::duration_cast<std::chrono::milliseconds>(
-            expiry_time_ - std::chrono::high_resolution_clock::now())).count();
-        return static_cast<int>(std::min(ms, int64_t{std::numeric_limits<int>::max()}));
-    }
+        std::chrono::milliseconds clamp_lo{IsInfinite() ? std::numeric_limits<int64_t>::max() : 0ll};
+        std::chrono::milliseconds clamp_hi{IsImmediate() ? 0ll : -1ll};
+        return std::clamp(std::chrono::duration_cast<std::chrono::milliseconds>(
+            expiry_time_ - std::chrono::high_resolution_clock::now()), clamp_lo, clamp_hi);
+     }
 
     void Reset() {
         initial_time_ = std::chrono::high_resolution_clock::now();

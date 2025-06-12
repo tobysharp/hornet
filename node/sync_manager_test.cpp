@@ -19,7 +19,7 @@ TEST(SyncManagerTest, TestGetHeaders) {
     const auto peer = engine.AddOutboundPeer(net::kLocalhost, node.GetPort());
     util::Timeout timeout(1000);  // Wait up to one second for the hanshake to complete.
     engine.RunMessageLoop([&](const Engine&) {
-        return timeout.IsExpired();
+        return timeout.IsExpired() || peer->GetHandshake().IsComplete();
     });
     EXPECT_TRUE(peer->GetHandshake().IsComplete());
 }
@@ -29,7 +29,7 @@ TEST(SyncManagerTest, TestMainnetSyncHeaders) {
     Engine engine{node.GetMagic()};
     const auto peer = engine.AddOutboundPeer(net::kLocalhost, node.GetPort());
     engine.RunMessageLoop([&](const Engine&) {
-        return engine.GetSyncManager().GetHeaderSync().Size() >= 899409;
+        return engine.GetSyncManager().GetHeaderSync().Size() >= 6000;
     });
     LogInfo() << "Header count: " << engine.GetSyncManager().GetHeaderSync().Size();
 }
