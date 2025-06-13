@@ -23,7 +23,7 @@ class HeaderStore {
     headers_.insert(headers_.end(), headers.begin(), headers.end());
     total_work_ = total_tip_work;
     if (!headers.empty()) tip_hash_ = {};
-    return Size() - 1;
+    return Length() - 1;
   }
 
   // Push headers into the store via pass-by-value-and-move.
@@ -32,10 +32,20 @@ class HeaderStore {
     headers_.emplace_back(std::move(header));
     total_work_ = total_tip_work;
     tip_hash_ = {};
-    return Size() - 1;
+    return Length() - 1;
   }
 
-  int Size() const {
+  void TruncateLength(int length, const protocol::Work& total_tip_work) {
+    headers_.resize(length);
+    total_work_ = total_tip_work;
+    tip_hash_ = {};
+  }
+
+  bool Empty() const {
+    return headers_.empty();
+  }
+
+  int Length() const {
     return std::ssize(headers_);
   }
 
@@ -48,8 +58,12 @@ class HeaderStore {
   }
 
   const protocol::Hash& GetHash(int height) const {
-    if (height == Size() - 1) return GetTipHash();
+    if (height == Length() - 1) return GetTipHash();
     return headers_[height + 1].GetPreviousBlockHash();
+  }
+
+  int GetTipHeight() const {
+    return Length() - 1;
   }
 
   const protocol::Hash& GetTipHash() const {
