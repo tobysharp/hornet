@@ -24,14 +24,14 @@ class Validator {
 
   Validator(const Parameters&);
 
+  template <std::invocable<int> Evaluator>
   std::optional<data::HeaderContext> ValidateDownloadedHeader(
-      const std::optional<data::HeaderContext>& parent, const protocol::BlockHeader& header) const {
+      const std::optional<data::HeaderContext>& parent, const protocol::BlockHeader& header,
+      Evaluator&& get_timestamp) const {
     const int height = parent ? parent->height + 1 : 0;
+    
     // Verify previous hash
-    if (height > 0) {
-      const protocol::Hash& parent_hash = header.GetPreviousBlockHash();
-      if (parent->hash != parent_hash) return {};
-    }
+    if (height > 0 && parent->hash != header.GetPreviousBlockHash()) return {};
 
     // Verify PoW target is a valid value
     if (!protocol::Target::FromCompact(header.GetCompactTarget()).IsValid()) return {};
@@ -40,7 +40,7 @@ class Validator {
     const uint32_t period_end_time = parent->header.GetTimestamp();  // block[height - 1].time
     const auto blocks_per_period = difficulty_adjustment_.GetBlocksPerPeriod();
     const uint32_t period_start_time =
-        height >= blocks_per_period ? 0 : 0;  // TODO: block[height - blocks_per_period].time
+        height >= blocks_per_period ? get_timestamp(height - blocks_per_period) : 0;
     const uint32_t expected_bits = difficulty_adjustment_.ComputeCompactTarget(
         height, parent->header.GetCompactTarget(), period_start_time, period_end_time);
     if (expected_bits != header.GetCompactTarget()) return {};

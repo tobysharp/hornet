@@ -58,7 +58,7 @@ void HeaderSync::Validate(const util::Timeout& timeout /* = util::Timeout::Infin
 
 bool HeaderSync::ValidateAndAppendToChain(const Batch& batch) {
   return ValidateBatch(
-      chain_.GetTipContext(), batch,
+      tree_.NullParent(), chain_.GetTipContext(), batch,
       [&](HeaderContext context) { chain_.Push(std::move(context.header), context.total_work); });
 }
 
@@ -68,23 +68,40 @@ std::tuple<bool, HeaderSync::tree_iterator> HeaderSync::ValidateAndAppendToReorg
   // If valid, add the batch to the tree.
   auto first_node_added = tree_.NullParent();
   auto it_tail = parent_node_it;
-  bool ok = ValidateBatch(parent_node_it->data, batch, [&](HeaderContext context) {
+  bool ok = ValidateBatch(parent_node_it, parent_node_it->data, batch, [&](HeaderContext context) {
     it_tail = tree_.AddChild(it_tail, std::move(context));
     if (!tree_.IsValidNode(first_node_added)) first_node_added = it_tail;
   });
   return {ok, first_node_added};
 }
 
-template <typename Callback>
-bool HeaderSync::ValidateBatch(const std::optional<HeaderContext>& parent,
+template <std::invocable<HeaderContext> Callback>
+bool HeaderSync::ValidateBatch(tree_iterator descendant, const std::optional<HeaderContext>& parent,
                                const Batch& batch, Callback&& on_valid) const {
   std::optional<HeaderContext> latest = parent;
   for (const auto& header : batch) {
-    auto validated = validator_.ValidateDownloadedHeader(latest, header);
-    if (!validated) return false;
-    latest = validated;
-    on_valid(std::move(validated));
+    auto context = validator_.ValidateDownloadedHeader(latest, header, [&](int height) {
+      return GetAncestorAtHeight(descendant, height)->GetTimestamp();
+    });
+    if (!context) return false;
+    latest = context;
+    on_valid(std::move(context));
   }
+}
+
+std::optional<protocol::BlockHeader> HeaderSync::GetAncestorAtHeight(tree_iterator it,
+                                                                     int height) const {
+  // If the descendant iterator is null, it means we can go straight to the chain.
+  if (!tree_.IsValidNode(it)) return chain_[height];
+
+  // Keep walking up the tree until we hit the top or find our target height.
+  while (tree_.IsValidNode(it->parent) && it->data.height > height) it = it->parent;
+
+  // Then we can jump straight to the header of interest.
+  if (it->data.height == height) return it->data.header;
+  if (!tree_.IsValidNode(it->parent)) return chain_[height];
+
+  return {};  // No such ancestor found.
 }
 
 // Performs a chain reorg. Takes the tail of reorg_tree_ as the new tip, and adjusts
