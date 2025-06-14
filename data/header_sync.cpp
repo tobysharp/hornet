@@ -198,4 +198,28 @@ bool HeaderSync::IsHeightHistoric(int height) const {
   return height + depth_for_reorg_ <= chain_.GetTipHeight();
 }
 
+std::optional<uint32_t> HeaderSync::ValidationView::TimestampAt(int height) const {
+  const auto ancestor = sync_.GetAncestorAtHeight(tip_, height);
+  if (ancestor) return ancestor->GetTimestamp();
+  return {};
+}
+
+std::vector<uint32_t> HeaderSync::ValidationView::LastNTimestamps(int count) const {
+  std::vector<uint32_t> result;
+  result.reserve(count);
+
+  // Keep walking up the tree until we hit the top or find our target height.
+  const int end_height = std::max(0, tip_->data.height - count + 1);
+  for (auto it = tip_; sync_.tree_.IsValidNode(it) && it->data.height >= end_height; it = it->parent)
+    result.push_back(it->data.header.GetTimestamp());
+
+  Assert(sync_.chain_.GetTipHeight() + 1 == end_height + std::ssize(result));
+
+  for (int height = sync_.chain_.GetTipHeight(); height >= end_height; --height)
+    result.push_back(sync_.chain_[height].GetTimestamp());
+
+  std::sort(result.begin(), result.end());
+  return result;
+}
+
 }  // namespace hornet::data

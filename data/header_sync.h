@@ -4,8 +4,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include "data/header_context.h"
+#include "consensus/header_ancestry_view.h"
 #include "data/header_chain.h"
+#include "data/header_context.h"
 #include "protocol/block_header.h"
 #include "protocol/work.h"
 #include "util/hashed_tree.h"
@@ -15,6 +16,20 @@ namespace hornet::data {
 
 class HeaderSync {
  public:
+  using HeaderTree = util::HashedTree<HeaderContext>;
+  using tree_iterator = HeaderTree::up_iterator;
+
+  class ValidationView : public consensus::HeaderAncestryView {
+   public:
+    ValidationView(const HeaderSync& sync, tree_iterator tip) : sync_(sync), tip_(tip) {}
+
+    virtual std::optional<uint32_t> TimestampAt(int height) const override;
+    virtual std::vector<uint32_t> LastNTimestamps(int count) const override;
+   private:
+    const HeaderSync& sync_;
+    tree_iterator tip_;
+  };
+ 
   // Push new headers into the unverified queue for later processing, which
   // could be in the same thread or a different thread.
   void Receive(std::span<const protocol::BlockHeader> headers) {  // Copy
@@ -36,8 +51,6 @@ class HeaderSync {
   void Validate(const util::Timeout& timeout = util::Timeout::Infinite());
 
  private:
-  using HeaderTree = util::HashedTree<HeaderContext>;
-  using tree_iterator = HeaderTree::up_iterator;
   using node_iterator = HeaderTree::node_iterator;
   using Batch = std::vector<protocol::BlockHeader>;
 
@@ -49,11 +62,11 @@ class HeaderSync {
   bool ValidateAndAppendToChain(const Batch& batch);
   std::tuple<bool, HeaderSync::tree_iterator> ValidateAndAppendToReorgTree(
       const Batch& batch, tree_iterator parent_node_it);
+  std::optional<protocol::BlockHeader> GetAncestorAtHeight(tree_iterator child, int height) const;
   void Fail() {}  // TODO
-
-  template <typename Callback>
-  bool ValidateBatch(const std::optional<HeaderContext>& parent, const Batch& batch,
-                     Callback&& on_valid) const;
+  template <std::invocable<HeaderContext> Callback>
+  bool ValidateBatch(tree_iterator descendant, const std::optional<HeaderContext>& parent,
+                     const Batch& batch, Callback&& on_valid) const;
 
   // Headers start out being pushed into an unverified queue pipeline.
   util::ThreadSafeQueue<Batch> queue_;
