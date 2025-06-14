@@ -3,7 +3,7 @@
 #include <optional>
 
 #include "consensus/difficulty_adjustment.h"
-#include "consensus/header_context.h"
+#include "data/header_context.h"
 #include "protocol/block_header.h"
 #include "protocol/hash.h"
 #include "util/throw.h"
@@ -24,8 +24,8 @@ class Validator {
 
   Validator(const Parameters&);
 
-  std::optional<HeaderContext> ValidateDownloadedHeader(
-      const std::optional<HeaderContext>& parent, const protocol::BlockHeader& header) const {
+  std::optional<data::HeaderContext> ValidateDownloadedHeader(
+      const std::optional<data::HeaderContext>& parent, const protocol::BlockHeader& header) const {
     const int height = parent ? parent->height + 1 : 0;
     // Verify previous hash
     if (height > 0) {
@@ -53,7 +53,7 @@ class Validator {
 
     // TODO: In Core, a previous block could be marked as failed/bad, in which case this one is
     // invalid too.
-    return parent ? parent->Extend(header) : HeaderContext::Genesis(header);
+    return parent ? parent->Extend(header) : data::HeaderContext::Genesis(header);
   }
 
  private:
