@@ -79,6 +79,12 @@
         "future": "cpp",
         "bitset": "cpp",
         "__verbose_abort": "cpp",
-        "ios": "cpp"
+        "ios": "cpp",
+        "__locale": "cpp",
+        "ranges": "cpp",
+        "__bit_reference": "cpp",
+        "__hash_table": "cpp",
+        "__split_buffer": "cpp",
+        "__tree": "cpp"
     }
 }

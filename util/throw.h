@@ -23,4 +23,9 @@ inline void ThrowOutOfRange(const Args&... args) {
     throw std::out_of_range{ToString(args...)};
 }
 
+template <typename... Args>
+inline void ThrowInvalidArgument(const Args&... args) {
+    throw std::invalid_argument{ToString(args...)};
+}
+
 }  // namespace hornet::util

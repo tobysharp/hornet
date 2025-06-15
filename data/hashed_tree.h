@@ -3,7 +3,9 @@
 #include <list>
 #include <unordered_map>
 
-namespace hornet::util {
+#include "protocol/hash.h"
+
+namespace hornet::data {
 
 template <typename T, typename Hasher = decltype([](const T& x) { return x.GetHash(); })>
 class HashedTree {
@@ -44,7 +46,7 @@ class HashedTree {
     list_.emplace_back(TreeNode{parent, hash, std::move(data)});
     return (map_[hash] = list_.rbegin());
   }
-  node_iterator Erase(node_iterator it) {
+  node_iterator Erase(tree_iterator it) {
     map_.erase(it->hash);
     return list_.erase(it);
   }
@@ -67,6 +69,9 @@ class HashedTree {
   std::ranges::subrange FromLatest() {
     return {list_.rbegin(), list_.rend()};
   }
+  std::ranges::subrange FromNode(tree_iterator it) {
+    return {it, list_.rend()};
+  }
 
  private:
   std::list<TreeNode> list_;
@@ -74,4 +79,4 @@ class HashedTree {
   Hasher hasher_;
 };
 
-}  // namespace hornet::util
+}  // namespace hornet::data
