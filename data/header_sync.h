@@ -1,35 +1,17 @@
 #pragma once
 
-#include <list>
-#include <unordered_map>
+#include <span>
 #include <vector>
 
-#include "consensus/header_ancestry_view.h"
-#include "data/header_chain.h"
-#include "data/header_context.h"
+#include "consensus/validator.h"
+#include "data/header_timechain.h"
 #include "protocol/block_header.h"
-#include "protocol/work.h"
-#include "util/hashed_tree.h"
 #include "util/thread_safe_queue.h"
 
 namespace hornet::data {
 
 class HeaderSync {
  public:
-  using HeaderTree = util::HashedTree<HeaderContext>;
-  using tree_iterator = HeaderTree::up_iterator;
-
-  class ValidationView : public consensus::HeaderAncestryView {
-   public:
-    ValidationView(const HeaderSync& sync, tree_iterator tip) : sync_(sync), tip_(tip) {}
-
-    virtual std::optional<uint32_t> TimestampAt(int height) const override;
-    virtual std::vector<uint32_t> LastNTimestamps(int count) const override;
-   private:
-    const HeaderSync& sync_;
-    tree_iterator tip_;
-  };
- 
   // Push new headers into the unverified queue for later processing, which
   // could be in the same thread or a different thread.
   void Receive(std::span<const protocol::BlockHeader> headers) {  // Copy
@@ -51,36 +33,14 @@ class HeaderSync {
   void Validate(const util::Timeout& timeout = util::Timeout::Infinite());
 
  private:
-  using node_iterator = HeaderTree::node_iterator;
   using Batch = std::vector<protocol::BlockHeader>;
 
-  void PopulateReorgTreeFromChain();
-  void PruneReorgTree();
-  bool IsHeightHistoric(int height) const;
-  bool IsNodeInChain(tree_iterator it) const;
-  void PerformReorg(tree_iterator batch_parent, node_iterator batch_begin);
-  bool ValidateAndAppendToChain(const Batch& batch);
-  std::tuple<bool, HeaderSync::tree_iterator> ValidateAndAppendToReorgTree(
-      const Batch& batch, tree_iterator parent_node_it);
-  std::optional<protocol::BlockHeader> GetAncestorAtHeight(tree_iterator child, int height) const;
   void Fail() {}  // TODO
-  template <std::invocable<HeaderContext> Callback>
-  bool ValidateBatch(tree_iterator descendant, const std::optional<HeaderContext>& parent,
-                     const Batch& batch, Callback&& on_valid) const;
 
   // Headers start out being pushed into an unverified queue pipeline.
   util::ThreadSafeQueue<Batch> queue_;
-
-  // Later, headers are pulled from the unverified queue, verified, and
-  // assembled into a tree of putative chains, with tracked proof-of-work.
-  HeaderTree tree_;
-  static constexpr int kDefaultReorgDepth = 64;
-  int depth_for_reorg_ = kDefaultReorgDepth;
-
-  // When potential forks or re-orgs are resolved and the heaviest chain
-  // becomes mature, then winning branches from the tree are moved into
-  // permanent storage, managed by HeaderChain.
-  HeaderChain chain_;
+  HeaderTimechain timechain_;
+  Validator validator_;
 };
 
 }  // namespace hornet::data

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #include "consensus/header_ancestry_view.h"
 #include "data/hashed_tree.h"
 #include "data/header_chain.h"
@@ -34,7 +36,12 @@ class HeaderTimechain {
   };
 
   Position Add(HeaderContext context);
-  Position Add(HeaderContext context, Position parent);
+  Position Add(HeaderContext context, const Position& parent);
+  
+  Position NullPosition() const { return {tree_.NullParent(), -1}; }
+  bool IsValid(const Position& position) const { return position.IsValid(tree_); }
+
+  std::unique_ptr<ValidationView> GetValidationView() const;
 
  private:
   void ReorgBranchToChain(tree_iterator tip);
@@ -43,7 +50,6 @@ class HeaderTimechain {
   tree_iterator AddChild(tree_iterator parent, HeaderContext context);
   bool IsValidNode(tree_iterator it) const { return tree_.IsValidNode(it); }
   int GetMinKeepHeight() const { return chain_.GetTipHeight() - max_keep_depth_; }
-  Position NullPosition() const { return {tree_.NullParent(), -1}; }
 
   // As potential forks or re-orgs are resolved and the heaviest chain
   // changes, then winning branches from the tree are moved into
