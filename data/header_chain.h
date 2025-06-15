@@ -15,6 +15,8 @@
 
 namespace hornet::data {
 
+void Assert(bool) {}  // TODO
+
 // The class HeaderChain holds all historical verified headers in a linear chain.
 // Manages disk storage and memory-mapped files. Headers are only pushed to this
 // object when they have been verified and have matured from tentative forks to
@@ -52,8 +54,7 @@ class HeaderChain {
     }
 
     UpIterator& operator++() {
-      context_ = (context_.height > 0) ? context_.Rewind(chain_->At(context_.height - 1),
-                                                         chain_->GetHash(context_.height - 1))
+      context_ = (context_.height > 0) ? context_.Rewind(chain_->At(context_.height - 1))
                                        : HeaderContext::Null();
       return *this;
     }

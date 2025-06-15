@@ -46,12 +46,15 @@ class HashedTree {
     list_.emplace_back(TreeNode{parent, hash, std::move(data)});
     return (map_[hash] = list_.rbegin());
   }
-  node_iterator Erase(tree_iterator it) {
+  up_iterator Erase(up_iterator it) {
     map_.erase(it->hash);
-    return list_.erase(it);
+    return NodeToUpIterator(list_.erase(UpToNodeIterator(it)));
   }
   static node_iterator UpToNodeIterator(up_iterator it) {
     return std::prev(it.base());
+  }
+  static up_iterator NodeToUpIterator(node_iterator it) {
+    return std::reverse_iterator(it);
   }
   up_iterator NullParent() const {
     return list_.rend();
@@ -63,13 +66,13 @@ class HashedTree {
     return list_.back();
   }
 
-  std::ranges::subrange FromOldest() {
+  std::ranges::subrange<node_iterator> FromOldest() {
     return {list_.begin(), list_.end()};
   }
-  std::ranges::subrange FromLatest() {
+  std::ranges::subrange<up_iterator> FromLatest() {
     return {list_.rbegin(), list_.rend()};
   }
-  std::ranges::subrange FromNode(tree_iterator it) {
+  std::ranges::subrange<up_iterator> FromNode(up_iterator it) {
     return {it, list_.rend()};
   }
 

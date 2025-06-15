@@ -16,17 +16,14 @@ struct HeaderContext {
     return {std::move(header), header.ComputeHash(), work, work, 0}; 
   }
 
-  HeaderContext Extend(protocol::BlockHeader header) const {
-    const auto work = header.GetWork();
-    return {std::move(header), header.ComputeHash(), work, total_work + work, height + 1};
+  HeaderContext Extend(protocol::BlockHeader next, const protocol::Hash& hash) const {
+    const auto work = next.GetWork();
+    return {std::move(header), hash, work, total_work + work, height + 1};
   }
 
-  HeaderContext Rewind(protocol::BlockHeader header) const {
-    return {std::move(header), header.ComputeHash(), header.GetWork(), total_work - local_work, height - 1};
-  }
-
-  HeaderContext Rewind(protocol::BlockHeader header, const protocol::Hash& hash) const {
-    return {std::move(header), hash, header.GetWork(), total_work - local_work, height - 1};
+  HeaderContext Rewind(protocol::BlockHeader prev) const {
+    const auto hash = header.GetPreviousBlockHash();
+    return {std::move(header), hash, prev.GetWork(), total_work - local_work, height - 1};
   }
 
   protocol::BlockHeader header;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <ranges>
 
 #include "consensus/header_ancestry_view.h"
 #include "data/hashed_tree.h"
@@ -18,38 +19,45 @@ class HeaderTimechain {
     HeaderContext context;
     int root_height;
 
-    int Height() const { return context.height; }
-    const protocol::BlockHeader& Header() const { return context.header; }
-    const protocol::Work& TotalWork() const { return context.total_work; }
+    int Height() const {
+      return context.height;
+    }
+    const protocol::BlockHeader& Header() const {
+      return context.header;
+    }
+    const protocol::Work& TotalWork() const {
+      return context.total_work;
+    }
+    const protocol::Hash& GetHash() const {
+      return context.hash;
+    }
   };
 
   using HeaderTree = HashedTree<NodeData>;
   using tree_iterator = HeaderTree::up_iterator;
 
-  struct Position {
-    tree_iterator node = {};
-    int chain_height = -1;
+  AncestorIterator Add(HeaderContext context);
+  AncestorIterator Add(HeaderContext context, const AncestorIterator& parent);
+  AncestorIterator Find(const protocol::Hash& hash);
 
-    bool InChain() const { return chain_height >= 0; }
-    bool InTree(const HeaderTree& tree) const { return tree.IsValidNode(node); }
-    bool IsValid(const HeaderTree& tree) const { return InChain() || InTree(tree); }
-  };
-
-  Position Add(HeaderContext context);
-  Position Add(HeaderContext context, const Position& parent);
-  
-  Position NullPosition() const { return {tree_.NullParent(), -1}; }
-  bool IsValid(const Position& position) const { return position.IsValid(tree_); }
-
-  std::unique_ptr<ValidationView> GetValidationView() const;
-
- private:
+  AncestorIterator NullPosition() const;
+  AncestorIterator BeginChain(int height) const;
+  AncestorIterator BeginTree(tree_iterator node) const;
+  std::unique_ptr<ValidationView> GetValidationView(const AncestorIterator& tip) const;
   void ReorgBranchToChain(tree_iterator tip);
   void PruneReorgTree();
   HeaderContext RewindRoot(tree_iterator root) const;
   tree_iterator AddChild(tree_iterator parent, HeaderContext context);
-  bool IsValidNode(tree_iterator it) const { return tree_.IsValidNode(it); }
-  int GetMinKeepHeight() const { return chain_.GetTipHeight() - max_keep_depth_; }
+  bool IsValidNode(tree_iterator it) const {
+    return tree_.IsValidNode(it);
+  }
+  int GetMinKeepHeight() const {
+    return chain_.GetTipHeight() - max_keep_depth_;
+  }
+  std::optional<protocol::BlockHeader> GetAncestorAtHeight(const AncestorIterator& tip,
+                                                           int height) const;
+  std::ranges::subrange<AncestorIterator> AncestorsToHeight(const AncestorIterator& start,
+                                                            int end_height) const;
 
   // As potential forks or re-orgs are resolved and the heaviest chain
   // changes, then winning branches from the tree are moved into
@@ -63,59 +71,47 @@ class HeaderTimechain {
   int min_root_height_;
 };
 
-class HeaderTimechain::ValidationView : public consensus::HeaderAncestryView {
- public:
-  ValidationView(const HeaderTimechain& timechain, tree_iterator tip)
-      : timechain_(timechain), tip_(tip) {}
-
-  virtual std::optional<uint32_t> TimestampAt(int height) const override;
-  virtual std::vector<uint32_t> LastNTimestamps(int count) const override;
-
- private:
-  const HeaderTimechain& timechain_;
-  tree_iterator tip_;
-};
-
 // Ancestor iterator for walking up from a tip to an exclusive height
 class HeaderTimechain::AncestorIterator {
  public:
-  // Constructor for chain tip
-  AncestorIterator(const HeaderTimechain& timechain)
-      : AncestorIterator(timechain, timechain.chain_.GetTipHeight()) {
-    AssertValid();
-  }
+  using value_type = protocol::BlockHeader;
+  using difference_type = std::ptrdiff_t;
+
+  AncestorIterator() : timechain_(nullptr), node_(), height_(-1) {}
+  AncestorIterator(const HeaderTimechain& timechain, tree_iterator tip, int height)
+      : timechain_(&timechain), node_(tip), height_(height) {}
 
   // Constructor for element in chain
   AncestorIterator(const HeaderTimechain& timechain, int height)
-      : timechain_(timechain), node_(timechain.tree_.NullParent()), height_(height) {
-    AssertValid();
-  }
+      : AncestorIterator(timechain, timechain.tree_.NullParent(), height) {}
 
   // Constructor for tree node
   AncestorIterator(const HeaderTimechain& timechain, tree_iterator tip)
-      : timechain_(timechain),
-        node_(tip),
-        height_(timechain.tree_.IsValidNode(tip) ? tip->data.Height()
-                                                 : timechain.chain_.GetTipHeight()) {
-    AssertValid();
-  }
+      : AncestorIterator(timechain, tip, -1) {}
 
-  bool OnChain() const {
-    return !timechain_.tree_.IsValidNode(node_) && height_ >= 0 &&
-           height_ < timechain_.chain_.Length();
-  }
+  AncestorIterator(const AncestorIterator& rhs)
+      : timechain_(rhs.timechain_), node_(rhs.node_), height_(rhs.height_) {}
+
+  AncestorIterator(AncestorIterator&&) = default;
+  AncestorIterator& operator=(const AncestorIterator&) = default;
+  AncestorIterator& operator=(AncestorIterator&&) = default;
 
   std::optional<protocol::BlockHeader> TryGet() const {
-    if (timechain_.tree_.IsValidNode(node_)) return node_->data.Header();
-    if (height_ >= 0 && height_ < timechain_.chain_.Length()) return timechain_.chain_[height_];
-    return {};
+    if (InChain())
+      return timechain_->chain_[height_];
+    else if (InTree())
+      return node_->data.Header();
+    else
+      return {};
   }
 
   const protocol::BlockHeader& operator*() const {
-    if (timechain_.tree_.IsValidNode(node_)) return node_->data.Header();
-    if (height_ < 0 || height_ < timechain_.chain_.Length())
+    if (InChain())
+      return timechain_->chain_[height_];
+    else if (InTree())
+      return node_->data.Header();
+    else
       util::ThrowRuntimeError("Tried to access a non-existent element.");
-    return timechain_.chain_[height_];
   }
 
   const protocol::BlockHeader* operator->() const {
@@ -123,24 +119,63 @@ class HeaderTimechain::AncestorIterator {
   }
 
   AncestorIterator& operator++() {
-    --height_;
-    if (timechain_.tree_.IsValidNode(node_)) node_ = node_->parent;
-    AssertValid();
+    if (InTree()) {
+      if (!timechain_->IsValidNode(node_->parent)) height_ = node_->data.Height();
+      node_ = node_->parent;
+    } else if (InChain())
+      --height_;
     return *this;
   }
 
+  void operator++(int) {
+    ++(*this);
+  }
+
   bool operator!=(const AncestorIterator& rhs) const {
-    return height_ != rhs.height_;
+    return !operator==(rhs);
+  }
+  bool operator==(const AncestorIterator& rhs) const {
+    return node_ == rhs.node_ && height_ == rhs.height_;
+  }
+  bool InChain() const {
+    return height_ >= 0;
+  }
+  bool InTree() const {
+    return timechain_->IsValidNode(node_);
+  }
+  bool IsValid() const {
+    return InChain() || InTree();
+  }
+  int ChainHeight() const {
+    return height_;
+  }
+  int GetHeight() const {
+    return InChain() ? height_ : (InTree() ? node_->data.Height() : -1);
+  }
+  tree_iterator Node() const {
+    return node_;
+  }
+  operator bool() const {
+    return IsValid();
   }
 
  private:
-  void AssertValid() const {
-    Assert(!timechain_.tree_.IsValidNode(node_) || node_->data.Height() == height_);
-  }
-
-  const HeaderTimechain& timechain_;
+  const HeaderTimechain* timechain_;
   tree_iterator node_;
   int height_;
+};
+
+class HeaderTimechain::ValidationView : public consensus::HeaderAncestryView {
+ public:
+  ValidationView(const HeaderTimechain& timechain, const AncestorIterator& tip)
+      : timechain_(timechain), tip_(tip) {}
+
+  virtual std::optional<uint32_t> TimestampAt(int height) const override;
+  virtual std::vector<uint32_t> LastNTimestamps(int count) const override;
+
+ private:
+  const HeaderTimechain& timechain_;
+  AncestorIterator tip_;
 };
 
 }  // namespace hornet::data

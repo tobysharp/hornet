@@ -13,6 +13,8 @@ endif()
 
 # Header-only core library
 add_library(hornet STATIC
+   data/header_sync.cpp
+   data/header_timechain.cpp
    net/bitcoind.cpp
    net/socket.cpp
    node/processor.cpp
