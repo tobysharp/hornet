@@ -1,9 +1,11 @@
 #pragma once
 
 #include <list>
+#include <ranges>
 #include <unordered_map>
 
 #include "protocol/hash.h"
+#include "util/pointer_iterator.h"
 
 namespace hornet::data {
 
@@ -11,74 +13,100 @@ template <typename T, typename Hasher = decltype([](const T& x) { return x.GetHa
 class HashedTree {
  public:
   using Hash = decltype(std::declval<Hasher>()(std::declval<T>()));
-  struct TreeNode;
-  using node_iterator = std::list<TreeNode>::iterator;
-  using up_iterator = std::list<TreeNode>::reverse_iterator;
 
-  struct TreeNode {
-    up_iterator parent;
+  struct Node {
+    Node* parent;
     Hash hash;
     T data;
   };
+
+  static constexpr auto get_parent_ = [](Node* node) { return node->parent; };
+
+  using Iterator = std::list<Node>::iterator;
+  using ConstIterator = std::list<Node>::const_iterator;
+  using UpIterator = util::PointerIterator<Node, decltype(get_parent_), false>;
+  using ConstUpIterator = util::PointerIterator<Node, decltype(get_parent_), true>;
 
   HashedTree(Hasher hasher = [](const T& x) { return x.GetHash(); }) : hasher_(std::move(hasher)) {}
 
   bool Empty() const {
     return list_.empty();
   }
-  bool IsValidNode(up_iterator iterator) const {
-    return iterator != list_.rend();
+
+  bool IsValidNode(const Node* node) const {
+    return node != nullptr;
   }
-  bool IsValidNode(node_iterator iterator) const {
+
+  bool IsValidNode(Iterator iterator) const {
     return iterator != list_.end();
   }
 
-  up_iterator Find(const protocol::Hash& hash) {
-    const auto it = map_.find(hash);
-    return it == map_.end() ? list_.rend() : it->second;
+  bool IsValidNode(ConstIterator iterator) const {
+    return iterator != list_.cend();
   }
+
+  ConstIterator Find(const protocol::Hash& hash) const {
+    const auto it = map_.find(hash);
+    return it == map_.end() ? list_.cend() : it->second;
+  }
+
+  Iterator Find(const protocol::Hash& hash) {
+    const auto it = map_.find(hash);
+    return it == map_.end() ? list_.end() : it->second;
+  }
+
   void Clear() {
     list_.clear();
     map_.clear();
   }
-  up_iterator AddChild(up_iterator parent, T data) {
-    const Hash hash = hasher_(data);
-    list_.emplace_back(TreeNode{parent, hash, std::move(data)});
-    return (map_[hash] = list_.rbegin());
+
+  Iterator AddChild(Iterator parent, T data) {
+    Hash hash = hasher_(data);
+    Node* const parent_node = parent == list_.end() ? nullptr : &*parent;
+    list_.emplace_back(Node{parent_node, hash, std::move(data)});
+    return map_[hash] = std::prev(list_.end());
   }
-  up_iterator Erase(up_iterator it) {
+
+  Iterator Erase(Iterator it) {
     map_.erase(it->hash);
-    return NodeToUpIterator(list_.erase(UpToNodeIterator(it)));
+    return list_.erase(it);
   }
-  static node_iterator UpToNodeIterator(up_iterator it) {
-    return std::prev(it.base());
+
+  Iterator NullIterator() {
+    return list.end();
   }
-  static up_iterator NodeToUpIterator(node_iterator it) {
-    return std::reverse_iterator(it);
+
+  ConstIterator NullIterator() const {
+    return list.cend();
   }
-  up_iterator NullParent() const {
-    return list_.rend();
-  }
+
   const TreeNode& Oldest() const {
     return list_.front();
   }
+
   const TreeNode& Latest() const {
     return list_.back();
   }
 
-  std::ranges::subrange<node_iterator> FromOldest() {
-    return {list_.begin(), list_.end()};
+  auto ForwardFromOldest() {
+    return std::ranges::subrange{list_.begin(), list_.end()};
   }
-  std::ranges::subrange<up_iterator> FromLatest() {
-    return {list_.rbegin(), list_.rend()};
+
+  auto BackFromLatest() {
+    return FromNode(list_.empty() ? nullptr : &list_.back());
   }
-  std::ranges::subrange<up_iterator> FromNode(up_iterator it) {
-    return {it, list_.rend()};
+
+  auto UpFromNode(Iterator it) {
+    return std::ranges::subrange{UpIterator{&*it}, nullptr};
+  }
+
+  auto UpFromNode(ConstIterator it) const {
+    return std::ranges::subrange{ConstUpIterator{&*it}, nullptr};
   }
 
  private:
-  std::list<TreeNode> list_;
-  std::unordered_map<Hash, up_iterator> map_;
+  std::list<Node> list_;
+  std::unordered_map<Hash, node_iterator> map_;
   Hasher hasher_;
 };
 

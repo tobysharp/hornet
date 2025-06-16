@@ -25,13 +25,17 @@ class HeaderChain {
  public:
   class UpIterator {
    public:
+    // These type aliases are crucial for satisfying iterator concepts.
     using value_type = HeaderContext;
     using difference_type = std::ptrdiff_t;
-    
+    using iterator_concept = std::forward_iterator_tag;
+    using reference        = const value_type&; // For iterators that return a prvalue from operator*, reference is the value_type itself.
+    using pointer          = const value_type*;    
+
     UpIterator() : chain_(nullptr), context_(HeaderContext::Null()) {}
-    UpIterator(const HeaderChain& chain, std::nullopt_t)
+    explicit UpIterator(const HeaderChain& chain, std::nullopt_t)
         : chain_(&chain), context_(HeaderContext::Null()) {}
-    UpIterator(const HeaderChain& chain)
+    explicit UpIterator(const HeaderChain& chain)
         : chain_(&chain),
           context_(chain.Empty() ? HeaderContext::Null()
                                  : HeaderContext{.header = *chain.Tip(),
@@ -131,6 +135,7 @@ class HeaderChain {
   }
 
   const protocol::Hash& GetTipHash() const {
+    // TODO: Consider case where chain is empty
     if (!tip_hash_) tip_hash_ = Tip().ComputeHash();
     return *tip_hash_;
   }
