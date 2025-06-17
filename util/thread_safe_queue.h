@@ -14,14 +14,14 @@ class ThreadSafeQueue {
  public:
   void Push(T item) {
     {
-        const std::scoped_lock{mutex_};
+        std::scoped_lock lock{mutex_};
         queue_.emplace_back(std::move(item));
     }
     cv_.notify_one();
   }
 
   std::optional<T> TryPop() {
-    const std::scoped_lock{mutex_};
+    std::scoped_lock lock{mutex_};
     if (queue_.empty()) return {};
     const T item = std::move(queue_.front());
     queue_.pop_front();
@@ -29,7 +29,7 @@ class ThreadSafeQueue {
   }
 
   std::optional<T> WaitPop(const Timeout& timeout = Timeout::Infinite()) {
-    std::scoped_lock lock{mutex_};
+    std::unique_lock lock{mutex_};
     if (timeout.IsInfinite()) {
         cv_.wait(lock, [&] { return !queue_.empty(); });
     } else {
@@ -52,7 +52,7 @@ class ThreadSafeQueue {
 
   void Clear() {
     {
-        const std::scoped_lock{mutex_};
+        std::scoped_lock lock{mutex_};
         queue_.clear();
     }
     cv_.notify_all();

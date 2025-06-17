@@ -7,6 +7,7 @@
 #include "protocol/constants.h"
 #include "protocol/hash.h"
 #include "util/big_uint.h"
+#include "util/throw.h"
 
 namespace hornet::protocol {
 

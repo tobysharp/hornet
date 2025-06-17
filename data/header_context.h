@@ -21,6 +21,11 @@ struct HeaderContext {
     return {std::move(header), hash, work, total_work + work, height + 1};
   }
 
+  HeaderContext Extend(protocol::BlockHeader next) const {
+    const auto work = next.GetWork();
+    return {std::move(header), next.ComputeHash(), work, total_work + work, height + 1};
+  }
+
   HeaderContext Rewind(protocol::BlockHeader prev) const {
     const auto hash = header.GetPreviousBlockHash();
     return {std::move(header), hash, prev.GetWork(), total_work - local_work, height - 1};

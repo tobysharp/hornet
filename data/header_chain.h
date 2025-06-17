@@ -135,8 +135,8 @@ class HeaderChain {
   }
 
   const protocol::Hash& GetTipHash() const {
-    // TODO: Consider case where chain is empty
-    if (!tip_hash_) tip_hash_ = Tip().ComputeHash();
+    if (Empty()) util::ThrowOutOfRange("Tip hash requested on an empty chain.");
+    if (!tip_hash_) tip_hash_ = Tip()->ComputeHash();
     return *tip_hash_;
   }
 

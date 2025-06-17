@@ -7,7 +7,7 @@ namespace hornet::util {
 
 class Timeout {
  public:
-    constexpr Timeout(int64_t timeout_ms) :
+    Timeout(int64_t timeout_ms) :
      timeout_ms_(timeout_ms),
      initial_time_(std::chrono::high_resolution_clock::now()),
      expiry_time_(initial_time_ + std::chrono::milliseconds{timeout_ms})
@@ -16,11 +16,11 @@ class Timeout {
     constexpr Timeout(const Timeout&) = default;
     constexpr Timeout(Timeout&&) = default;
 
-    static constexpr Timeout Immediate() {
+    static Timeout Immediate() {
         return 0;
     }
 
-    static constexpr Timeout Infinite() {
+    static Timeout Infinite() {
         return -1;
     }
 

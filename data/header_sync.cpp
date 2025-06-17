@@ -11,13 +11,13 @@ void HeaderSync::Validate(const util::Timeout& timeout /* = util::Timeout::Infin
   for (std::optional<Batch> batch; !timeout.IsExpired() && (batch = queue_.WaitPop(timeout));) {
     if (batch->empty()) continue;
 
-    auto parent = timechain_.Find((*batch)[0].GetPreviousBlockHash());
-    const std::unique_ptr<const HeaderTimechain::ValidationView> view = timechain_.GetValidationView(parent.iterator);
+    auto [parent_iterator, parent_context] = timechain_.Find((*batch)[0].GetPreviousBlockHash());
+    const std::unique_ptr<const HeaderTimechain::ValidationView> view = timechain_.GetValidationView(parent_iterator);
     for (const auto& header : *batch) {
-      auto context = validator_.ValidateDownloadedHeader(parent.context, header, *view);
+      auto context = validator_.ValidateDownloadedHeader(parent_context, header, *view);
       if (!context) return Fail();
-      parent.context = context;
-      parent.iterator = timechain_.Add(std::move(context), parent.iterator);
+      parent_context = context;
+      parent_iterator = timechain_.Add(std::move(*context), parent_iterator);
     }
   }
 }

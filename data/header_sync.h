@@ -40,7 +40,7 @@ class HeaderSync {
   // Headers start out being pushed into an unverified queue pipeline.
   util::ThreadSafeQueue<Batch> queue_;
   HeaderTimechain timechain_;
-  Validator validator_;
+  consensus::Validator validator_;
 };
 
 }  // namespace hornet::data
