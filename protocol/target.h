@@ -6,6 +6,7 @@
 
 #include "protocol/constants.h"
 #include "protocol/hash.h"
+#include "util/assert.h"
 #include "util/big_uint.h"
 #include "util/throw.h"
 
@@ -52,6 +53,30 @@ class Target {
       return target >> (-lshift_bits);
     else
       return target << lshift_bits;
+  }
+
+  // Compresses a target to a compact 32-bit representation.
+  inline constexpr uint32_t GetCompact() const {
+    // We define the exponent to be the number of significant bytes in Target.
+    // Then we define the mantissa to be the most significant 3 bytes.
+    // This sacrifices up to 7 bits of precision, but this is the Bitcoin Core method.
+    const int significant_bytes = (value_->SignificantBits() + 7) >> 3;
+    const int rshift_bytes = significant_bytes - 3;
+    const int rshift_bits = rshift_bytes << 3;
+    const Uint256 shifted_target =
+        rshift_bits >= 0 ? (*value_ >> rshift_bits) : (*value_ << (-rshift_bits));
+    int mantissa = shifted_target.Words()[0];
+    int exponent = significant_bytes;
+    // Now we have achieved Target = Mantissa * 2^(8 * (Exponent - 3)) + Error.
+    // However, we are only allowed 23 bits for Mantissa, and we may have used 24.
+    if (mantissa & 0x00800000) {
+      // Yes, we used 24 bits, so we adjust down to 16 bits.
+      mantissa >>= 8;
+      ++exponent;
+    }
+    Assert((mantissa & ~0x007FFFFF) == 0);
+    Assert(exponent < 256);
+    return (exponent << 24) | mantissa;
   }
 
   // Convert from a little-endian hash representation

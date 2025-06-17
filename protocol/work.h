@@ -25,8 +25,15 @@ class Work {
   constexpr Work operator+(const Work& rhs) const {
     return value_ + rhs.value_;
   }
+  constexpr Work operator-(const Work& rhs) const {
+    return value_ - rhs.value_;
+  }
   constexpr Work& operator+=(const Work& rhs) {
     value_ += rhs.value_;
+    return *this;
+  }
+  constexpr Work& operator -=(const Work& rhs) {
+    value_ -= rhs.value_;
     return *this;
   }
   constexpr bool operator<(const Work& rhs) const {

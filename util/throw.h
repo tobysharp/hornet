@@ -14,17 +14,17 @@ inline std::string ToString(const Args&... args) {
 }
 
 template <typename... Args>
-inline void ThrowRuntimeError(const Args&... args) {
+[[noreturn]] inline void ThrowRuntimeError(const Args&... args) {
     throw std::runtime_error{ToString(args...)};
 }
 
 template <typename... Args>
-inline void ThrowOutOfRange(const Args&... args) {
+[[noreturn]] inline void ThrowOutOfRange(const Args&... args) {
     throw std::out_of_range{ToString(args...)};
 }
 
 template <typename... Args>
-inline void ThrowInvalidArgument(const Args&... args) {
+[[noreturn]] inline void ThrowInvalidArgument(const Args&... args) {
     throw std::invalid_argument{ToString(args...)};
 }
 
