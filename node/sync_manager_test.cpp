@@ -31,10 +31,12 @@ TEST(SyncManagerTest, TestMainnetSyncHeaders) {
     data::Timechain timechain;
     Engine engine{timechain, node.GetMagic()};
     const auto peer = engine.AddOutboundPeer(net::kLocalhost, node.GetPort());
+    util::Timeout timeout(1000);  // Wait up to one second for the hanshake to complete.
     engine.RunMessageLoop([&](const Engine&) {
-        return timechain.Headers().GetHeaviestLength() >= 6000;
+        return timeout.IsExpired() || timechain.Headers().GetHeaviestLength() >= 6000;
     });
-    LogInfo() << "Header count: " << timechain.Headers().GetHeaviestLength();
+    LogDebug() << "Header count: " << timechain.Headers().GetHeaviestLength();
+    EXPECT_TRUE(timechain.Headers().GetHeaviestLength() >= 6000);
 }
 
 }  // namespace
