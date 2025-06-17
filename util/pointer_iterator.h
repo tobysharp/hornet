@@ -3,6 +3,7 @@
 #include <concepts>
 #include <functional>
 #include <iterator>
+#include <optional>
 #include <type_traits>
 
 namespace hornet::util {
@@ -14,11 +15,16 @@ class PointerIterator {
   using iterator_concept = std::forward_iterator_tag;
   using difference_type = std::ptrdiff_t;
   using value_type = Node;
-  using pointer = std::conditional_t<IsConst, const Node, Node>*;
-  using reference = std::conditional_t<IsConst, const Node, Node>&;
+  using pointer = std::conditional_t<kIsConst, const Node, Node>*;
+  using reference = std::conditional_t<kIsConst, const Node, Node>&;
 
   PointerIterator() : node_(nullptr) {}
   explicit PointerIterator(pointer node) : node_(node) {}
+
+  PointerIterator(const PointerIterator&) = default;
+  PointerIterator& operator =(const PointerIterator&) = default;
+  PointerIterator(PointerIterator&&) = default;
+  PointerIterator& operator =(PointerIterator&&) = default;
 
   // Allow conversion from a non-const to a const iterator
   template <bool kIsRhsConst>
@@ -45,7 +51,9 @@ class PointerIterator {
     return tmp;
   }
 
-  bool operator==(const PointerIterator& other) const = default;
+  bool operator==(const PointerIterator& other) const {
+    return node_ == other.node_;
+  }
   friend bool operator==(const PointerIterator& it, std::nullptr_t) {
     return it.node_ == nullptr;
   }
