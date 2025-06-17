@@ -13,17 +13,13 @@ namespace hornet::consensus {
 
 class Validator {
  public:
-  class Parameters {
-   public:
-    const protocol::Hash& GetGenesisHash() const {
-      return genesis_hash_;
-    }
-
-   private:
-    protocol::Hash genesis_hash_ = protocol::kGenesisHash;
+  struct Parameters {
+    protocol::Hash genesis_hash;
+    
+    Parameters() : genesis_hash(protocol::kGenesisHash) {}
   };
 
-  Validator(const Parameters&);
+  Validator(const Parameters& params = {}) : parameters_(params) {}
 
   std::optional<data::HeaderContext> ValidateDownloadedHeader(
       const std::optional<data::HeaderContext>& parent, const protocol::BlockHeader& header,

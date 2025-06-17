@@ -11,11 +11,10 @@
 #include "data/header_context.h"
 #include "protocol/block_header.h"
 #include "protocol/work.h"
+#include "util/assert.h"
 #include "util/log.h"
 
 namespace hornet::data {
-
-void Assert(bool) {}  // TODO
 
 // The class HeaderChain holds all historical verified headers in a linear chain.
 // Manages disk storage and memory-mapped files. Headers are only pushed to this

@@ -44,6 +44,13 @@ class HeaderTimechain {
   FindResult Find(const protocol::Hash& hash);
   std::unique_ptr<ValidationView> GetValidationView(const ParentIterator& tip) const;
 
+  int GetHeaviestTipHeight() const {
+    return chain_.GetTipHeight();
+  }
+  int GetHeaviestLength() const {
+    return chain_.Length();
+  }
+
  private:
   using HeaderTree = HashedTree<NodeData>;
   using TreeIterator = HeaderTree::Iterator;

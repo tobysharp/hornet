@@ -12,14 +12,19 @@ namespace hornet::data {
 
 class HeaderSync {
  public:
+  HeaderSync(HeaderTimechain& timechain) : timechain_(timechain) {}
+  HeaderSync() = delete;
+
   // Push new headers into the unverified queue for later processing, which
   // could be in the same thread or a different thread.
-  void Receive(std::span<const protocol::BlockHeader> headers) {  // Copy
+  int Receive(std::span<const protocol::BlockHeader> headers) {  // Copy
     queue_.Push(Batch{headers.begin(), headers.end()});
+    return std::ssize(headers);
   }
 
-  void Receive(std::vector<protocol::BlockHeader>&& headers) {  // Move
+  int Receive(std::vector<protocol::BlockHeader>&& headers) {  // Move
     queue_.Push(std::move(headers));
+    return std::ssize(headers);
   }
 
   // Returns true if there is validation work to be done, i.e. queued headers.
@@ -39,7 +44,7 @@ class HeaderSync {
 
   // Headers start out being pushed into an unverified queue pipeline.
   util::ThreadSafeQueue<Batch> queue_;
-  HeaderTimechain timechain_;
+  HeaderTimechain& timechain_;
   consensus::Validator validator_;
 };
 

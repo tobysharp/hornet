@@ -29,7 +29,7 @@ class Handshake {
 
   // Constructs a Handshake object based on the Role value.
   explicit Handshake(Role role) noexcept
-      : role_(role), machine_(role == Role::Inbound ? s_inbound_machine_ : s_outbound_machine_) {}
+      : machine_(role == Role::Inbound ? s_inbound_machine_ : s_outbound_machine_) {}
 
   // Advances (mutates) the internal state of the handshake based on the attempted transition.
   // If the transition is illegal, the function throws an Error. Otherwise, it returns the next
@@ -123,7 +123,6 @@ class Handshake {
       {{State::VerackReceived, Transition::SendVerack}, {State::Complete, Transition::None}},
       {{State::VerackSent, Transition::ReceiveVerack}, {State::Complete, Transition::None}}};
 
-  Role role_;                                         // The direction of connectivity
   Sink state_ = {State::None, Transition::Begin};     // The current state and available action
   const StateMachine& machine_;                       // The applicable finite state machine
 };

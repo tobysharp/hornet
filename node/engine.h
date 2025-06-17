@@ -5,6 +5,7 @@
 #include <optional>
 #include <queue>
 
+#include "data/timechain.h"
 #include "net/peer.h"
 #include "net/peer_manager.h"
 #include "node/broadcaster.h"
@@ -28,7 +29,7 @@ class Engine : public Broadcaster {
   };
   using BreakCondition = std::function<bool(const Engine&)>;
  
-  Engine(protocol::Magic magic);
+  Engine(data::Timechain& timechain, protocol::Magic magic = protocol::Magic::Main);
   void RunMessageLoop(BreakCondition condition = BreakOnTimeout{});
 
   void Abort() {
@@ -54,6 +55,7 @@ class Engine : public Broadcaster {
   void WriteBuffersToSockets(net::PeerManager& peers);
   void ManagePeers(net::PeerManager& peers);
 
+  data::Timechain& timechain_;
   protocol::Magic magic_;
   net::PeerManager peers_;
   std::atomic<bool> abort_ = false;

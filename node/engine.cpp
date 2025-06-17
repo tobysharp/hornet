@@ -1,6 +1,7 @@
 #include <atomic>
 #include <queue>
 
+#include "data/timechain.h"
 #include "message/registry.h"
 #include "net/peer.h"
 #include "net/peer_manager.h"
@@ -18,10 +19,10 @@
 
 namespace hornet::node {
 
-Engine::Engine(protocol::Magic magic)
-    : Broadcaster(), magic_(magic), factory_(message::CreateMessageFactory()) {
+Engine::Engine(data::Timechain& timechain, protocol::Magic magic)
+    : Broadcaster(), timechain_(timechain), magic_(magic), factory_(message::CreateMessageFactory()) {
   processor_.emplace(factory_, *this);
-  sync_manager_.emplace(*this);
+  sync_manager_.emplace(timechain_, *this);
 }
 
 void Engine::SendToOne(const std::shared_ptr<net::Peer>& peer, OutboundMessage&& msg) {

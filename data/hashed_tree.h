@@ -9,7 +9,14 @@
 
 namespace hornet::data {
 
-template <typename T, typename Hasher = decltype([](const T& x) { return x.GetHash(); })>
+struct GetHashFunctor {
+  template <typename T>
+  protocol::Hash operator()(const T& x) {
+    return x.GetHash();
+  }
+};
+
+template <typename T, typename Hasher = GetHashFunctor>
 class HashedTree {
  public:
   using Hash = decltype(std::declval<Hasher>()(std::declval<T>()));
@@ -21,8 +28,12 @@ class HashedTree {
   };
 
   struct GetParent {
-    Node* operator()(Node* node) const { return node->parent; }
-    const Node* operator()(const Node* node) const { return node->parent; }
+    Node* operator()(Node* node) const {
+      return node->parent;
+    }
+    const Node* operator()(const Node* node) const {
+      return node->parent;
+    }
   };
 
   using Iterator = std::list<Node>::iterator;
@@ -30,7 +41,7 @@ class HashedTree {
   using UpIterator = util::PointerIterator<Node, GetParent, false>;
   using ConstUpIterator = util::PointerIterator<Node, GetParent, true>;
 
-  HashedTree(Hasher hasher = [](const T& x) { return x.GetHash(); }) : hasher_(std::move(hasher)) {}
+  HashedTree(Hasher&& hasher = GetHashFunctor{}) : hasher_(std::forward<Hasher>(hasher)) {}
 
   bool Empty() const {
     return list_.empty();
@@ -74,8 +85,7 @@ class HashedTree {
 
   Iterator Erase(Iterator it) {
     // Handle the case where this node has a parent
-    if (it->parent != nullptr)
-    {
+    if (it->parent != nullptr) {
       const auto siblings = child_map_.equal_range(it->parent);
       for (auto sibling = siblings.first; sibling != siblings.second; ++sibling) {
         if (sibling->second == it) {
@@ -102,8 +112,7 @@ class HashedTree {
 
     Node* next = nullptr;
     // Iterate up the chain
-    for (Node* node = leaf; node != nullptr; node = next)
-    {
+    for (Node* node = leaf; node != nullptr; node = next) {
       // Promote all children of the parent node
       if ((next = node->parent) != nullptr) {
         const auto siblings = child_map_.equal_range(next);

@@ -1,5 +1,6 @@
 #include "node/sync_manager.h"
 
+#include "data/timechain.h"
 #include "net/bitcoind.h"
 #include "node/engine.h"
 #include "protocol/handshake.h"
@@ -15,7 +16,8 @@ TEST(SyncManagerTest, TestGetHeaders) {
     constexpr int kBlocks = 10;
     net::Bitcoind node = net::Bitcoind::Launch();
     node.MineBlocks(kBlocks);
-    Engine engine{node.GetMagic()};
+    data::Timechain timechain;
+    Engine engine{timechain, node.GetMagic()};
     const auto peer = engine.AddOutboundPeer(net::kLocalhost, node.GetPort());
     util::Timeout timeout(1000);  // Wait up to one second for the hanshake to complete.
     engine.RunMessageLoop([&](const Engine&) {
@@ -26,12 +28,13 @@ TEST(SyncManagerTest, TestGetHeaders) {
 
 TEST(SyncManagerTest, TestMainnetSyncHeaders) {
     net::Bitcoind node = net::Bitcoind::Connect(net::Network::Mainnet);
-    Engine engine{node.GetMagic()};
+    data::Timechain timechain;
+    Engine engine{timechain, node.GetMagic()};
     const auto peer = engine.AddOutboundPeer(net::kLocalhost, node.GetPort());
     engine.RunMessageLoop([&](const Engine&) {
-        return engine.GetSyncManager().GetHeaderSync().Size() >= 6000;
+        return timechain.Headers().GetHeaviestLength() >= 6000;
     });
-    LogInfo() << "Header count: " << engine.GetSyncManager().GetHeaderSync().Size();
+    LogInfo() << "Header count: " << timechain.Headers().GetHeaviestLength();
 }
 
 }  // namespace

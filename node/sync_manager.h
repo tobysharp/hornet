@@ -3,6 +3,7 @@
 #include <chrono>
 
 #include "data/header_sync.h"
+#include "data/timechain.h"
 #include "message/getheaders.h"
 #include "message/headers.h"
 #include "message/verack.h"
@@ -15,7 +16,8 @@ namespace hornet::node {
 // Class for managing initial block download
 class SyncManager : public InboundHandler {
  public:
-  SyncManager(Broadcaster& broadcaster) : InboundHandler(&broadcaster) {}
+  SyncManager(data::Timechain& timechain, Broadcaster& broadcaster) : InboundHandler(&broadcaster), headers_(timechain.Headers()) {}
+  SyncManager() = delete;
 
   void OnHandshakeCompleted(std::shared_ptr<net::Peer> peer) {
     {
@@ -55,10 +57,11 @@ class SyncManager : public InboundHandler {
     // For now, we will assume that if the message comes from our sync peer, it's good.
     if (!IsSyncPeer()) return;
 
-    const int accepted = headers_.Accept(headers.GetBlockHeaders());
+    const int accepted = headers_.Receive(headers.GetBlockHeaders());
+    // TODO: Move getheaders logic into HeaderSync class.
     if (accepted == protocol::kMaxBlockHeaders) {
       message::GetHeaders getheaders(GetPeer()->GetCapabilities().GetVersion());
-      getheaders.AddLocatorHash(headers.GetBlockHeaders().back().GetHash());
+      getheaders.AddLocatorHash(headers.GetBlockHeaders().back().ComputeHash());
       Send(std::move(getheaders));
     }
   }

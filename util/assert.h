@@ -4,7 +4,7 @@
 
 namespace hornet {
 
-void Assert([[maybe_unused]] bool expression) {
+inline void Assert([[maybe_unused]] bool expression) {
   assert(expression);
 }
 
