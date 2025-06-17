@@ -21,7 +21,8 @@ class HashedTree {
   };
 
   struct GetParent {
-    Node* operator()(Node* node) { return node->parent; }
+    Node* operator()(Node* node) const { return node->parent; }
+    const Node* operator()(const Node* node) const { return node->parent; }
   };
 
   using Iterator = std::list<Node>::iterator;

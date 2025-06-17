@@ -19,7 +19,7 @@ class PointerIterator {
   using reference = std::conditional_t<kIsConst, const Node, Node>&;
 
   PointerIterator() : node_(nullptr) {}
-  explicit PointerIterator(pointer node) : node_(node) {}
+  explicit PointerIterator(pointer node, GetNext&& fn = GetNext{}) : node_(node), get_next_(std::forward<GetNext>(fn)) {}
 
   PointerIterator(const PointerIterator&) = default;
   PointerIterator& operator =(const PointerIterator&) = default;
@@ -41,7 +41,7 @@ class PointerIterator {
 
   // Increment by invoking the user-provided functor
   PointerIterator& operator++() {
-    if (node_) node_ = std::invoke(get_next_, node_);
+    if (node_) node_ = get_next_(node_);
     return *this;
   }
 

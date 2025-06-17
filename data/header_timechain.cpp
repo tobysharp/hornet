@@ -151,8 +151,11 @@ const protocol::BlockHeader& HeaderTimechain::GetAncestorAtHeight(
 
   if (tip.Node()->data.root_height > height)
     return chain_[height];
-  else
-    return tip.Node()->data.Header();
+  else {
+    for (const auto& node : tree_.UpFromNode(tip.Node()))
+      if (node.data.Height() == height) return node.data.Header();
+  }
+  util::ThrowRuntimeError("Couldn't find an ancestor at height ", height);
 }
 
 HeaderTimechain::ParentIterator HeaderTimechain::NullIterator() const {
@@ -170,6 +173,7 @@ HeaderTimechain::ParentIterator HeaderTimechain::BeginTree(TreeIterator node) co
 auto HeaderTimechain::AncestorsToHeight(
     const ParentIterator& start, int end_height) const {
       static_assert(std::forward_iterator<ParentIterator>);
+      static_assert(std::sentinel_for<int, ParentIterator>);
       return std::ranges::subrange{start, BeginChain(end_height)};
 }
 
