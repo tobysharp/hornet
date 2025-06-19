@@ -23,7 +23,7 @@ void SwapVersionMessages(Network network) {
   Socket sock = Socket::Connect(kLocalhost, node.GetPort());
 
   // Send a version message
-  sock.Write(FrameMessage(node.GetMagic(), message::Version{}));
+  sock.Write(protocol::FrameMessage(node.GetMagic(), message::Version{}));
 
   // Receive a version message
   const auto msgin = ReceiveMessage<message::Version>(sock, node.GetMagic());

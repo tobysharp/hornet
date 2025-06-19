@@ -13,9 +13,7 @@ namespace hornet::node {
 namespace {
 
 TEST(SyncManagerTest, TestGetHeaders) {
-    constexpr int kBlocks = 10;
-    net::Bitcoind node = net::Bitcoind::Launch();
-    node.MineBlocks(kBlocks);
+    net::Bitcoind node = net::Bitcoind::ConnectOrLaunch();
     data::Timechain timechain;
     Engine engine{timechain, node.GetMagic()};
     const auto peer = engine.AddOutboundPeer(net::kLocalhost, node.GetPort());
@@ -27,7 +25,7 @@ TEST(SyncManagerTest, TestGetHeaders) {
 }
 
 TEST(SyncManagerTest, TestMainnetSyncHeaders) {
-    net::Bitcoind node = net::Bitcoind::Connect(net::Network::Mainnet);
+    net::Bitcoind node = net::Bitcoind::Connect();
     data::Timechain timechain;
     Engine engine{timechain, node.GetMagic()};
     const auto peer = engine.AddOutboundPeer(net::kLocalhost, node.GetPort());

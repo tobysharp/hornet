@@ -29,7 +29,7 @@ void Engine::SendToOne(const std::shared_ptr<net::Peer>& peer, OutboundMessage&&
   if (!peer->IsDropped()) {
     const SerializationMemoPtr memo = std::make_shared<SerializationMemo>(std::move(msg));
     outbox_[peer].emplace_back(memo);  // Creates queue if previously non-existent
-    LogInfo() << "Sent: peer = " << *peer << ", msg = " << memo->GetOutbound();
+    LogInfo() << "Sent: peer = " << *peer << ", msg = " << memo;
   }
 }
 
@@ -37,7 +37,7 @@ void Engine::SendToAll(OutboundMessage&& msg) {
   const SerializationMemoPtr memo = std::make_shared<SerializationMemo>(std::move(msg));
   for (auto pair : outbox_) {
     pair.second.emplace_back(memo);
-    LogInfo() << "Sent: peer = " << *pair.first.lock() << ", msg = " << memo->GetOutbound();
+    LogInfo() << "Sent: peer = " << *pair.first.lock() << ", msg = " << memo;
   }
 }
 

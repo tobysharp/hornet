@@ -36,8 +36,6 @@ class BigUint {
     }
   }
 
-  explicit constexpr BigUint(std::array<T, kWords>&& array) : words_(std::move(array)) {}
-
   constexpr explicit BigUint(T word) {
     words_ = {};
     words_[0] = word;
@@ -56,7 +54,7 @@ class BigUint {
 
   static constexpr BigUint Zero() {
     std::array<T, kWords> words = {};
-    return BigUint{std::move(words)};
+    return BigUint{words};
   }
 
   static constexpr BigUint Maximum() {

@@ -14,8 +14,8 @@ class Headers : public protocol::Message {
   std::span<const protocol::BlockHeader> GetBlockHeaders() const {
     return block_headers_;
   }
-  void AddBlockHeader(protocol::BlockHeader header) {
-    block_headers_.emplace_back(std::move(header));
+  void AddBlockHeader(const protocol::BlockHeader& header) {
+    block_headers_.emplace_back(header);
   }
   virtual std::string GetName() const override { return "headers"; }
   virtual void Accept(Visitor& v) const override {

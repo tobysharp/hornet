@@ -16,7 +16,7 @@ class Bitcoind {
 
   static Bitcoind Connect(Network network = Network::Mainnet);
   static Bitcoind Launch(Network network = Network::Regtest);
-  static Bitcoind ConnectOrLaunch(Network network);
+  static Bitcoind ConnectOrLaunch(Network network = Network::Mainnet);
 
   std::string GetCookiePath() const;
 

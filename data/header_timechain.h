@@ -39,8 +39,8 @@ class HeaderTimechain {
   };
 
   // Public methods
-  ParentIterator Add(HeaderContext context);
-  ParentIterator Add(HeaderContext context, const ParentIterator& parent);
+  ParentIterator Add(const HeaderContext& context);
+  ParentIterator Add(const HeaderContext& context, ParentIterator parent);
   FindResult Find(const protocol::Hash& hash);
   std::unique_ptr<ValidationView> GetValidationView(const ParentIterator& tip) const;
 
@@ -57,7 +57,7 @@ class HeaderTimechain {
   using TreeNode = HeaderTree::Node;
 
   // Tree helpers
-  TreeNode* AddChild(TreeNode* parent, HeaderContext context);
+  TreeNode* AddChild(TreeNode* parent, const HeaderContext& context);
   void PruneReorgTree();
   bool IsValidNode(TreeIterator it) const {
     return tree_.IsValidNode(it);
@@ -70,8 +70,9 @@ class HeaderTimechain {
   ParentIterator NullIterator() const;
   ParentIterator BeginChain(int height) const;
   ParentIterator BeginTree(TreeIterator node) const;
-  const protocol::BlockHeader& GetAncestorAtHeight(const ParentIterator& tip, int height) const;
-  auto AncestorsToHeight(const ParentIterator& start, int end_height) const;
+  ParentIterator BeginTree(TreeNode* node) const;
+  const protocol::BlockHeader& GetAncestorAtHeight(ParentIterator tip, int height) const;
+  auto AncestorsToHeight(ParentIterator start, int end_height) const;
 
   // As potential forks or re-orgs are resolved, the heaviest chain is kept in a linear array.
   HeaderChain chain_;
@@ -184,7 +185,7 @@ class HeaderTimechain::AncestorIterator {
 
 class HeaderTimechain::ValidationView : public consensus::HeaderAncestryView {
  public:
-  ValidationView(const HeaderTimechain& timechain, const ParentIterator& tip)
+  ValidationView(const HeaderTimechain& timechain, ParentIterator tip)
       : timechain_(timechain), tip_(tip) {}
 
   virtual std::optional<uint32_t> TimestampAt(int height) const override;

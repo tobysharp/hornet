@@ -16,11 +16,10 @@ class Framer {
  public:
   explicit Framer(Magic magic = Magic::Testnet) : magic_(magic) {}
 
-  void Frame(const Message &message) {
+  void Frame(const Message& message) {
     // Defer writing the real header until after we know the payload details.
     const auto header_pos = writer_.GetPos();
-    Header header = { .magic = magic_,
-                      .command = message.GetName() };
+    Header header = {.magic = magic_, .command = message.GetName()};
     header.Serialize(writer_);
 
     // Serialize the message payload.
@@ -38,7 +37,7 @@ class Framer {
     writer_.SeekPos(end_pos);
   }
 
-  const std::vector<uint8_t> &Buffer() const {
+  const std::vector<uint8_t>& Buffer() const {
     return writer_.Buffer();
   }
 
@@ -46,10 +45,10 @@ class Framer {
     writer_.Clear();
   }
 
-  static std::shared_ptr<std::vector<uint8_t>> FrameToBuffer(Magic magic, const Message& message) {
+  static std::vector<uint8_t> FrameToBuffer(Magic magic, const Message& message) {
     Framer framer{magic};
     framer.Frame(message);
-    return std::make_shared<std::vector<uint8_t>>(framer.writer_.ReleaseBuffer());
+    return framer.writer_.ReleaseBuffer();
   }
 
  private:
@@ -57,10 +56,8 @@ class Framer {
   encoding::Writer writer_;
 };
 
-inline std::vector<uint8_t> FrameMessage(Magic magic, const Message &message) {
-  Framer framer(magic);
-  framer.Frame(message);
-  return std::move(framer.Buffer());  // explicitly moved to avoid copy
+inline std::vector<uint8_t> FrameMessage(Magic magic, const Message& message) {
+  return Framer::FrameToBuffer(magic, message);
 }
 
 }  // namespace hornet::protocol

@@ -22,7 +22,7 @@ Bitcoind::~Bitcoind() {
   Terminate();
 }
 
-Bitcoind Bitcoind::ConnectOrLaunch(Network network) {
+Bitcoind Bitcoind::ConnectOrLaunch(Network network /* = Network::Mainnet */) {
   try {
     return Connect(network);
   }

@@ -156,7 +156,7 @@ class Writer {
     return buffer_;
   }
 
-  std::vector<uint8_t>&& ReleaseBuffer() {
+  std::vector<uint8_t> ReleaseBuffer() {
     return std::move(buffer_);
   }
 

@@ -18,7 +18,7 @@ class Target {
   constexpr Target() = default;
   constexpr Target(const Target&) = default;
   constexpr Target(Target&&) = default;
-  constexpr Target(Uint256 value) : value_(std::move(value)) {}
+  constexpr Target(const Uint256& value) : value_(value) {}
 
   // Expands a compact representation of target to a little-endian byte array.
   inline static constexpr Target FromCompact(uint32_t bits) {
@@ -80,8 +80,8 @@ class Target {
   }
 
   // Convert from a little-endian hash representation
-  inline static constexpr Target FromHash(Hash hash) {
-    return Uint256{std::move(hash)};
+  inline static constexpr Target FromHash(const Hash& hash) {
+    return Uint256{hash};
   }
 
   // Returns the maximum protocol-valid target value.
@@ -114,8 +114,8 @@ class Target {
     return (~*value_ / (*value_ + 1u)) + 1u;
   }
 
-  inline friend constexpr bool operator<=(Hash hash, const Target& rhs) {
-    return rhs.value_ ? Uint256{std::move(hash)} <= rhs.value_ : false;
+  inline friend constexpr bool operator<=(const Hash& hash, const Target& rhs) {
+    return rhs.value_ ? Uint256{hash} <= rhs.value_ : false;
   }
 
   inline friend constexpr bool operator<=(const Target& lhs, const Target& rhs) {

@@ -14,7 +14,7 @@ namespace hornet::node {
 namespace {
 
 TEST(EngineTest, TestHandshake) {
-    net::Bitcoind node = net::Bitcoind::Launch();
+    net::Bitcoind node = net::Bitcoind::ConnectOrLaunch();
     data::Timechain timechain_;
     Engine engine_{timechain_, node.GetMagic()};
     const auto peer = engine_.AddOutboundPeer(net::kLocalhost, node.GetPort());

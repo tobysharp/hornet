@@ -10,7 +10,12 @@
 
 namespace hornet::data {
 
-HeaderTimechain::ParentIterator HeaderTimechain::Add(HeaderContext context) {
+HeaderTimechain::ParentIterator HeaderTimechain::Add(const HeaderContext& context) {
+  if (chain_.Empty()) {
+    // Genesis header
+    return BeginChain(chain_.Push(context.header, context.total_work));
+  }
+
   const protocol::Hash parent_hash = context.header.GetPreviousBlockHash();
 
   // If we weren't given a parent hint then first check whether we can match the chain.
@@ -26,58 +31,59 @@ HeaderTimechain::ParentIterator HeaderTimechain::Add(HeaderContext context) {
 
 // We specify that if a parent hint is passed, then it must be valid and must match
 // the required hash, otherwise nothing is added.
-HeaderTimechain::ParentIterator HeaderTimechain::Add(HeaderContext context,
-                                                       const ParentIterator& parent) {
-  TreeNode* result_node = nullptr;
-  int result_height = -1;
+HeaderTimechain::ParentIterator HeaderTimechain::Add(const HeaderContext& context,
+                                                     ParentIterator parent) {
+  ParentIterator result;
   const protocol::Hash parent_hash = context.header.GetPreviousBlockHash();
 
-  // We can only add to exactly one parent location.
-  if ((parent.InChain() ^ parent.InTree())
-      // If parent chain height given it must match context and chain hash.
-      || (parent.InChain() && ((parent.ChainHeight() != context.height - 1) ||
+  // Validate the input arguments carefully.
+
+  // If the parent is invalid, the chain must be empty.
+  bool fail = !parent.IsValid() && !chain_.Empty();
+  // We can only add to one parent location.
+  fail |= parent.InChain() && parent.InTree();
+  // If parent chain height given it must match context and chain hash.
+  fail |= parent.InChain() && ((parent.ChainHeight() != context.height - 1) ||
                                (parent.ChainHeight() >= chain_.Length()) ||
-                               (parent_hash != chain_.GetHash(parent.ChainHeight()))))
-      // Validate parent in tree.
-      || (parent.InTree() && parent_hash != parent.Node()->hash))
-    util::ThrowInvalidArgument("The parent wasn't found or didn't match the requirements.");
+                               (parent_hash != chain_.GetHash(parent.ChainHeight())));
+  // Validate parent in tree.
+  fail |= parent.InTree() && parent_hash != parent.Node()->hash;
+  if (fail) util::ThrowInvalidArgument("The parent wasn't found or didn't match the requirements.");
 
   // Now a parent is found in the chain or in the tree.
   if (parent.ChainHeight() == chain_.GetTipHeight())
-    result_height = chain_.Push(std::move(context.header), context.total_work);
+    result = BeginChain(chain_.Push(context.header, context.total_work));
   else {
-    result_node = AddChild(parent.Node(), std::move(context));
+    result = BeginTree(AddChild(parent.Node(), context));
   }
 
   // Compare against the PoW at the current tip.
-  if (result_height < 0 && result_node->data.TotalWork() > chain_.GetTipTotalWork()) {
+  if (result.InTree() && result.Node()->data.TotalWork() > chain_.GetTipTotalWork()) {
     // Since this PoW is greater, truncate the chain to the common parent,
     // then copy this new branch into the linear chain. This is a reorg.
-    ReorgBranchToChain(result_node);
-    result_height = chain_.GetTipHeight();
+    ReorgBranchToChain(result.Node());
+    result = BeginChain(chain_.GetTipHeight());
   }
 
   // Prune stale tree entries before returning.
   PruneReorgTree();
-  return {*this, result_node, result_height};
+  return result;
 }
 
 HeaderTimechain::FindResult HeaderTimechain::Find(const protocol::Hash& hash) {
-  if (!chain_.Empty() && chain_.GetTipHash() == hash) 
-    return { BeginChain(chain_.GetTipHeight()), chain_.GetTipContext() };
+  if (!chain_.Empty() && chain_.GetTipHash() == hash)
+    return {BeginChain(chain_.GetTipHeight()), chain_.GetTipContext()};
 
   const TreeIterator node = tree_.Find(hash);
-  if (IsValidNode(node)) 
-    return { BeginTree(node), node->data.context };
+  if (IsValidNode(node)) return {BeginTree(node), node->data.context};
 
   const int min_height = std::max(0, chain_.Length() - max_search_depth_);
   HeaderContext context = chain_.GetTipContext();
   for (int height = chain_.GetTipHeight() - 1; height >= min_height; --height) {
     context = context.Rewind(chain_[height]);
-    if (chain_.GetHash(height) == hash) 
-      return { BeginChain(height), context };
+    if (chain_.GetHash(height) == hash) return {BeginChain(height), context};
   }
-  return { {*this}, std::nullopt };
+  return {{*this}, std::nullopt};
 }
 
 // Performs a chain reorg. Takes the tip node of a branch, and adjusts
@@ -107,10 +113,10 @@ void HeaderTimechain::ReorgBranchToChain(TreeNode* tip) {
 
   // Truncate the chain back to the common ancestor fork point.
   chain_.TruncateLength(root->data.Height(), fork.total_work);
-  
+
   // Now walk forward down the new branch, moving headers into the heaviest chain.
   for (; !stack.empty(); stack.pop())
-    chain_.Push(std::move(stack.top()->data.Header()), stack.top()->data.TotalWork());
+    chain_.Push(stack.top()->data.Header(), stack.top()->data.TotalWork());
 
   // Finally delete the chain containing the new tip from the forest.
   tree_.EraseChain(tip);
@@ -119,8 +125,7 @@ void HeaderTimechain::ReorgBranchToChain(TreeNode* tip) {
 // Prunes historic branches from the tree.
 void HeaderTimechain::PruneReorgTree() {
   const int min_keep_height = chain_.GetTipHeight() - max_keep_depth_;
-  if (tree_.Empty() || min_root_height_ >= min_keep_height) 
-    return;
+  if (tree_.Empty() || min_root_height_ >= min_keep_height) return;
 
   min_root_height_ = std::numeric_limits<int>::max();
   const auto range = tree_.ForwardFromOldest();
@@ -134,9 +139,9 @@ void HeaderTimechain::PruneReorgTree() {
   }
 }
 
-HeaderTimechain::TreeNode* HeaderTimechain::AddChild(TreeNode* parent, HeaderContext context) {
+HeaderTimechain::TreeNode* HeaderTimechain::AddChild(TreeNode* parent, const HeaderContext& context) {
   const int root_height = parent != nullptr ? parent->data.root_height : context.height;
-  const auto it = tree_.AddChild(parent, {std::move(context), root_height});
+  const auto it = tree_.AddChild(parent, {context, root_height});
   return tree_.IsValidNode(it) ? &*it : nullptr;
 }
 
@@ -145,8 +150,8 @@ std::unique_ptr<HeaderTimechain::ValidationView> HeaderTimechain::GetValidationV
   return std::make_unique<HeaderTimechain::ValidationView>(*this, tip);
 }
 
-const protocol::BlockHeader& HeaderTimechain::GetAncestorAtHeight(
-    const ParentIterator& tip, int height) const {
+const protocol::BlockHeader& HeaderTimechain::GetAncestorAtHeight(ParentIterator tip,
+                                                                  int height) const {
   if (tip.InChain()) return chain_[height];
 
   if (tip.Node()->data.root_height > height)
@@ -170,11 +175,14 @@ HeaderTimechain::ParentIterator HeaderTimechain::BeginTree(TreeIterator node) co
   return {*this, tree_.IsValidNode(node) ? &*node : nullptr};
 }
 
-auto HeaderTimechain::AncestorsToHeight(
-    const ParentIterator& start, int end_height) const {
-      static_assert(std::forward_iterator<ParentIterator>);
-      static_assert(std::sentinel_for<int, ParentIterator>);
-      return std::ranges::subrange{start, BeginChain(end_height)};
+HeaderTimechain::ParentIterator HeaderTimechain::BeginTree(TreeNode* node) const {
+  return {*this, node};
+}
+
+auto HeaderTimechain::AncestorsToHeight(ParentIterator start, int end_height) const {
+  static_assert(std::forward_iterator<ParentIterator>);
+  static_assert(std::sentinel_for<int, ParentIterator>);
+  return std::ranges::subrange{start, BeginChain(end_height)};
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////

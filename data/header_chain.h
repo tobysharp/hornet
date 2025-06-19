@@ -93,10 +93,10 @@ class HeaderChain {
   }
 
   // Push headers into the chain via pass-by-value-and-move.
-  int Push(protocol::BlockHeader header, const protocol::Work& total_tip_work) {
+  int Push(const protocol::BlockHeader& header, const protocol::Work& total_tip_work) {
     Assert(total_tip_work >= total_work_);
-    Assert(header.ComputeHash() == GetTipHash());
-    headers_.emplace_back(std::move(header));
+    Assert(Empty() || header.GetPreviousBlockHash() == GetTipHash());
+    headers_.emplace_back(header);
     total_work_ = total_tip_work;
     tip_hash_ = {};
     return Length() - 1;

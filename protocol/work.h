@@ -11,7 +11,7 @@ class Work {
   constexpr Work() = default;
   constexpr Work(const Work&) = default;
   constexpr Work(Work&&) = default;
-  constexpr Work(Uint256 value) : value_(std::move(value)) {}
+  constexpr Work(const Uint256& value) : value_(value) {}
 
   // Return a Work object from a compact "bits" representation of a target.
   static constexpr Work FromBits(uint32_t bits) {

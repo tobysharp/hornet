@@ -52,7 +52,7 @@ struct HexLiteral {
 
 // _h: variable-length, returns std::array<uint8_t, N>
 template <util::HexLiteral H>
-consteval auto operator"" _h() {
+consteval auto operator""_h() {
   constexpr auto& chars = H.chars;
   return [&]<std::size_t... I>(std::index_sequence<I...>) {
     return util::DecodeHexString<chars[I]...>();
@@ -61,7 +61,7 @@ consteval auto operator"" _h() {
 
 // _h256: exactly 64 hex digits, returns Uint256
 template <util::HexLiteral<65> H>
-consteval Uint256 operator"" _h256() {
+consteval Uint256 operator""_h256() {
   constexpr auto& chars = H.chars;
   return Uint256{[]<std::size_t... I>(std::index_sequence<I...>) {
     return util::DecodeHexString<chars[I]...>();

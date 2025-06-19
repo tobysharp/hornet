@@ -1,0 +1,23 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "clang20-debug",
+      "displayName": "Clang20 Debug",
+      "description": "Builds with the newer Clang 20 toolchain.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/clang20-debug",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang-20",
+        "CMAKE_CXX_COMPILER": "clang++-20",
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "clang20-debug-build",
+      "configurePreset": "clang20-debug"
+    }
+  ]
+}

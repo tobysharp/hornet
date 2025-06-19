@@ -53,11 +53,11 @@ class BlockHeader {
   void SetVersion(int version) {
     version_ = version;
   }
-  void SetPreviousBlockHash(Hash hash) {
-    prev_block_ = std::move(hash);
+  void SetPreviousBlockHash(const Hash& hash) {
+    prev_block_ = hash;
   }
-  void SetMerkleRoot(Hash hash) {
-    merkle_root_ = std::move(hash);
+  void SetMerkleRoot(const Hash& hash) {
+    merkle_root_ = hash;
   }
   void SetTimestamp(uint32_t timestamp) {
     timestamp_ = timestamp;

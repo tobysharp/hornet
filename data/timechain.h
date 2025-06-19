@@ -1,11 +1,21 @@
 #pragma once
 
+#include <memory>
+
 #include "data/header_timechain.h"
+#include "protocol/block_header.h"
+#include "protocol/hash.h"
+#include "util/assert.h"
+#include "util/hex.h"
 
 namespace hornet::data {
 
 class Timechain {
  public:
+  Timechain() {
+    headers_.Add(HeaderContext::Genesis(GetGenesisHeader()));
+  }
+
   HeaderTimechain& Headers() {
     return headers_;
   }
@@ -14,6 +24,17 @@ class Timechain {
   }
 
  private:
+  static protocol::BlockHeader GetGenesisHeader() {
+    protocol::BlockHeader genesis = {};
+    genesis.SetCompactTarget(0x1d00ffff);
+    genesis.SetVersion(1);
+    genesis.SetTimestamp(0x495fab29);
+    genesis.SetNonce(0x7c2bac1d);
+    genesis.SetMerkleRoot("4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"_h);
+    Assert(genesis.ComputeHash() == protocol::kGenesisHash);
+    return genesis;
+  }
+
   HeaderTimechain headers_;
 };
 
