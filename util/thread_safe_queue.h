@@ -23,7 +23,7 @@ class ThreadSafeQueue {
   std::optional<T> TryPop() {
     std::scoped_lock lock{mutex_};
     if (queue_.empty()) return {};
-    const T item = std::move(queue_.front());
+    T item = std::move(queue_.front());
     queue_.pop_front();
     return item;
   }
@@ -38,7 +38,7 @@ class ThreadSafeQueue {
         }
     }
     if (!is_stopped_ && !queue_.empty()) {
-      const T item = std::move(queue_.front());
+      T item = std::move(queue_.front());
       queue_.pop_front();
       return item;
     }
