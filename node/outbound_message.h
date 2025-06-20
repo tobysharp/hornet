@@ -15,6 +15,8 @@ class OutboundMessage {
  public:
   OutboundMessage(std::unique_ptr<const protocol::Message>&& msg)
       : message_(std::move(msg)) {}
+  OutboundMessage(const OutboundMessage&) = delete;
+  OutboundMessage(OutboundMessage&&) = default;
 
   const protocol::Message& GetMessage() const {
     return *message_;

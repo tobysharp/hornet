@@ -15,6 +15,11 @@ namespace hornet::message {
 
 class Headers : public protocol::Message {
  public:
+  Headers() = default;
+  Headers(const Headers&) = default;
+  Headers(Headers&&) = default;
+  Headers(const Headers&&) = delete;
+
   std::span<const protocol::BlockHeader> GetBlockHeaders() const {
     return block_headers_;
   }

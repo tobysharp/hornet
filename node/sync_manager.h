@@ -47,7 +47,7 @@ class SyncManager : public InboundHandler {
     // (https://linear.app/hornet-node/issue/HOR-20/request-tracking)
     if (!IsSyncPeer()) return;
 
-    const auto getheaders = headers_.OnHeaders(
+    auto getheaders = headers_.OnHeaders(
         GetSync(), headers,
         [](net::PeerId id, const protocol::BlockHeader&, consensus::HeaderError error) {
           if (auto peer = net::Peer::FromId(id)) {
@@ -74,14 +74,14 @@ class SyncManager : public InboundHandler {
     return sync && (sync == GetPeer());
   }
   template <typename T, typename... Args>
-  void Send(Args... args) {
+  void Send(Args&&... args) {
     if (const auto sync = sync_.lock())
       broadcaster_->SendMessage<T>(sync, std::forward<Args>(args)...);
   }
   template <typename T>
-  void Send(T msg) {
+  void Send(T&& msg) {
     if (const auto sync = sync_.lock())
-      broadcaster_->SendMessage<T>(sync, std::make_unique<T>(std::move(msg)));
+      broadcaster_->SendMessage<T>(sync, std::make_unique<T>(std::forward<T>(msg)));
   }
 
   std::weak_ptr<net::Peer> sync_;  // The peer used for timechain synchronization requests.

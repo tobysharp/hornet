@@ -19,6 +19,10 @@ namespace hornet::node {
 class SerializationMemo {
  public:
   SerializationMemo(OutboundMessage&& message) : message_(std::move(message)) {}
+  SerializationMemo(const SerializationMemo&) = delete;
+  SerializationMemo(SerializationMemo&& rhs)
+      : message_(std::move(rhs.message_)), serialized_(std::move(rhs.serialized_)) {}
+  SerializationMemo(const SerializationMemo&&) = delete;
 
   std::shared_ptr<const std::vector<uint8_t>> GetSerializedBuffer(protocol::Magic magic) const {
     std::lock_guard lock(serialize_mutex_);
@@ -30,14 +34,14 @@ class SerializationMemo {
     return serialized_;
   }
 
-  friend std::ostream& operator <<(std::ostream& os, const SerializationMemo& memo) {
+  friend std::ostream& operator<<(std::ostream& os, const SerializationMemo& memo) {
     std::lock_guard lock(memo.serialize_mutex_);
     if (memo.message_)
-      return os << *memo.message_; 
+      return os << *memo.message_;
     else
       return os << "<empty>";
   }
-  
+
  private:
   mutable std::optional<OutboundMessage> message_;
   mutable std::shared_ptr<const std::vector<uint8_t>> serialized_;

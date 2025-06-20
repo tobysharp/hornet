@@ -17,6 +17,9 @@ class GetHeaders : public protocol::Message {
  public:
   GetHeaders() : version_(protocol::kCurrentVersion) {}
   explicit GetHeaders(int version) : version_(version) {}
+  GetHeaders(const GetHeaders&) = default;
+  GetHeaders(GetHeaders&&) = default;
+  GetHeaders(const GetHeaders&&) = delete;
 
   void AddLocatorHash(const crypto::bytes32_t& hash) {
     locator_hashes_.emplace_back(hash);

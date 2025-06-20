@@ -42,7 +42,7 @@ class InboundHandler : public message::Visitor {
     return inbound_->GetPeer();
   }
   template <typename T, typename... Args>
-  void Reply(Args... args) {
+  void Reply(Args&&... args) {
     if (broadcaster_ != nullptr)
       broadcaster_->SendMessage<T, Args...>(GetPeer(), std::forward<Args>(args)...);
   }

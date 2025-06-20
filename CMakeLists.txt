@@ -7,7 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # --- Set compile options that apply to ALL build types ---
 # (We put compiler-independent warnings here if possible, or use generator expressions)
-add_compile_options(-Wall -Wextra -Wpedantic)
+add_compile_options(-Wall -Wextra -Wpedantic -Wmove)
 
 # --- Set flags SPECIFIC to each build type ---
 
