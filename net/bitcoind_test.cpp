@@ -34,11 +34,11 @@ TEST(BitcoindTest, SwapVersionMessagesRegtest) {
   SwapVersionMessages(Network::Regtest);
 }
 
-TEST(BitcoindTest, SwapVersionMessagesTestnett) {
+TEST(BitcoindTest, SwapVersionMessagesTestnet) {
   SwapVersionMessages(Network::Testnet);
 }
 
-TEST(BitcoindTest, SwapVersionMessagesMainnett) {
+TEST(BitcoindTest, SwapVersionMessagesMainnet) {
   SwapVersionMessages(Network::Mainnet);
 }
 
