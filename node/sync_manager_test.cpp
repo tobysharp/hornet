@@ -14,7 +14,7 @@ TEST(SyncManagerTest, TestGetHeaders) {
     net::Bitcoind node = net::Bitcoind::Launch();
     Engine engine_{node.magic};
     const auto peer = engine_.AddOutboundPeer(net::kLocalhost, node.port);
-    util::Timeout timeout(2000);  // Wait up to one second for the hanshake to complete.
+    util::Timeout timeout(2000);  // Wait up to two seconds for the handshake to complete.
     engine_.RunMessageLoop([&](const Engine&) {
         return timeout.IsExpired();
     });
