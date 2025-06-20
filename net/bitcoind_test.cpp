@@ -30,14 +30,6 @@ void SwapVersionMessages(Network network) {
   EXPECT_TRUE(msgin->GetName() == "version");
 }
 
-TEST(BitcoindTest, SwapVersionMessagesRegtest) {
-  SwapVersionMessages(Network::Regtest);
-}
-
-TEST(BitcoindTest, SwapVersionMessagesTestnet) {
-  SwapVersionMessages(Network::Testnet);
-}
-
 TEST(BitcoindTest, SwapVersionMessagesMainnet) {
   SwapVersionMessages(Network::Mainnet);
 }

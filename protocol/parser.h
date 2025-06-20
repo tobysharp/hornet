@@ -75,7 +75,10 @@ class Parser {
     // Read the header.
     const Header header = ReadHeader(buffer);
 
-    // NB: Note that currently we don't try to validate the magic bytes here.
+    // TODO: [HOR-19: Safeguard against long or garbage inbound messages]
+    // (https://linear.app/hornet-node/issue/HOR-19/safeguard-against-long-or-garbage-inbound-messages)
+    // Validate the header here. Check the magic bytes, the message name, and advertised message length.
+    // Reject message if it's unknown, throw if it's too long.
 
     // Returns true if the buffer holds all the advertised data.
     return kHeaderLength + header.bytes <= buffer.size();

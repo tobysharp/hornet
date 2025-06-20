@@ -45,6 +45,11 @@ class ThreadSafeQueue {
     return {};
   }
 
+  template <typename Pred>
+  void EraseIf(Pred&& predicate) {
+    std::remove_if(queue_.begin(), queue_.end(), predicate);
+  }
+
   bool Empty() const {
     return queue_.empty();
   }
@@ -53,7 +58,7 @@ class ThreadSafeQueue {
     return std::ssize(queue_);
   }
 
-  bool IsStoppe() const {
+  bool IsStopped() const {
     return is_stopped_;
   }
 

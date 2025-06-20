@@ -6,52 +6,108 @@
 
 #include "consensus/validator.h"
 #include "data/header_timechain.h"
+#include "message/getheaders.h"
+#include "message/headers.h"
+#include "net/peer.h"
 #include "protocol/block_header.h"
 #include "util/thread_safe_queue.h"
 
 namespace hornet::data {
 
+// HeaderSync performs header synchronization. It receives headers messages from peers, validates
+// them against consensus rules in a background thread, and adds them to the header timechain.
 class HeaderSync {
  public:
+  using OnError =
+      std::function<void(net::PeerId, const protocol::BlockHeader&, consensus::HeaderError)>;
+
   HeaderSync(HeaderTimechain& timechain);
   ~HeaderSync();
 
-  // Push new headers into the unverified queue for later processing, which
-  // could be in the same thread or a different thread.
-  int Receive(std::span<const protocol::BlockHeader> headers) {  // Copy
-    queue_.Push(Batch{headers.begin(), headers.end()});
-    return std::ssize(headers);
-  }
+  // Queues a headers message received from a peer for validation.
+  // Returns a getheaders message if more headers are needed from the same peer.
+  std::optional<message::GetHeaders> OnHeaders(net::PeerId peer, const message::Headers& message,
+                                               OnError on_error);
 
-  int Receive(std::vector<protocol::BlockHeader>&& headers) {  // Move
-    int size = std::ssize(headers);
-    queue_.Push(std::move(headers));
-    return size;
-  }
-
-  // Returns true if there is validation work to be done, i.e. queued headers.
+  // Returns true if there is validation work to be done.
   bool HasPendingWork() const {
     return !queue_.Empty();
   }
 
-
  private:
   using Batch = std::vector<protocol::BlockHeader>;
-  enum Result { Stopped, Timeout, ConsensusError };
 
-  // Perform validation on the queued headers in the current thread. Works
-  // until all work is done or the given timeout (in ms) expires. This method
-  // also performs the maturation from the tree structure to the header chain.
-  Result Validate(const util::Timeout& timeout = util::Timeout::Infinite());
+  struct Item {
+    net::PeerId peer;
+    Batch batch;
+    OnError on_error;
+  };
 
-  void WorkerThreadLoop();
-  void Fail() {}  // TODO
+  // Validates queued headers, and adds them to the headers timechain.
+  void Process();
 
-  // Headers start out being pushed into an unverified queue pipeline.
-  util::ThreadSafeQueue<Batch> queue_;
-  HeaderTimechain& timechain_;
-  consensus::Validator validator_;
-  std::thread worker_thread_;
+  util::ThreadSafeQueue<Item> queue_;  // Queue of unverified headers to process.
+  HeaderTimechain& timechain_;         // Timechain to receive validated headers.
+  consensus::Validator validator_;     // Performs consensus rule checks.
+  std::thread worker_thread_;          // Background worker thread for processing.
 };
+
+inline HeaderSync::HeaderSync(HeaderTimechain& timechain)
+    : timechain_(timechain), worker_thread_([this] { this->Process(); }) {}
+
+inline HeaderSync::~HeaderSync() {
+  queue_.Stop();
+  worker_thread_.join();
+}
+
+// Queues a headers message received from a peer for validation.
+// Returns a getheaders message if more headers are needed from the same peer.
+inline std::optional<message::GetHeaders> HeaderSync::OnHeaders(net::PeerId peer,
+                                                                const message::Headers& message,
+                                                                OnError on_error) {
+  const auto& headers = message.GetBlockHeaders();
+
+  // Pushes work onto the thread-safe async work queue.
+  queue_.Push({peer, Batch{headers.begin(), headers.end()}, on_error});
+
+  if (headers.size() == protocol::kMaxBlockHeaders) {
+    // Requests more headers from the same peer.
+    message::GetHeaders getheaders(net::Peer::FromId(peer)->GetCapabilities().GetVersion());
+    getheaders.AddLocatorHash(headers.back().ComputeHash());
+    return getheaders;
+  }
+  return {};
+}
+
+// Validates queued headers, and adds them to the headers timechain.
+inline void HeaderSync::Process() {
+  for (std::optional<Item> item; (item = queue_.WaitPop());) {
+    if (item->batch.empty()) continue;
+
+    // Locates the parent of this header in the timechain.
+    auto [parent_iterator, parent_context] = timechain_.Find(item->batch[0].GetPreviousBlockHash());
+    const std::unique_ptr<const HeaderTimechain::ValidationView> view =
+        timechain_.GetValidationView(parent_iterator);
+
+    for (const auto& header : item->batch) {
+      // Validates the header against consensus rules.
+      const auto validated = validator_.ValidateDownloadedHeader(parent_context, header, *view);
+
+      // Handles consensus failures, breaking out of this batch.
+      if (const auto* error = std::get_if<consensus::HeaderError>(&validated)) {
+        // Notifies caller of consensus failure and discards future batches from the same peer.
+        item->on_error(item->peer, header, *error);
+        queue_.EraseIf(
+            [&](const Item& queued) { return net::Peer::IsSame(item->peer, queued.peer); });
+        break;
+      }
+
+      // Adds the validated header to the headers timechain.
+      const auto& context = std::get<data::HeaderContext>(validated);
+      parent_iterator = timechain_.Add(context, parent_iterator);
+      parent_context = context;
+    }
+  }
+}
 
 }  // namespace hornet::data
