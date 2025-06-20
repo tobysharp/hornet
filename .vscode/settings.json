@@ -76,6 +76,37 @@
         "netfwd": "cpp",
         "socket": "cpp",
         "timer": "cpp",
-        "future": "cpp"
-    }
+        "future": "cpp",
+        "bitset": "cpp",
+        "__verbose_abort": "cpp",
+        "ios": "cpp",
+        "__locale": "cpp",
+        "ranges": "cpp",
+        "__bit_reference": "cpp",
+        "__hash_table": "cpp",
+        "__split_buffer": "cpp",
+        "__tree": "cpp",
+        "__threading_support": "cpp",
+        "locale": "cpp"
+    },
+    "C_Cpp.default.compilerPath": "/usr/bin/clang++-20",
+    // This tells the CMake Tools status bar button how to launch the debugger.
+    // It mimics the structure of our launch.json configuration.
+    "cmake.debugConfig": {
+        "type": "cppdbg",
+        "MIMode": "gdb",
+        "miDebuggerPath": "/usr/bin/gdb",
+        "setupCommands": [
+            {
+                "description": "Enable pretty-printing for gdb",
+                "text": "-enable-pretty-printing",
+                "ignoreFailures": true
+            }
+        ],
+        // We can also add args, stopAtEntry, etc. here if needed.
+        // Note: "program" and "cwd" are automatically deduced by the extension
+        // from the active CMake target, so we don't need to set them here.
+    },
+    // --- C++ TestMate Configuration ---
+    "testMate.cpp.test.executables": "build/clang20-debug/hornet_tests",
 }

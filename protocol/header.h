@@ -1,3 +1,7 @@
+// Copyright 2025 Toby Sharp
+//
+// This file is part of the Hornet Node project. All rights reserved.
+// For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
 #include <array>
@@ -10,10 +14,10 @@
 namespace hornet::protocol {
 
 struct Header {
-  Magic magic;
+  Magic magic = Magic::None;
   std::string command;
-  uint32_t bytes;
-  std::array<uint8_t, kChecksumLength> checksum;
+  uint32_t bytes = 0;
+  std::array<uint8_t, kChecksumLength> checksum = {};
 
   void Serialize(encoding::Writer& w) const {
     w.WriteLE4(static_cast<uint32_t>(magic));

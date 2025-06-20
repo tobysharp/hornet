@@ -1,3 +1,7 @@
+// Copyright 2025 Toby Sharp
+//
+// This file is part of the Hornet Node project. All rights reserved.
+// For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
 #include <list>
@@ -20,7 +24,7 @@ class PeerManager {
     int fd = peer->GetConnection().GetSocket().GetFD();
     peers_.push_back(peer);
     auto back = peers_.end(); --back;
-    peers_by_fd_.emplace(fd, Lookup{std::move(peer), back});
+    peers_by_fd_.emplace(fd, Lookup{peer, back});
     fds_dirty_ = true;
     return peer;
   }

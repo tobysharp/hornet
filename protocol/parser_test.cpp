@@ -1,3 +1,7 @@
+// Copyright 2025 Toby Sharp
+//
+// This file is part of the Hornet Node project. All rights reserved.
+// For licensing or usage inquiries, contact: ask@hornetnode.com.
 #include "protocol/parser.h"
 
 #include <array>
@@ -27,7 +31,7 @@ class DummyMessage : public Message {
   std::string GetName() const override {
     return "ping";
   }
-  void Accept(message::Visitor& v) const override {}
+  void Accept(message::Visitor&) const override {}
 };
 
 TEST(ParserTest, ParsesValidMessage) {

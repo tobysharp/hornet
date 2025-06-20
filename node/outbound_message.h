@@ -1,3 +1,7 @@
+// Copyright 2025 Toby Sharp
+//
+// This file is part of the Hornet Node project. All rights reserved.
+// For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
 #include <chrono>
@@ -10,7 +14,7 @@ namespace hornet::node {
 class OutboundMessage {
  public:
   OutboundMessage(std::unique_ptr<const protocol::Message>&& msg)
-      : message_(std::move(msg)), construct_time_(std::chrono::steady_clock::now()) {}
+      : message_(std::move(msg)) {}
 
   const protocol::Message& GetMessage() const {
     return *message_;
@@ -21,7 +25,7 @@ class OutboundMessage {
   }
  private:
   std::unique_ptr<const protocol::Message> message_;
-  std::chrono::steady_clock::time_point construct_time_;
+  std::chrono::steady_clock::time_point construct_time_ = std::chrono::steady_clock::now();
   // TODO: Priority, origination, etc.
 };
 

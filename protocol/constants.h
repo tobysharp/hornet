@@ -1,9 +1,11 @@
+// Copyright 2025 Toby Sharp
+//
+// This file is part of the Hornet Node project. All rights reserved.
+// For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
 #include <cstddef>
 #include <cstdint>
-
-#include "crypto/hash.h"
 
 namespace hornet::protocol {
 
@@ -13,7 +15,8 @@ enum class Magic : uint32_t {
   Regtest = 0xDAB5BFFA,  // testnet/regnet
   Testnet = 0x0709110B,  // testnet3
   Signet = 0x40CF030A,   // signet
-  Namecoin = 0xFEB4BEF9  // namecoin
+  Namecoin = 0xFEB4BEF9, // namecoin
+  None = 0xFFFFFFFF
 };
 
 enum class HandshakeState {
@@ -25,8 +28,6 @@ enum class HandshakeState {
   Complete,
   Failed
 };
-
-using Hash = crypto::bytes32_t;
 
 inline constexpr size_t kCommandLength = 12;
 inline constexpr size_t kHeaderLength = 24;
@@ -46,7 +47,6 @@ static constexpr size_t kMaxBlockHeaders = 2000;
 // See MAX_PROTOCOL_MESSAGE_LENGTH in https://github.com/bitcoin/bitcoin/blob/master/src/net.h.
 inline constexpr size_t kMaxMessageSize = 4'000'000;
 
-inline constexpr Hash kGenesisHash =
-    crypto::ParseHex32("000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f");
+inline constexpr uint32_t kMaxCompactTarget = 0x1D00FFFF;
 
 }  // namespace hornet::protocol

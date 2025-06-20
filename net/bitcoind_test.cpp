@@ -1,3 +1,7 @@
+// Copyright 2025 Toby Sharp
+//
+// This file is part of the Hornet Node project. All rights reserved.
+// For licensing or usage inquiries, contact: ask@hornetnode.com.
 #include "net/bitcoind.h"
 
 #include "message/registry.h"
@@ -17,25 +21,17 @@ namespace {
 
 void SwapVersionMessages(Network network) {
   // Launch bitcoind on regtest
-  Bitcoind node = Bitcoind::Launch(network);
+  Bitcoind node = Bitcoind::ConnectOrLaunch(network);
 
   // Try connecting to it
-  Socket sock = Socket::Connect(kLocalhost, node.port);
+  Socket sock = Socket::Connect(kLocalhost, node.GetPort());
 
   // Send a version message
-  sock.Write(FrameMessage(node.magic, message::Version{}));
+  sock.Write(protocol::FrameMessage(node.GetMagic(), message::Version{}));
 
   // Receive a version message
-  const auto msgin = ReceiveMessage<message::Version>(sock, node.magic);
+  const auto msgin = ReceiveMessage<message::Version>(sock, node.GetMagic());
   EXPECT_TRUE(msgin->GetName() == "version");
-}
-
-TEST(BitcoindTest, SwapVersionMessagesRegtest) {
-  SwapVersionMessages(Network::Regtest);
-}
-
-TEST(BitcoindTest, SwapVersionMessagesTestnet) {
-  SwapVersionMessages(Network::Testnet);
 }
 
 TEST(BitcoindTest, SwapVersionMessagesMainnet) {

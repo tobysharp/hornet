@@ -1,3 +1,7 @@
+// Copyright 2025 Toby Sharp
+//
+// This file is part of the Hornet Node project. All rights reserved.
+// For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
 #include <vector>
@@ -14,8 +18,8 @@ class Headers : public protocol::Message {
   std::span<const protocol::BlockHeader> GetBlockHeaders() const {
     return block_headers_;
   }
-  void AddBlockHeader(protocol::BlockHeader header) {
-    block_headers_.emplace_back(std::move(header));
+  void AddBlockHeader(const protocol::BlockHeader& header) {
+    block_headers_.emplace_back(header);
   }
   virtual std::string GetName() const override { return "headers"; }
   virtual void Accept(Visitor& v) const override {

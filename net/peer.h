@@ -1,5 +1,10 @@
+// Copyright 2025 Toby Sharp
+//
+// This file is part of the Hornet Node project. All rights reserved.
+// For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
+#include <memory>
 #include <ostream>
 #include <string>
 
@@ -10,12 +15,25 @@
 
 namespace hornet::net {
 
+class Peer;
+using PeerId = std::weak_ptr<Peer>;
+
 class Peer {
   public:
   Peer(const std::string& host, uint16_t port)
       : conn_(host, port), address_(host), handshake_(protocol::Handshake::Role::Outbound) {}
   Peer(Connection conn, std::string address)
       : conn_(std::move(conn)), address_(std::move(address)), handshake_(protocol::Handshake::Role::Outbound) {}
+
+  static std::shared_ptr<Peer> FromId(PeerId id) {
+    // If in the future we change PeerId to an integer type for persistence, then we can replace this
+    // call to std::weak_ptr::lock with one like PeerManager::Instance().Lookup(id) etc.
+    return id.lock();
+  }
+
+  static bool IsSame(PeerId a, PeerId b) {
+    return FromId(a) == FromId(b);
+  }
 
   bool IsDropped() const {
     return !conn_.GetSocket().IsOpen();

@@ -1,6 +1,11 @@
+// Copyright 2025 Toby Sharp
+//
+// This file is part of the Hornet Node project. All rights reserved.
+// For licensing or usage inquiries, contact: ask@hornetnode.com.
 #include <atomic>
 #include <queue>
 
+#include "data/timechain.h"
 #include "message/registry.h"
 #include "net/peer.h"
 #include "net/peer_manager.h"
@@ -18,17 +23,17 @@
 
 namespace hornet::node {
 
-Engine::Engine(protocol::Magic magic)
-    : Broadcaster(), magic_(magic), factory_(message::CreateMessageFactory()) {
+Engine::Engine(data::Timechain& timechain, protocol::Magic magic)
+    : Broadcaster(), timechain_(timechain), magic_(magic), factory_(message::CreateMessageFactory()) {
   processor_.emplace(factory_, *this);
-  sync_manager_.emplace(*this);
+  sync_manager_.emplace(timechain_, *this);
 }
 
 void Engine::SendToOne(const std::shared_ptr<net::Peer>& peer, OutboundMessage&& msg) {
   if (!peer->IsDropped()) {
     const SerializationMemoPtr memo = std::make_shared<SerializationMemo>(std::move(msg));
     outbox_[peer].emplace_back(memo);  // Creates queue if previously non-existent
-    LogInfo() << "Sent: peer = " << *peer << ", msg = " << memo->GetOutbound();
+    LogInfo() << "Sent: peer = " << *peer << ", msg = " << memo;
   }
 }
 
@@ -36,7 +41,7 @@ void Engine::SendToAll(OutboundMessage&& msg) {
   const SerializationMemoPtr memo = std::make_shared<SerializationMemo>(std::move(msg));
   for (auto pair : outbox_) {
     pair.second.emplace_back(memo);
-    LogInfo() << "Sent: peer = " << *pair.first.lock() << ", msg = " << memo->GetOutbound();
+    LogInfo() << "Sent: peer = " << *pair.first.lock() << ", msg = " << memo;
   }
 }
 
@@ -199,7 +204,7 @@ void Engine::WriteBuffersToSockets(net::PeerManager& peers) {
     return peer.GetConnection().QueuedWriteBufferCount() > 0;
   };
 
-  size_t bytes_written = 0;
+  [[maybe_unused]] size_t bytes_written = 0;
   for (const auto peer : peers.PollWrite(kPollWriteTimeoutMs, select)) {
     if (peer) bytes_written += peer->GetConnection().ContinueWrite();
   }

@@ -1,3 +1,7 @@
+// Copyright 2025 Toby Sharp
+//
+// This file is part of the Hornet Node project. All rights reserved.
+// For licensing or usage inquiries, contact: ask@hornetnode.com.
 #include <queue>
 #include <utility>
 
@@ -35,7 +39,7 @@ void Processor::Visit(const message::SendCompact& sendcmpct) {
   GetPeerCapabilities().SetCompactBlocks(sendcmpct.IsCompact());
 }
 
-void Processor::Visit(const message::Verack& v) {
+void Processor::Visit(const message::Verack&) {
   AdvanceHandshake(GetPeer(), protocol::Handshake::Transition::ReceiveVerack);
 }
 

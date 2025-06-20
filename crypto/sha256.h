@@ -1,3 +1,7 @@
+// Copyright 2025 Toby Sharp
+//
+// This file is part of the Hornet Node project. All rights reserved.
+// For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
 // SHA-256
@@ -6,6 +10,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <ostream>
 #include <span>
 
@@ -73,17 +78,17 @@ inline uint32_t sigma_1(uint32_t x) {
 }
 
 inline uint32_t ReverseEndianByteIndex(uint32_t index) {
-  return (index & ~3) | (3 - (index & 3));
+  return (index & ~3u) | (3u - (index & 3u));
 }
 
 inline uint32_t ReverseEndianWord(uint32_t x) {
-  return (x << 24) | ((x & 0x0000FF00) << 8) | ((x & 0x00FF0000) >> 8) | (x >> 24);
+  return (x << 24u) | ((x & 0x0000FF00) << 8) | ((x & 0x00FF0000) >> 8) | (x >> 24);
 }
 
 inline hash256_t ReverseEndianWords(const uint256_t &words) {
   hash256_t rv;
   uint32_t *output = reinterpret_cast<uint32_t *>(&rv[0]);
-  for (int i = 0; i < 8; ++i) output[i] = ReverseEndianWord(words[i]);
+  for (unsigned int i = 0; i < 8; ++i) output[i] = ReverseEndianWord(words[i]);
   return rv;
 }
 
