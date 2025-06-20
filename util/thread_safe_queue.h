@@ -8,6 +8,8 @@
 #include <deque>
 #include <mutex>
 #include <optional>
+#include <algorithm>
+#include <utility>
 
 #include "util/timeout.h"
 
@@ -51,7 +53,8 @@ class ThreadSafeQueue {
 
   template <typename Pred>
   void EraseIf(Pred&& predicate) {
-    std::remove_if(queue_.begin(), queue_.end(), predicate);
+    std::scoped_lock lock{mutex_};
+    std::erase_if(queue_, std::forward<Pred>(predicate));
   }
 
   bool Empty() const {
