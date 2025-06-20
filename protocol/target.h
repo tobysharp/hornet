@@ -7,6 +7,7 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <optional>
 
 #include "protocol/constants.h"
 #include "protocol/hash.h"
