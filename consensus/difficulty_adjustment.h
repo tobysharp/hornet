@@ -26,7 +26,7 @@ class DifficultyAdjustment {
 
   uint32_t ComputeCompactTarget(int height, uint32_t prev_bits,
                              uint32_t period_start_time, uint32_t period_end_time) const {
-    if (IsTransition(height)) return prev_bits;
+    if (!IsTransition(height)) return prev_bits;
 
     uint32_t period_duration = period_end_time - period_start_time;
     period_duration = std::clamp(period_duration, parameters_.kTargetDuration / 4, parameters_.kTargetDuration * 4);
