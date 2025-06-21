@@ -38,7 +38,7 @@ HeaderTimechain::ParentIterator HeaderTimechain::Add(const HeaderContext& contex
 HeaderTimechain::ParentIterator HeaderTimechain::Add(const HeaderContext& context,
                                                      ParentIterator parent) {
   ParentIterator result;
-  const protocol::Hash parent_hash = context.header.GetPreviousBlockHash();
+  const protocol::Hash& parent_hash = context.header.GetPreviousBlockHash();
 
   // Validate the input arguments carefully.
 
@@ -124,6 +124,8 @@ void HeaderTimechain::ReorgBranchToChain(TreeNode* tip) {
 
   // Finally delete the chain containing the new tip from the forest.
   tree_.EraseChain(tip);
+  
+  // TODO: Update min_root_height_;
 }
 
 // Prunes historic branches from the tree.
@@ -145,6 +147,7 @@ void HeaderTimechain::PruneReorgTree() {
 
 HeaderTimechain::TreeNode* HeaderTimechain::AddChild(TreeNode* parent, const HeaderContext& context) {
   const int root_height = parent != nullptr ? parent->data.root_height : context.height;
+  min_root_height_ = std::min(min_root_height_, root_height);
   const auto it = tree_.AddChild(parent, {context, root_height});
   return tree_.IsValidNode(it) ? &*it : nullptr;
 }
@@ -172,7 +175,7 @@ HeaderTimechain::ParentIterator HeaderTimechain::NullIterator() const {
 }
 
 HeaderTimechain::ParentIterator HeaderTimechain::BeginChain(int height) const {
-  return {*this, height};
+  return {*this, std::max(-1, height)};
 }
 
 HeaderTimechain::ParentIterator HeaderTimechain::BeginTree(TreeIterator node) const {
@@ -191,7 +194,11 @@ auto HeaderTimechain::AncestorsToHeight(ParentIterator start, int end_height) co
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 
-std::optional<uint32_t> HeaderTimechain::ValidationView::TimestampAt(int height) const {
+int HeaderTimechain::ValidationView::Length() const {
+  return tip_.GetHeight() + 1;
+}
+
+uint32_t HeaderTimechain::ValidationView::TimestampAt(int height) const {
   return timechain_.GetAncestorAtHeight(tip_, height).GetTimestamp();
 }
 
@@ -199,7 +206,7 @@ std::vector<uint32_t> HeaderTimechain::ValidationView::LastNTimestamps(int count
   std::vector<uint32_t> result;
   result.reserve(count);
 
-  const int final_height = tip_.GetHeight() + 1 - count;
+  const int final_height = std::max(Length() - count, -1);
   for (const auto& header : timechain_.AncestorsToHeight(tip_, final_height))
     result.push_back(header.GetTimestamp());
 

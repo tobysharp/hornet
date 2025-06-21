@@ -9,6 +9,7 @@
 
 #include "consensus/difficulty_adjustment.h"
 #include "consensus/header_ancestry_view.h"
+#include "consensus/parameters.h"
 #include "data/header_context.h"
 #include "protocol/block_header.h"
 #include "protocol/hash.h"
@@ -21,52 +22,67 @@ enum class HeaderError {
   ParentNotFound,
   InvalidProofOfWork,
   BadTimestamp,
-  BadDifficultyTransition
+  BadDifficultyTransition,
+  BadVersion
 };
 
 class Validator {
  public:
-  struct Parameters {
-    protocol::Hash genesis_hash;
-
-    Parameters() : genesis_hash(protocol::kGenesisHash) {}
-  };
-
   using HeaderResult = std::variant<data::HeaderContext, HeaderError>;
 
-  Validator(const Parameters& params = {}) : parameters_(params) {}
+  Validator(const Parameters& params = {}) : parameters_(params), difficulty_adjustment_(params) {}
 
-  HeaderResult ValidateDownloadedHeader(const std::optional<data::HeaderContext>& parent,
+  HeaderResult ValidateDownloadedHeader(const data::HeaderContext& parent,
                                         const protocol::BlockHeader& header,
                                         const HeaderAncestryView& view) const {
-    const int height = parent ? parent->height + 1 : 0;
+    const int height = parent.height + 1;
 
     // Verify previous hash
-    if (height > 0 && parent->hash != header.GetPreviousBlockHash())
-      return HeaderError::ParentNotFound;
+    if (parent.hash != header.GetPreviousBlockHash()) return HeaderError::ParentNotFound;
 
-    // Verify PoW target is a valid value
-    if (!protocol::Target::FromCompact(header.GetCompactTarget()).IsValid())
-      return HeaderError::InvalidProofOfWork;
+    // Verify PoW target is valid and is achieved by the header's hash.
+    const auto hash = header.ComputeHash();
+    const auto target = protocol::Target::FromCompact(header.GetCompactTarget());
+    if (!target.IsValid() || hash > target) return HeaderError::InvalidProofOfWork;
 
     // Verify PoW target obeys the difficulty adjustment rules.
-    const uint32_t period_end_time = parent->header.GetTimestamp();  // block[height - 1].time
-    const auto blocks_per_period = difficulty_adjustment_.GetBlocksPerPeriod();
-    const uint32_t period_start_time =
-        (height >= blocks_per_period) ? *view.TimestampAt(height - blocks_per_period) : 0;
-    const uint32_t expected_bits = difficulty_adjustment_.ComputeCompactTarget(
-        height, parent->header.GetCompactTarget(), period_start_time, period_end_time);
+    uint32_t expected_bits = parent.header.GetCompactTarget();
+    if (difficulty_adjustment_.IsTransition(height)) {
+      const int blocks_per_period = difficulty_adjustment_.GetBlocksPerPeriod();
+      Assert(height - blocks_per_period < view.Length());
+      const uint32_t period_start_time =
+          view.TimestampAt(height - blocks_per_period);               // block[height - 2016].time
+      const uint32_t period_end_time = parent.header.GetTimestamp();  // block[height - 1].time
+      expected_bits = difficulty_adjustment_.ComputeCompactTarget(
+          height, parent.header.GetCompactTarget(), period_start_time, period_end_time);
+    }
     if (expected_bits != header.GetCompactTarget()) return HeaderError::BadDifficultyTransition;
 
-    // Verify that the hash achieves the target PoW value.
-    if (!header.IsProofOfWork()) return HeaderError::InvalidProofOfWork;
+    // Verify median of recent timestamps.
+    const auto recent_times = view.LastNTimestamps(parameters_.kBlocksForMedianTime);
+    const uint32_t median_time = recent_times[recent_times.size() / 2];
+    if (header.GetTimestamp() <= median_time) return HeaderError::BadTimestamp;
 
-    // TODO: Verify the version number?
-    // TODO: Verify the timestamp matches the MTP rule.
+    // Verify that the timestamp isn't too far in the future.
+    const auto now = std::chrono::system_clock::now().time_since_epoch();
+    if (std::chrono::seconds{header.GetTimestamp()} >
+        now + std::chrono::seconds{parameters_.kTimestampTolerance})
+      return HeaderError::BadTimestamp;
 
-    // TODO: In Core, a previous block could be marked as failed/bad, in which case this one is
-    // invalid too.
-    return parent ? parent->Extend(header) : data::HeaderContext::Genesis(header);
+    // Verify that the version number is allowed at this height.
+    if (IsVersionExpired(height, header.GetVersion()))
+      return HeaderError::BadVersion;
+
+    return parent.Extend(header, hash);
+  }
+
+  bool IsVersionExpired(int height, int version) const {
+      const std::array<int, 5> kVersionExpiryHeights = {parameters_.kBIP34Height, 
+                                                         parameters_.kBIP34Height, 
+                                                         parameters_.kBIP34Height, 
+                                                         parameters_.kBIP66Height, 
+                                                         parameters_.kBIP65Height };
+      return version < std::ssize(kVersionExpiryHeights) && height >= kVersionExpiryHeights[version];
   }
 
  private:

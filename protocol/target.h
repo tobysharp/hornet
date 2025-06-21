@@ -122,6 +122,10 @@ class Target {
     return rhs.value_ ? Uint256{hash} <= rhs.value_ : false;
   }
 
+  inline friend constexpr bool operator>(const Hash& hash, const Target& rhs) {
+    return rhs.value_ ? Uint256{hash} > rhs.value_ : false;
+  }
+
   inline friend constexpr bool operator<=(const Target& lhs, const Target& rhs) {
     return lhs.value_ && rhs.value_ && lhs.value_ <= rhs.value_;
   }

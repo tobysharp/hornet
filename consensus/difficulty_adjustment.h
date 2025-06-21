@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdint>
 
+#include "consensus/parameters.h"
 #include "protocol/target.h"
 #include "util/big_uint.h"
 #include "util/hex.h"
@@ -15,25 +16,29 @@ namespace hornet::consensus {
 
 class DifficultyAdjustment {
  public:
-  static constexpr int GetBlocksPerPeriod() { return kAdjustmentInterval; }
+  DifficultyAdjustment(const Parameters& parameters) : parameters_(parameters) {}
 
-  uint32_t ComputeCompactTarget(uint32_t height, uint32_t prev_bits,
+  constexpr int GetBlocksPerPeriod() const { return parameters_.kAdjustmentInterval; }
+
+  bool IsTransition(int height) const {
+    return (height % parameters_.kAdjustmentInterval) == 0;
+  }
+
+  uint32_t ComputeCompactTarget(int height, uint32_t prev_bits,
                              uint32_t period_start_time, uint32_t period_end_time) const {
-    if (height % kAdjustmentInterval != 0) return prev_bits;
+    if (IsTransition(height)) return prev_bits;
 
     uint32_t period_duration = period_end_time - period_start_time;
-    period_duration = std::clamp(period_duration, kTargetDuration / 4, kTargetDuration * 4);
+    period_duration = std::clamp(period_duration, parameters_.kTargetDuration / 4, parameters_.kTargetDuration * 4);
 
     const protocol::Target last_target = protocol::Target::FromCompact(prev_bits);
     const protocol::Target next_target =
-        std::min((last_target.Value() * period_duration) / kTargetDuration, kTargetLimit.Value());
+        std::min((last_target.Value() * period_duration) / parameters_.kTargetDuration, parameters_.kTargetLimit.Value());
     return next_target.GetCompact();
   }
 
  private:
-  static constexpr int kAdjustmentInterval = 2016;               // Blocks per difficulty period
-  static constexpr uint32_t kTargetDuration = 14 * 24 * 60 * 60;  // Two weeks in seconds
-  static constexpr protocol::Target kTargetLimit = "00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"_h256;
+  Parameters parameters_;
 };
 
 // class DifficultyAdjustment {

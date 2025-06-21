@@ -51,6 +51,9 @@ class HeaderSync {
   // Validates queued headers, and adds them to the headers timechain.
   void Process();
 
+  // Calls error handler and deletes peer's other queued items.
+  void HandleError(const Item& item, const protocol::BlockHeader& header, consensus::HeaderError error);
+
   util::ThreadSafeQueue<Item> queue_;  // Queue of unverified headers to process.
   HeaderTimechain& timechain_;         // Timechain to receive validated headers.
   consensus::Validator validator_;     // Performs consensus rule checks.
@@ -91,19 +94,23 @@ inline void HeaderSync::Process() {
 
     // Locates the parent of this header in the timechain.
     auto [parent_iterator, parent_context] = timechain_.Find(item->batch[0].GetPreviousBlockHash());
+    if (!parent_iterator || !parent_context) {
+      HandleError(*item, item->batch[0], consensus::HeaderError::ParentNotFound);
+      continue;
+    }
+  
+    // Creates an implementation-independent view onto the timechain history for the validator.
     const std::unique_ptr<const HeaderTimechain::ValidationView> view =
         timechain_.GetValidationView(parent_iterator);
 
     for (const auto& header : item->batch) {
       // Validates the header against consensus rules.
-      const auto validated = validator_.ValidateDownloadedHeader(parent_context, header, *view);
+      const auto validated = validator_.ValidateDownloadedHeader(*parent_context, header, *view);
 
       // Handles consensus failures, breaking out of this batch.
       if (const auto* error = std::get_if<consensus::HeaderError>(&validated)) {
         // Notifies caller of consensus failure and discards future batches from the same peer.
-        item->on_error(item->peer, header, *error);
-        queue_.EraseIf(
-            [&](const Item& queued) { return net::Peer::IsSame(item->peer, queued.peer); });
+        HandleError(*item, header, *error);
         break;
       }
 
@@ -113,6 +120,12 @@ inline void HeaderSync::Process() {
       parent_context = context;
     }
   }
+}
+
+// Calls error handler and deletes peer's other queued items.
+inline void HeaderSync::HandleError(const Item& item, const protocol::BlockHeader& header, consensus::HeaderError error) {
+  item.on_error(item.peer, header, error);
+  queue_.EraseIf([&](const Item& queued) { return net::Peer::IsSame(item.peer, queued.peer); });
 }
 
 }  // namespace hornet::data

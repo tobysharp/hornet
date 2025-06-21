@@ -17,11 +17,15 @@ class HeaderAncestryView {
  public:
   virtual ~HeaderAncestryView() = default;
 
-  // Returns the timestamp of an ancestor at the given height, if known.
-  virtual std::optional<uint32_t> TimestampAt(int height) const = 0;
+  // Returns the length of the current chain.
+  virtual int Length() const = 0;
+
+  // Returns the timestamp of an ancestor at the given height.
+  virtual uint32_t TimestampAt(int height) const = 0;
 
   // Returns the last `count` ancestor timestamps ending at the current tip,
   // ordered from oldest to newest. Does not include the candidate.
+  // May return fewer than `count` items if not all exist.
   virtual std::vector<uint32_t> LastNTimestamps(int count) const = 0;
 };
 
