@@ -4,7 +4,7 @@
     {
       "name": "clang20-debug",
       "displayName": "Clang20 Debug",
-      "description": "Builds with the newer Clang 20 toolchain.",
+      "description": "Clang++-20 Debug",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/clang20-debug",
       "cacheVariables": {
@@ -12,12 +12,28 @@
         "CMAKE_CXX_COMPILER": "clang++-20",
         "CMAKE_BUILD_TYPE": "Debug"
       }
+    },
+    {
+      "name": "clang20-release",
+      "displayName": "Clang20 Release",
+      "hidden": false,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/clang20-release",
+      "description": "Clang++-20 Release",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++-20",
+        "CMAKE_BUILD_TYPE": "Release"
+      }
     }
   ],
   "buildPresets": [
     {
       "name": "clang20-debug-build",
       "configurePreset": "clang20-debug"
+    },
+        {
+      "name": "clang20-release-build",
+      "configurePreset": "clang20-release"
     }
   ]
 }

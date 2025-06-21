@@ -108,5 +108,5 @@
         // from the active CMake target, so we don't need to set them here.
     },
     // --- C++ TestMate Configuration ---
-    "testMate.cpp.test.executables": "build/clang20-debug/hornet_tests",
+    "testMate.cpp.test.executables": "${command:cmake.buildDirectory}/hornet_tests",
 }

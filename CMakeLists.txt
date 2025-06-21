@@ -11,12 +11,13 @@ add_compile_options(-Wall -Wextra -Wpedantic -Wmove)
 
 # --- Set flags SPECIFIC to each build type ---
 
-# For Debug builds, add -g for symbols and -O0 to disable optimizations,
-# which makes the debugger's behavior more predictable.
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
-
-# For Release builds, add optimization flags and define NDEBUG to disable asserts.
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
+# --- Per-configuration flags ---
+# Only append if not already added (so users can override)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_compile_options(-g -O0)
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_compile_options(-O3 -DNDEBUG)
+endif()
 
 # --- Special flags ---
 # The -fno-elide-constructors flag was a temporary workaround for a clang-14 bug.
