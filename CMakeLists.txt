@@ -65,6 +65,7 @@ add_executable(hornet_tests
    protocol/handshake_test.cpp
    protocol/parser_test.cpp
    util/big_uint_test.cpp
+   util/thread_safe_queue_test.cpp
 )
 target_compile_features(hornet_tests PRIVATE cxx_std_20)
 target_link_libraries(hornet_tests PRIVATE hornet gtest_main)
