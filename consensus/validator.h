@@ -4,8 +4,11 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
+#include <array>
+#include <chrono>
 #include <optional>
 #include <variant>
+#include <vector>
 
 #include "consensus/difficulty_adjustment.h"
 #include "consensus/header_ancestry_view.h"
@@ -13,6 +16,7 @@
 #include "data/header_context.h"
 #include "protocol/block_header.h"
 #include "protocol/hash.h"
+#include "protocol/target.h"
 #include "util/throw.h"
 
 namespace hornet::consensus {
@@ -43,7 +47,7 @@ class Validator {
     // Verify PoW target is valid and is achieved by the header's hash.
     const auto hash = header.ComputeHash();
     const auto target = protocol::Target::FromCompact(header.GetCompactTarget());
-    if (!target.IsValid() || hash > target) return HeaderError::InvalidProofOfWork;
+    if (!(hash <= target)) return HeaderError::InvalidProofOfWork;
 
     // Verify PoW target obeys the difficulty adjustment rules.
     uint32_t expected_bits = parent.header.GetCompactTarget();
@@ -70,13 +74,13 @@ class Validator {
       return HeaderError::BadTimestamp;
 
     // Verify that the version number is allowed at this height.
-    if (IsVersionExpired(height, header.GetVersion()))
+    if (IsVersionRetiredAtHeight(header.GetVersion(), height))
       return HeaderError::BadVersion;
 
     return parent.Extend(header, hash);
   }
 
-  bool IsVersionExpired(int height, int version) const {
+  bool IsVersionRetiredAtHeight(int version, int height) const {
       const std::array<int, 5> kVersionExpiryHeights = {parameters_.kBIP34Height, 
                                                          parameters_.kBIP34Height, 
                                                          parameters_.kBIP34Height, 

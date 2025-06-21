@@ -123,7 +123,7 @@ class Target {
   }
 
   inline friend constexpr bool operator>(const Hash& hash, const Target& rhs) {
-    return rhs.value_ ? Uint256{hash} > rhs.value_ : false;
+    return !operator<=(hash, rhs);
   }
 
   inline friend constexpr bool operator<=(const Target& lhs, const Target& rhs) {
