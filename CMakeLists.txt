@@ -46,6 +46,7 @@ target_compile_options(gtest PRIVATE -Wno-deprecated-declarations)
 
 # Unit test binary using GoogleTest
 add_executable(hornet_tests
+   consensus/difficulty_adjustment_test.cpp
    crypto/hash_test.cpp
    encoding/reader_test.cpp
    encoding/writer_test.cpp
