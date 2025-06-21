@@ -29,6 +29,9 @@ class HeaderSync {
   HeaderSync(HeaderTimechain& timechain);
   ~HeaderSync();
 
+  // Returns a getheaders message that may be sent to the peer to begin header sync.
+  std::optional<message::GetHeaders> Initiate(net::PeerId id);
+
   // Queues a headers message received from a peer for validation.
   // Returns a getheaders message if more headers are needed from the same peer.
   std::optional<message::GetHeaders> OnHeaders(net::PeerId peer, const message::Headers& message,
@@ -66,6 +69,16 @@ inline HeaderSync::HeaderSync(HeaderTimechain& timechain)
 inline HeaderSync::~HeaderSync() {
   queue_.Stop();
   worker_thread_.join();
+}
+
+// Returns a getheaders message that may be sent to the peer to begin header sync.
+inline std::optional<message::GetHeaders> HeaderSync::Initiate(net::PeerId id) {
+  const auto tip = timechain_.HeaviestTip();
+  if (!tip.second) return {};
+  const auto peer = net::Peer::FromId(id);
+  message::GetHeaders getheaders(peer->GetCapabilities().GetVersion());
+  getheaders.AddLocatorHash(tip.second->hash);
+  return getheaders;
 }
 
 // Queues a headers message received from a peer for validation.

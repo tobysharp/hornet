@@ -90,6 +90,11 @@ HeaderTimechain::FindResult HeaderTimechain::Find(const protocol::Hash& hash) {
   return {{*this}, std::nullopt};
 }
 
+HeaderTimechain::FindResult HeaderTimechain::HeaviestTip() const {
+  if (chain_.Empty()) return {{*this}, std::nullopt};
+  return {BeginChain(chain_.GetTipHeight()), chain_.GetTipContext()};
+}
+
 // Performs a chain reorg. Takes the tip node of a branch, and adjusts
 // entries in chain_ to reflect that as the new heaviest chain.
 void HeaderTimechain::ReorgBranchToChain(TreeNode* tip) {

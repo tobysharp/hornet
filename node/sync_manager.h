@@ -33,9 +33,8 @@ class SyncManager : public InboundHandler {
     sync_ = peer;
 
     // Send a message requesting headers (example only).
-    message::GetHeaders getheaders(peer->GetCapabilities().GetVersion());
-    getheaders.AddLocatorHash(protocol::kGenesisHash);
-    Send(std::move(getheaders));
+    if (auto getheaders = headers_.Initiate(sync_)) 
+      Send(*std::move(getheaders));
   }
 
   virtual void Visit(const message::Verack&) override {
@@ -47,6 +46,7 @@ class SyncManager : public InboundHandler {
     // (https://linear.app/hornet-node/issue/HOR-20/request-tracking)
     if (!IsSyncPeer()) return;
 
+    // Pass the headers message to the HeaderSync object.
     auto getheaders = headers_.OnHeaders(
         GetSync(), headers,
         [](net::PeerId id, const protocol::BlockHeader&, consensus::HeaderError error) {
@@ -58,7 +58,7 @@ class SyncManager : public InboundHandler {
         });
 
     // Request the next batch of headers if appropriate.
-    if (getheaders) Send(std::move(*getheaders));
+    if (getheaders) Send(*std::move(getheaders));
   }
 
   const data::HeaderSync& GetHeaderSync() const {
