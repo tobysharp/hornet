@@ -109,7 +109,7 @@
     },
    "cmake.useCMakePresets": "auto",
     "cmake.configureSettings": {
-        "CMAKE_TOOLCHAIN_FILE": "${workspaceFolder/clang20.toolchain.cmake"
+        "CMAKE_TOOLCHAIN_FILE": "${workspaceFolder}/clang20.toolchain.cmake"
     },
  
     // --- C++ TestMate Configuration ---
