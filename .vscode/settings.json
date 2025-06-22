@@ -107,6 +107,11 @@
         // Note: "program" and "cwd" are automatically deduced by the extension
         // from the active CMake target, so we don't need to set them here.
     },
+   "cmake.useCMakePresets": "auto",
+    "cmake.configureSettings": {
+        "CMAKE_TOOLCHAIN_FILE": "${workspaceFolder/clang20.toolchain.cmake"
+    },
+ 
     // --- C++ TestMate Configuration ---
     "testMate.cpp.test.executables": "${command:cmake.buildDirectory}/hornet_tests",
 }

@@ -1,0 +1,2 @@
+add_executable(hornetlib_bench trivial_bench.cpp)
+target_link_libraries(hornetlib_bench benchmark::benchmark)

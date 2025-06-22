@@ -35,7 +35,7 @@ TEST(SyncManagerTest, TestMainnetSyncHeaders) {
     const auto peer = engine.AddOutboundPeer(net::kLocalhost, node.GetPort());
     util::Timeout timeout(1000);  // Wait up to one second for the hanshake to complete.
     engine.RunMessageLoop([&](const Engine&) {
-        return timeout.IsExpired() || timechain.Headers().GetHeaviestLength() >= 6000;
+        return timechain.Headers().GetHeaviestLength() >= 9000;
     });
     LogDebug() << "Header count: " << timechain.Headers().GetHeaviestLength();
     EXPECT_TRUE(timechain.Headers().GetHeaviestLength() >= 6000);
