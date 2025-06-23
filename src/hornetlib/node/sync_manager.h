@@ -33,8 +33,14 @@ class SyncManager : public InboundHandler {
     sync_ = peer;
 
     // Send a message requesting headers (example only).
-    if (auto getheaders = headers_.Initiate(sync_)) 
-      Send(*std::move(getheaders));
+    headers_.RegisterPeer(sync_, [this](auto&&... args) {
+      return SendGetHeaders(std::forward<decltype(args)>(args)...);
+    });
+  }
+
+  // Sends a getheaders message. Called by HeaderSync when headers are required.
+  void SendGetHeaders(const std::shared_ptr<net::Peer>& p, message::GetHeaders&& getheaders) {
+    broadcaster_->SendMessage<message::GetHeaders>(p, std::move(getheaders));
   }
 
   virtual void Visit(const message::Verack&) override {
@@ -47,7 +53,7 @@ class SyncManager : public InboundHandler {
     if (!IsSyncPeer()) return;
 
     // Pass the headers message to the HeaderSync object.
-    auto getheaders = headers_.OnHeaders(
+    headers_.OnHeaders(
         GetSync(), headers,
         [](net::PeerId id, const protocol::BlockHeader&, consensus::HeaderError error) {
           if (auto peer = net::Peer::FromId(id)) {
@@ -56,9 +62,6 @@ class SyncManager : public InboundHandler {
             peer->Drop();
           }
         });
-
-    // Request the next batch of headers if appropriate.
-    if (getheaders) Send(*std::move(getheaders));
   }
 
   const data::HeaderSync& GetHeaderSync() const {

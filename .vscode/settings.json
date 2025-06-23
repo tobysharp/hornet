@@ -113,5 +113,5 @@
     },
  
     // --- C++ TestMate Configuration ---
-    "testMate.cpp.test.executables": "${command:cmake.buildDirectory}/hornet_tests",
+    "testMate.cpp.test.executables": "${command:cmake.buildDirectory}/hornetlib_tests",
 }
