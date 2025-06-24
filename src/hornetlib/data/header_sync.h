@@ -77,6 +77,7 @@ class HeaderSync {
   std::thread worker_thread_;          // Background worker thread for processing.
   int max_queue_items_ = 16;           // Default queue capacity to hide download latency.
   OnNeedHeaders on_getheaders_;        // Callback for sending a getheaders message.
+  std::atomic_flag send_blocked_;      // Whether getheaders messages are currently blocked.
 };
 
 inline HeaderSync::HeaderSync(HeaderTimechain& timechain)
@@ -91,28 +92,34 @@ inline HeaderSync::~HeaderSync() {
 inline void HeaderSync::RequestHeadersFrom(net::PeerId id, const protocol::Hash& previous) {
   const auto peer = net::Peer::FromId(id);
   if (peer && on_getheaders_ && queue_.Size() < max_queue_items_) {
-    message::GetHeaders getheaders{peer->GetCapabilities().GetVersion()};
-    getheaders.AddLocatorHash(previous);
-    on_getheaders_(peer, std::move(getheaders));
+    if (!send_blocked_.test_and_set(std::memory_order_acquire)) {
+      message::GetHeaders getheaders{peer->GetCapabilities().GetVersion()};
+      getheaders.AddLocatorHash(previous);
+      on_getheaders_(peer, std::move(getheaders));
+    }
   }
 }
 
 // Registers a peer to use for headers sync, and provides its getheaders callback.
 inline void HeaderSync::RegisterPeer(net::PeerId id, OnNeedHeaders callback) {
   on_getheaders_ = callback;
+  send_blocked_.clear(std::memory_order::release);
   RequestHeadersFrom(id, timechain_.HeaviestTip().second->hash);
 }
 
 // Queues a headers message received from a peer for validation.
 inline void HeaderSync::OnHeaders(net::PeerId peer, const message::Headers& message,
                                   OnError on_error) {
+  Assert(send_blocked_.test());
   const auto& headers = message.GetBlockHeaders();
 
   // Pushes work onto the thread-safe async work queue.
   queue_.Push({peer, Batch{headers.begin(), headers.end()}, on_error});
 
-  if (IsFullBatch(headers))
+  if (IsFullBatch(headers)) {
+    send_blocked_.clear(std::memory_order::release);
     RequestHeadersFrom(peer, headers.back().ComputeHash());
+  }
 }
 
 // Validates queued headers, and adds them to the headers timechain.
@@ -121,8 +128,8 @@ inline void HeaderSync::Process() {
     if (item->batch.empty()) continue;
 
     // As soon as we pop from the queue, request new headers if appropriate.
-    if (IsFullBatch(item->batch))
-      RequestHeadersFrom(item->peer, item->batch.back().ComputeHash());
+    const auto& last_item = queue_.Empty() ? *item : queue_.Back();
+    RequestHeadersFrom(item->peer, last_item.batch.back().ComputeHash());
 
     // Locates the parent of this header in the timechain.
     auto [parent_iterator, parent_context] = timechain_.Find(item->batch[0].GetPreviousBlockHash());

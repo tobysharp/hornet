@@ -49,19 +49,24 @@ class ThreadSafeQueue {
     return {};
   }
 
+  const T& Back() const {
+    std::scoped_lock lock{mutex_};
+    return queue_.back();
+  }
+
   template <typename Pred>
   void EraseIf(Pred&& predicate) {
-    std::unique_lock lock{mutex_};
+    std::scoped_lock lock{mutex_};
     std::remove_if(queue_.begin(), queue_.end(), predicate);
   }
 
   bool Empty() const {
-    std::unique_lock lock{mutex_};
+    std::scoped_lock lock{mutex_};
     return queue_.empty();
   }
 
   int Size() const {
-    std::unique_lock lock{mutex_};
+     std::scoped_lock lock{mutex_};
     return std::ssize(queue_);
   }
 
