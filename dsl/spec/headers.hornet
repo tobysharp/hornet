@@ -1,0 +1,166 @@
+// Copyright Toby Sharp 2025
+// Hornet Consensus DSL (v0.3) — Bitcoin Protocol Consensus Specification.
+// 
+// headers.hornet:
+// Specifies Bitcoin Core's consensus rules for validating block headers.
+
+void ValidateHeader(
+    BlockHeader header,   // The putative block header to validate
+    BlockHeader parent    // The validated parent header in the timechain
+) {
+  int parent_height = GetHeight(parent);
+  assert(parent_height != null);
+  int height = parent_height + 1;
+
+  ValidatePreviousHash(header, parent);
+  ValidateProofOfWork(header);
+  ValidateDifficultyAdjustment(height, header, parent);
+  ValidateMedianTimePast(header, parent);
+  ValidateFutureTimestamp(header);
+  ValidateVersion(height, header.version);
+}
+
+void ValidatePreviousHash(BlockHeader header, BlockHeader parent) {
+  if (HashBlockHeader(parent) != header.PrevBlockHash) {
+    throw HeaderError::ParentNotFound;
+  }
+}
+
+void ValidateProofOfWork(BlockHeader header) {
+  uint256 hash = Hash(header);
+  uint256 target = Uint256FromCompact(header.Bits);
+  if (hash > target) {
+    throw HeaderError::InvalidProofOfWork;
+  }
+}
+
+void ValidateDifficultyAdjustment(
+    int height,
+    BlockHeader header,
+    BlockHeader parent,
+) {
+  uint32 startTime = TimestampAt(parent, height - BlocksPerPeriod);
+  uint32 endTime = parent.Timestamp;
+  uint32 expectedBits = ComputeNextTarget(height, parent.Bits, startTime, endTime);
+  if (header.Bits != expectedBits) {
+    throw HeaderError::BadDifficultyTransition;
+  }
+}
+
+uint32 ComputeNextTarget(
+    int height,
+    uint32 prevBits,
+    uint32 startTime,
+    uint32 endTime
+) {
+  if (!IsDifficultyTransition(height)) {
+    return prevBits;
+  }
+
+  uint32 duration = endTime - startTime;
+  uint32 targetDuration = BlocksPerPeriod * TargetBlockSpacing;
+  uint32 clampedDuration = Clamp(duration, targetDuration / 4, targetDuration * 4);
+
+  uint256 lastTarget = CompactToUint256(prevBits);
+  uint256 nextTarget = lastTarget * clampedDuration / targetDuration;
+  nextTarget = Min(nextTarget, TargetLimit);
+
+  return Uint256ToCompact(nextTarget);
+}
+
+bool IsDifficultyTransition(int height) {
+  return (height % BlocksPerPeriod) == 0;
+}
+
+void ValidateMedianTimePast(BlockHeader header, BlockHeader parent) {
+  array<uint32> times = LastNTimestamps(parent, MedianWindow);
+  uint32 medianTime = Median(times);
+  if (header.Timestamp <= medianTime) {
+    throw HeaderError::BadTimestamp;
+  }
+}
+
+void ValidateFutureTimestamp(BlockHeader header) {
+  uint32 now = SystemTime();
+  if (header.Timestamp > now + TimestampTolerance) {
+    throw HeaderError::BadTimestamp;
+  }
+}
+
+void ValidateVersion(int height, int version) {
+  if (IsVersionRetired(height, version)) {
+    throw HeaderError::BadVersion;
+  }
+}
+
+bool IsVersionRetired(int height, int version) {
+  map<int, int> version_expiry = {
+    2: 34,  // version -> BIP
+    3: 66,
+    4: 65
+  };
+  return version_expiry.contains(version) && height >= BIP_activations[version_expiry[version]];
+}
+
+array<uint32> LastNTimestamps(BlockHeader tip, int count) {
+  array<uint32> timestamps = [];
+  int? height = GetHeight(tip);
+  assert(height != null);
+
+  for (int i = 0; i < count; i += 1) {
+    int h = height - i;
+    BlockHeader? ancestor = GetAncestorAtHeight(tip, h);
+    if (ancestor == null) {
+      break;
+    }
+    timestamps = [ancestor.Timestamp] + timestamps;
+  }
+  return timestamps;
+}
+
+uint32 TimestampAt(BlockHeader tip, int height) {
+  BlockHeader? ancestor = GetAncestorAtHeight(tip, height);
+  if (ancestor == null) {
+    throw HeaderError::ParentNotFound;
+  }
+  return ancestor.Timestamp;
+}
+
+// Types
+struct BlockHeader {
+  uint256 PrevBlockHash;
+  uint32 Bits;
+  uint32 Timestamp;
+  int Version;
+}
+
+enum HeaderError {
+  ParentNotFound,
+  InvalidProofOfWork,
+  BadDifficultyTransition,
+  BadTimestamp,
+  BadVersion
+}
+
+// Constants
+const int MedianWindow = 11;
+const int BlocksPerPeriod = 2016;
+const uint32 TimestampTolerance = 7200;  // seconds (2 hours)
+const uint32 TargetBlockSpacing = 600;    // seconds
+const uint256 TargetLimit = 0x00000000FFFF0000000000000000000000000000000000000000000000000000;
+const map<int, int> BIP_activations = {
+  34: 227931,
+  65: 388381
+  66: 363725,
+};
+
+// Built-in functions
+builtin uint256 Hash(BlockHeader header);
+builtin uint256 CompactToUint256(uint32 bits);
+builtin uint32 Uint256ToCompact(uint256 target);
+builtin uint32 SystemTime();
+builtin uint32 Median(array<uint32> values);
+builtin uint32 Clamp(uint32 value, uint32 min, uint32 max);
+builtin uint256 Min(uint256 a, uint256 b);
+builtin BlockHeader? GetAncestorAtHeight(BlockHeader tip, int height);
+builtin int? GetHeight(BlockHeader header);
