@@ -2,13 +2,13 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "protocol/dispatch.h"
+#include "hornetlib/protocol/dispatch.h"
 
-#include "message/registry.h"
-#include "message/version.h"
-#include "protocol/constants.h"
-#include "protocol/framer.h"
-#include "protocol/message.h"
+#include "hornetlib/message/registry.h"
+#include "hornetlib/message/version.h"
+#include "hornetlib/protocol/constants.h"
+#include "hornetlib/protocol/framer.h"
+#include "hornetlib/protocol/message.h"
 
 #include <gtest/gtest.h>
 

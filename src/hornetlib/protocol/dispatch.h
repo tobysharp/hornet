@@ -4,11 +4,11 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
-#include "encoding/reader.h"
-#include "protocol/constants.h"
-#include "protocol/factory.h"
-#include "protocol/message.h"
-#include "protocol/parser.h"
+#include "hornetlib/encoding/reader.h"
+#include "hornetlib/protocol/constants.h"
+#include "hornetlib/protocol/factory.h"
+#include "hornetlib/protocol/message.h"
+#include "hornetlib/protocol/parser.h"
 
 #include <memory>
 #include <span>

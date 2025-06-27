@@ -6,7 +6,7 @@
 
 #include <cstdint>
 
-#include "protocol/constants.h"
+#include "hornetlib/protocol/constants.h"
 
 namespace hornet::net {
 

@@ -9,18 +9,18 @@
 #include <optional>
 #include <queue>
 
-#include "data/timechain.h"
-#include "net/peer.h"
-#include "net/peer_manager.h"
-#include "node/broadcaster.h"
-#include "node/inbound_message.h"
-#include "node/outbound_message.h"
-#include "node/processor.h"
-#include "node/serialization_memo.h"
-#include "node/sync_manager.h"
-#include "protocol/constants.h"
-#include "protocol/factory.h"
-#include "util/timeout.h"
+#include "hornetlib/data/timechain.h"
+#include "hornetlib/net/peer.h"
+#include "hornetlib/net/peer_manager.h"
+#include "hornetlib/node/broadcaster.h"
+#include "hornetlib/node/inbound_message.h"
+#include "hornetlib/node/outbound_message.h"
+#include "hornetlib/node/processor.h"
+#include "hornetlib/node/serialization_memo.h"
+#include "hornetlib/node/sync_manager.h"
+#include "hornetlib/protocol/constants.h"
+#include "hornetlib/protocol/factory.h"
+#include "hornetlib/util/timeout.h"
 
 namespace hornet::node {
 

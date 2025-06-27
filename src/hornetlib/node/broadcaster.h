@@ -8,8 +8,8 @@
 #include <map>
 #include <memory>
 
-#include "net/peer.h"
-#include "node/outbound_message.h"
+#include "hornetlib/net/peer.h"
+#include "hornetlib/node/outbound_message.h"
 
 namespace hornet::node {
 

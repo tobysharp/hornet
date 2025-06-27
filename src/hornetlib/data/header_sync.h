@@ -8,15 +8,15 @@
 #include <thread>
 #include <variant>
 
-#include "consensus/validator.h"
-#include "data/header_context.h"
-#include "data/header_timechain.h"
-#include "message/getheaders.h"
-#include "message/headers.h"
-#include "net/peer.h"
-#include "protocol/block_header.h"
-#include "protocol/hash.h"
-#include "util/thread_safe_queue.h"
+#include "hornetlib/consensus/validator.h"
+#include "hornetlib/data/header_context.h"
+#include "hornetlib/data/header_timechain.h"
+#include "hornetlib/message/getheaders.h"
+#include "hornetlib/message/headers.h"
+#include "hornetlib/net/peer.h"
+#include "hornetlib/protocol/block_header.h"
+#include "hornetlib/protocol/hash.h"
+#include "hornetlib/util/thread_safe_queue.h"
 
 namespace hornet::data {
 

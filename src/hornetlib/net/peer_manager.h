@@ -9,8 +9,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "net/peer.h"
-#include "util/weak_ptr_collection.h"
+#include "hornetlib/net/peer.h"
+#include "hornetlib/util/weak_ptr_collection.h"
 
 namespace hornet::net {
 

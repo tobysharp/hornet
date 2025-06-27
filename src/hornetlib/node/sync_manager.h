@@ -6,14 +6,14 @@
 
 #include <chrono>
 
-#include "data/header_sync.h"
-#include "data/timechain.h"
-#include "message/getheaders.h"
-#include "message/headers.h"
-#include "message/verack.h"
-#include "node/broadcaster.h"
-#include "node/inbound_handler.h"
-#include "protocol/constants.h"
+#include "hornetlib/data/header_sync.h"
+#include "hornetlib/data/timechain.h"
+#include "hornetlib/message/getheaders.h"
+#include "hornetlib/message/headers.h"
+#include "hornetlib/message/verack.h"
+#include "hornetlib/node/broadcaster.h"
+#include "hornetlib/node/inbound_handler.h"
+#include "hornetlib/protocol/constants.h"
 
 namespace hornet::node {
 

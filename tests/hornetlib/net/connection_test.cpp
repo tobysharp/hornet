@@ -2,14 +2,14 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "net/connection.h"
+#include "hornetlib/net/connection.h"
 
 #include <netinet/in.h>
 #include <thread>
 #include <unistd.h>
 #include <vector>
 
-#include "util/shared_span.h"
+#include "hornetlib/util/shared_span.h"
 
 #include <gtest/gtest.h>
 

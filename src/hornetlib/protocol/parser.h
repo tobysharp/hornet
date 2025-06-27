@@ -9,10 +9,10 @@
 #include <stdexcept>
 #include <string>
 
-#include "crypto/hash.h"
-#include "encoding/reader.h"
-#include "protocol/constants.h"
-#include "protocol/header.h"
+#include "hornetlib/crypto/hash.h"
+#include "hornetlib/encoding/reader.h"
+#include "hornetlib/protocol/constants.h"
+#include "hornetlib/protocol/header.h"
 
 namespace hornet::protocol {
 

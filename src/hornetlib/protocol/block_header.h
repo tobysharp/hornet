@@ -6,16 +6,16 @@
 
 #include <optional>
 
-#include "crypto/hash.h"
-#include "encoding/endian.h"
-#include "encoding/reader.h"
-#include "encoding/transfer.h"
-#include "encoding/writer.h"
-#include "protocol/constants.h"
-#include "protocol/target.h"
-#include "protocol/work.h"
-#include "util/big_uint.h"
-#include "util/throw.h"
+#include "hornetlib/crypto/hash.h"
+#include "hornetlib/encoding/endian.h"
+#include "hornetlib/encoding/reader.h"
+#include "hornetlib/encoding/transfer.h"
+#include "hornetlib/encoding/writer.h"
+#include "hornetlib/protocol/constants.h"
+#include "hornetlib/protocol/target.h"
+#include "hornetlib/protocol/work.h"
+#include "hornetlib/util/big_uint.h"
+#include "hornetlib/util/throw.h"
 
 namespace hornet::protocol {
 

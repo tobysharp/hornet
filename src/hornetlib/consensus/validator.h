@@ -10,14 +10,14 @@
 #include <variant>
 #include <vector>
 
-#include "consensus/difficulty_adjustment.h"
-#include "consensus/header_ancestry_view.h"
-#include "consensus/parameters.h"
-#include "data/header_context.h"
-#include "protocol/block_header.h"
-#include "protocol/hash.h"
-#include "protocol/target.h"
-#include "util/throw.h"
+#include "hornetlib/consensus/difficulty_adjustment.h"
+#include "hornetlib/consensus/header_ancestry_view.h"
+#include "hornetlib/consensus/parameters.h"
+#include "hornetlib/data/header_context.h"
+#include "hornetlib/protocol/block_header.h"
+#include "hornetlib/protocol/hash.h"
+#include "hornetlib/protocol/target.h"
+#include "hornetlib/util/throw.h"
 
 namespace hornet::consensus {
 

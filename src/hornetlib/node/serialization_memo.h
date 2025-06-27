@@ -10,9 +10,9 @@
 #include <optional>
 #include <vector>
 
-#include "node/outbound_message.h"
-#include "protocol/constants.h"
-#include "protocol/framer.h"
+#include "hornetlib/node/outbound_message.h"
+#include "hornetlib/protocol/constants.h"
+#include "hornetlib/protocol/framer.h"
 
 namespace hornet::node {
 

@@ -8,10 +8,10 @@
 #include <ostream>
 #include <string>
 
-#include "net/connection.h"
-#include "net/constants.h"
-#include "protocol/capabilities.h"
-#include "protocol/handshake.h"
+#include "hornetlib/net/connection.h"
+#include "hornetlib/net/constants.h"
+#include "hornetlib/protocol/capabilities.h"
+#include "hornetlib/protocol/handshake.h"
 
 namespace hornet::net {
 

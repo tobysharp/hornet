@@ -4,11 +4,11 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
-#include "encoding/reader.h"
-#include "encoding/writer.h"
-#include "message/visitor.h"
-#include "protocol/message.h"
-#include "util/rand.h"
+#include "hornetlib/encoding/reader.h"
+#include "hornetlib/encoding/writer.h"
+#include "hornetlib/message/visitor.h"
+#include "hornetlib/protocol/message.h"
+#include "hornetlib/util/rand.h"
 
 namespace hornet::message {
 

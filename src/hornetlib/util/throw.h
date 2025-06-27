@@ -8,7 +8,7 @@
 #include <string>
 #include <stdexcept>
 
-#include "util/assert.h"
+#include "hornetlib/util/assert.h"
 
 namespace hornet::util {
 

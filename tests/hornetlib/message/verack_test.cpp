@@ -2,22 +2,22 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "message/verack.h"
+#include "hornetlib/message/verack.h"
 
 #include <array>
 
-#include "message/registry.h"
-#include "message/version.h"
-#include "net/bitcoind.h"
-#include "net/connection.h"
-#include "net/constants.h"
-#include "net/receive.h"
-#include "net/socket.h"
-#include "protocol/constants.h"
-#include "protocol/dispatch.h"
-#include "protocol/factory.h"
-#include "protocol/framer.h"
-#include "protocol/parser.h"
+#include "hornetlib/message/registry.h"
+#include "hornetlib/message/version.h"
+#include "hornetlib/net/bitcoind.h"
+#include "hornetlib/net/connection.h"
+#include "hornetlib/net/constants.h"
+#include "hornetlib/net/receive.h"
+#include "hornetlib/net/socket.h"
+#include "hornetlib/protocol/constants.h"
+#include "hornetlib/protocol/dispatch.h"
+#include "hornetlib/protocol/factory.h"
+#include "hornetlib/protocol/framer.h"
+#include "hornetlib/protocol/parser.h"
 
 #include <gtest/gtest.h>
 

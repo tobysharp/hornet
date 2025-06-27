@@ -4,8 +4,8 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
-#include "crypto/hash.h"
-#include "util/hex.h"
+#include "hornetlib/crypto/hash.h"
+#include "hornetlib/util/hex.h"
 
 namespace hornet::protocol {
 

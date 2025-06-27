@@ -6,8 +6,8 @@
 
 #include <string>
 
-#include "message/visitor.h"
-#include "protocol/message.h"
+#include "hornetlib/message/visitor.h"
+#include "hornetlib/protocol/message.h"
 
 namespace hornet::message {
 

@@ -7,9 +7,9 @@
 #include <array>
 #include <cstdint>
 
-#include "encoding/reader.h"
-#include "encoding/writer.h"
-#include "protocol/constants.h"
+#include "hornetlib/encoding/reader.h"
+#include "hornetlib/encoding/writer.h"
+#include "hornetlib/protocol/constants.h"
 
 namespace hornet::protocol {
 

@@ -12,7 +12,7 @@
 #include <type_traits>
 #include <vector>
 
-#include "encoding/endian.h"
+#include "hornetlib/encoding/endian.h"
 
 namespace hornet::encoding {
 

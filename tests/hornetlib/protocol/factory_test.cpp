@@ -2,10 +2,10 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "protocol/factory.h"
+#include "hornetlib/protocol/factory.h"
 
-#include "message/registry.h"
-#include "message/version.h"
+#include "hornetlib/message/registry.h"
+#include "hornetlib/message/version.h"
 
 #include <gtest/gtest.h>
 

@@ -8,8 +8,8 @@
 #include <cstdint>
 #include <string>
 
-#include "encoding/reader.h"
-#include "encoding/writer.h"
+#include "hornetlib/encoding/reader.h"
+#include "hornetlib/encoding/writer.h"
 
 namespace hornet::encoding {
 

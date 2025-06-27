@@ -2,15 +2,15 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "crypto/hash.h"
+#include "hornetlib/crypto/hash.h"
 
 #include <array>
 #include <cstring>
 #include <iostream>
 
-#include "crypto/sha256.h"
-#include "util/big_uint.h"
-#include "util/hex.h"
+#include "hornetlib/crypto/sha256.h"
+#include "hornetlib/util/big_uint.h"
+#include "hornetlib/util/hex.h"
 
 #include <gtest/gtest.h>
 

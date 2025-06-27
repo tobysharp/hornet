@@ -2,16 +2,16 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "protocol/parser.h"
+#include "hornetlib/protocol/parser.h"
 
 #include <array>
 #include <string>
 
-#include "crypto/hash.h"  // for DoubleSha256
-#include "encoding/writer.h"
-#include "protocol/constants.h"
-#include "protocol/framer.h"
-#include "protocol/message.h"
+#include "hornetlib/crypto/hash.h"  // for DoubleSha256
+#include "hornetlib/encoding/writer.h"
+#include "hornetlib/protocol/constants.h"
+#include "hornetlib/protocol/framer.h"
+#include "hornetlib/protocol/message.h"
 
 #include <gtest/gtest.h>
 

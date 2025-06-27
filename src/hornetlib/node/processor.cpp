@@ -5,17 +5,17 @@
 #include <queue>
 #include <utility>
 
-#include "message/ping.h"
-#include "message/pong.h"
-#include "message/registry.h"
-#include "message/verack.h"
-#include "message/version.h"
-#include "net/constants.h"
-#include "node/broadcaster.h"
-#include "node/inbound_message.h"
-#include "node/processor.h"
-#include "protocol/handshake.h"
-#include "util/throw.h"
+#include "hornetlib/message/ping.h"
+#include "hornetlib/message/pong.h"
+#include "hornetlib/message/registry.h"
+#include "hornetlib/message/verack.h"
+#include "hornetlib/message/version.h"
+#include "hornetlib/net/constants.h"
+#include "hornetlib/node/broadcaster.h"
+#include "hornetlib/node/inbound_message.h"
+#include "hornetlib/node/processor.h"
+#include "hornetlib/protocol/handshake.h"
+#include "hornetlib/util/throw.h"
 
 namespace hornet::node {
 

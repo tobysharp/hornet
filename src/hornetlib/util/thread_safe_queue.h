@@ -9,7 +9,7 @@
 #include <mutex>
 #include <optional>
 
-#include "util/timeout.h"
+#include "hornetlib/util/timeout.h"
 
 namespace hornet::util {
 

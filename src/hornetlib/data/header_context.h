@@ -4,9 +4,9 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
-#include "protocol/block_header.h"
-#include "protocol/hash.h"
-#include "protocol/work.h"
+#include "hornetlib/protocol/block_header.h"
+#include "hornetlib/protocol/hash.h"
+#include "hornetlib/protocol/work.h"
 
 namespace hornet::data {
 

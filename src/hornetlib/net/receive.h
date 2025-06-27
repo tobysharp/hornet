@@ -8,11 +8,11 @@
 #include <cstdint>
 #include <stdexcept>
 
-#include "net/socket.h"
-#include "message/registry.h"
-#include "protocol/constants.h"
-#include "protocol/dispatch.h"
-#include "protocol/factory.h"
+#include "hornetlib/net/socket.h"
+#include "hornetlib/message/registry.h"
+#include "hornetlib/protocol/constants.h"
+#include "hornetlib/protocol/dispatch.h"
+#include "hornetlib/protocol/factory.h"
 
 namespace hornet::net {
 

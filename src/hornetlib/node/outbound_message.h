@@ -7,7 +7,7 @@
 #include <chrono>
 #include <memory>
 
-#include "protocol/message.h"
+#include "hornetlib/protocol/message.h"
 
 namespace hornet::node {
 

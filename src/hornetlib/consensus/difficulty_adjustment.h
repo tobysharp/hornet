@@ -7,10 +7,10 @@
 #include <algorithm>
 #include <cstdint>
 
-#include "consensus/parameters.h"
-#include "protocol/target.h"
-#include "util/big_uint.h"
-#include "util/hex.h"
+#include "hornetlib/consensus/parameters.h"
+#include "hornetlib/protocol/target.h"
+#include "hornetlib/util/big_uint.h"
+#include "hornetlib/util/hex.h"
 
 namespace hornet::consensus {
 

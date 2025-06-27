@@ -2,7 +2,7 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "encoding/writer.h"
+#include "hornetlib/encoding/writer.h"
 
 #include <gtest/gtest.h>
 

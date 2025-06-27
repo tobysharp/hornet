@@ -6,11 +6,11 @@
 
 #include <memory>
 
-#include "data/header_timechain.h"
-#include "protocol/block_header.h"
-#include "protocol/hash.h"
-#include "util/assert.h"
-#include "util/hex.h"
+#include "hornetlib/data/header_timechain.h"
+#include "hornetlib/protocol/block_header.h"
+#include "hornetlib/protocol/hash.h"
+#include "hornetlib/util/assert.h"
+#include "hornetlib/util/hex.h"
 
 namespace hornet::data {
 

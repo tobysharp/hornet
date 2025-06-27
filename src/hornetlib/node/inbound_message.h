@@ -8,8 +8,8 @@
 #include <memory>
 #include <ostream>
 
-#include "net/peer.h"
-#include "protocol/message.h"
+#include "hornetlib/net/peer.h"
+#include "hornetlib/protocol/message.h"
 
 namespace hornet::node {
 

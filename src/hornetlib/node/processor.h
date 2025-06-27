@@ -8,14 +8,14 @@
 #include <queue>
 #include <utility>
 
-#include "message/visitor.h"
-#include "net/peer.h"
-#include "node/broadcaster.h"
-#include "node/inbound_message.h"
-#include "node/inbound_handler.h"
-#include "node/outbound_message.h"
-#include "protocol/factory.h"
-#include "protocol/message.h"
+#include "hornetlib/message/visitor.h"
+#include "hornetlib/net/peer.h"
+#include "hornetlib/node/broadcaster.h"
+#include "hornetlib/node/inbound_message.h"
+#include "hornetlib/node/inbound_handler.h"
+#include "hornetlib/node/outbound_message.h"
+#include "hornetlib/protocol/factory.h"
+#include "hornetlib/protocol/message.h"
 
 namespace hornet::node {
 

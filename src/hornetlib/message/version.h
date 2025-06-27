@@ -7,13 +7,13 @@
 #include <array>
 #include <string>
 
-#include "encoding/reader.h"
-#include "encoding/transfer.h"
-#include "encoding/writer.h"
-#include "message/visitor.h"
-#include "protocol/constants.h"
-#include "protocol/message.h"
-#include "util/as_span.h"
+#include "hornetlib/encoding/reader.h"
+#include "hornetlib/encoding/transfer.h"
+#include "hornetlib/encoding/writer.h"
+#include "hornetlib/message/visitor.h"
+#include "hornetlib/protocol/constants.h"
+#include "hornetlib/protocol/message.h"
+#include "hornetlib/util/as_span.h"
 
 namespace hornet::message {
 
