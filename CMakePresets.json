@@ -28,11 +28,11 @@
   ],
   "buildPresets": [
     {
-      "name": "clang20-debug-build",
+      "name": "clang20-debug-all",
       "configurePreset": "clang20-debug"
     },
-        {
-      "name": "clang20-release-build",
+    {
+      "name": "clang20-release-all",
       "configurePreset": "clang20-release"
     }
   ]

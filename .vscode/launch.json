@@ -17,7 +17,7 @@
         }
       ],
       "request": "launch",
-      "program": "${workspaceFolder}/build/clang20-debug/hornet_tests",
+      "program": "${workspaceFolder}/build/clang20-debug/hornetlib_tests",
       "args": [
         "--gtest_filter=SyncManagerTest.TestMainnetSyncHeaders"
       ],

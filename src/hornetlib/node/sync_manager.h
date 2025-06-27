@@ -1,0 +1,94 @@
+// Copyright 2025 Toby Sharp
+//
+// This file is part of the Hornet Node project. All rights reserved.
+// For licensing or usage inquiries, contact: ask@hornetnode.com.
+#pragma once
+
+#include <chrono>
+
+#include "hornetlib/data/header_sync.h"
+#include "hornetlib/data/timechain.h"
+#include "hornetlib/message/getheaders.h"
+#include "hornetlib/message/headers.h"
+#include "hornetlib/message/verack.h"
+#include "hornetlib/node/broadcaster.h"
+#include "hornetlib/node/inbound_handler.h"
+#include "hornetlib/protocol/constants.h"
+
+namespace hornet::node {
+
+// Class for managing initial block download
+class SyncManager : public InboundHandler {
+ public:
+  SyncManager(data::Timechain& timechain, Broadcaster& broadcaster)
+      : InboundHandler(&broadcaster), headers_(timechain.Headers()) {}
+  SyncManager() = delete;
+
+  void OnHandshakeCompleted(std::shared_ptr<net::Peer> peer) {
+    {
+      const std::shared_ptr<net::Peer> sync = sync_.lock();
+      if (sync && !sync->IsDropped()) return;  // We already have a sync peer
+    }
+    // Adopt a new peer to use for timechain sync requests
+    sync_ = peer;
+
+    // Send a message requesting headers (example only).
+    headers_.RegisterPeer(sync_, [this](auto&&... args) {
+      return SendGetHeaders(std::forward<decltype(args)>(args)...);
+    });
+  }
+
+  // Sends a getheaders message. Called by HeaderSync when headers are required.
+  void SendGetHeaders(const std::shared_ptr<net::Peer>& p, message::GetHeaders&& getheaders) {
+    broadcaster_->SendMessage<message::GetHeaders>(p, std::move(getheaders));
+  }
+
+  virtual void Visit(const message::Verack&) override {
+    if (GetPeer()->GetHandshake().IsComplete()) OnHandshakeCompleted(GetPeer());
+  }
+
+  virtual void Visit(const message::Headers& headers) override {
+    // TODO: [HOR-20: Request tracking]
+    // (https://linear.app/hornet-node/issue/HOR-20/request-tracking)
+    if (!IsSyncPeer()) return;
+
+    // Pass the headers message to the HeaderSync object.
+    headers_.OnHeaders(
+        GetSync(), headers,
+        [](net::PeerId id, const protocol::BlockHeader&, consensus::HeaderError error) {
+          if (auto peer = net::Peer::FromId(id)) {
+            LogWarn() << "Header validation failed with error " << static_cast<int>(error)
+                      << ", dropping peer.";
+            peer->Drop();
+          }
+        });
+  }
+
+  const data::HeaderSync& GetHeaderSync() const {
+    return headers_;
+  }
+
+ private:
+  std::shared_ptr<net::Peer> GetSync() const {
+    return sync_.lock();
+  }
+  bool IsSyncPeer() const {
+    const auto sync = GetSync();
+    return sync && (sync == GetPeer());
+  }
+  template <typename T, typename... Args>
+  void Send(Args&&... args) {
+    if (const auto sync = sync_.lock())
+      broadcaster_->SendMessage<T>(sync, std::forward<Args>(args)...);
+  }
+  template <typename T>
+  void Send(T&& msg) {
+    if (const auto sync = sync_.lock())
+      broadcaster_->SendMessage<T>(sync, std::make_unique<T>(std::forward<T>(msg)));
+  }
+
+  std::weak_ptr<net::Peer> sync_;  // The peer used for timechain synchronization requests.
+  data::HeaderSync headers_;
+};
+
+}  // namespace hornet::node

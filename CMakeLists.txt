@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
-project(hornet_node LANGUAGES CXX)
+project(hornet LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # --- Set compile options that apply to ALL build types ---
 # (We put compiler-independent warnings here if possible, or use generator expressions)
@@ -19,60 +21,10 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
     add_compile_options(-O3 -DNDEBUG)
 endif()
 
-# --- Special flags ---
-# The -fno-elide-constructors flag was a temporary workaround for a clang-14 bug.
-# It's best not to keep it permanently. If you still need it when using clang-14,
-# you can add it specifically to the debug flags like this:
-# set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-elide-constructors")
-
-# Header-only core library
-add_library(hornet STATIC
-   data/header_timechain.cpp
-   net/bitcoind.cpp
-   net/socket.cpp
-   node/processor.cpp
-   node/engine.cpp
-)
-target_include_directories(hornet PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_features(hornet PRIVATE cxx_std_20)
-
-# Main app (optional)
-add_executable(btchornet main.cpp)
-target_compile_features(btchornet PRIVATE cxx_std_20)
-target_link_libraries(btchornet PRIVATE hornet)
-
-# GoogleTest submodule
 add_subdirectory(extern/googletest)
 target_compile_options(gtest PRIVATE -Wno-deprecated-declarations)
-
-# Unit test binary using GoogleTest
-add_executable(hornet_tests
-   crypto/hash_test.cpp
-   encoding/reader_test.cpp
-   encoding/writer_test.cpp
-   message/version_test.cpp
-   message/verack_test.cpp
-   net/bitcoind_test.cpp
-   net/connection_test.cpp
-   net/peer_test.cpp
-   net/peer_manager_test.cpp
-   net/socket_test.cpp
-   node/engine_test.cpp
-   node/sync_manager_test.cpp
-   protocol/block_header_test.cpp
-   protocol/dispatch_test.cpp
-   protocol/factory_test.cpp
-   protocol/framer_test.cpp
-   protocol/handshake_test.cpp
-   protocol/parser_test.cpp
-   util/big_uint_test.cpp
-)
-target_compile_features(hornet_tests PRIVATE cxx_std_20)
-target_link_libraries(hornet_tests PRIVATE hornet gtest_main)
-
-include(GoogleTest)
-gtest_discover_tests(hornet_tests)
-
-# Enable CTest
-include(CTest)
-enable_testing()
+set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "Disable benchmark tests")
+add_subdirectory(extern/benchmark)
+add_subdirectory(src)
+add_subdirectory(tests)
+add_subdirectory(bench)
