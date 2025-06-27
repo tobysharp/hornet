@@ -9,7 +9,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # --- Set compile options that apply to ALL build types ---
 # (We put compiler-independent warnings here if possible, or use generator expressions)
-add_compile_options(-Wall -Wextra -Wpedantic -Wmove)
+add_compile_options(-Wall -Wextra -Wpedantic -Wredundant-move -Wself-move)
 
 # --- Set flags SPECIFIC to each build type ---
 
