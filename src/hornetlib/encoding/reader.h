@@ -14,7 +14,7 @@
 #include <string>
 #include <type_traits>
 
-#include "encoding/endian.h"
+#include "hornetlib/encoding/endian.h"
 
 namespace hornet::encoding {
 

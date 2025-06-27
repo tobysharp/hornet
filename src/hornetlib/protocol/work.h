@@ -4,8 +4,8 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
-#include "protocol/target.h"
-#include "util/big_uint.h"
+#include "hornetlib/protocol/target.h"
+#include "hornetlib/util/big_uint.h"
 
 namespace hornet::protocol {
 

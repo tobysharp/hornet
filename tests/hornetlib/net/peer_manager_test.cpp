@@ -2,14 +2,14 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "net/peer_manager.h"
+#include "hornetlib/net/peer_manager.h"
 
 #include <memory>
 #include <netinet/in.h>
 #include <thread>
 #include <unistd.h>
 
-#include "net/peer.h"
+#include "hornetlib/net/peer.h"
 
 #include <gtest/gtest.h>
 

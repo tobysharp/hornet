@@ -8,10 +8,10 @@
 #include <ranges>
 #include <tuple>
 
-#include "consensus/header_ancestry_view.h"
-#include "data/hashed_tree.h"
-#include "data/header_chain.h"
-#include "data/header_context.h"
+#include "hornetlib/consensus/header_ancestry_view.h"
+#include "hornetlib/data/hashed_tree.h"
+#include "hornetlib/data/header_chain.h"
+#include "hornetlib/data/header_context.h"
 
 namespace hornet::data {
 

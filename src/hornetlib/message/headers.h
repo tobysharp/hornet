@@ -6,10 +6,10 @@
 
 #include <vector>
 
-#include "message/visitor.h"
-#include "protocol/block_header.h"
-#include "protocol/message.h"
-#include "util/throw.h"
+#include "hornetlib/message/visitor.h"
+#include "hornetlib/protocol/block_header.h"
+#include "hornetlib/protocol/message.h"
+#include "hornetlib/util/throw.h"
 
 namespace hornet::message {
 

@@ -8,11 +8,11 @@
 #include <cstdint>
 #include <cstring>
 
-#include "protocol/constants.h"
-#include "protocol/hash.h"
-#include "util/assert.h"
-#include "util/big_uint.h"
-#include "util/throw.h"
+#include "hornetlib/protocol/constants.h"
+#include "hornetlib/protocol/hash.h"
+#include "hornetlib/util/assert.h"
+#include "hornetlib/util/big_uint.h"
+#include "hornetlib/util/throw.h"
 
 namespace hornet::protocol {
 

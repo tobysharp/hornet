@@ -2,10 +2,10 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "protocol/block_header.h"
+#include "hornetlib/protocol/block_header.h"
 
-#include "crypto/hash.h"
-#include "util/big_uint.h"
+#include "hornetlib/crypto/hash.h"
+#include "hornetlib/util/big_uint.h"
 
 #include <gtest/gtest.h>
 

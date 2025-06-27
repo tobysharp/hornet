@@ -1,8 +1,8 @@
 #pragma once
 
-#include "protocol/hash.h"
-#include "protocol/target.h"
-#include "util/hex.h"
+#include "hornetlib/protocol/hash.h"
+#include "hornetlib/protocol/target.h"
+#include "hornetlib/util/hex.h"
 
 namespace hornet::consensus {
 

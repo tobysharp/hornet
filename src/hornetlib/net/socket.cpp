@@ -15,7 +15,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include "net/socket.h"
+#include "hornetlib/net/socket.h"
 
 namespace hornet::net {
 

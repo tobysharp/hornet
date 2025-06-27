@@ -9,8 +9,8 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "util/big_uint.h"
-#include "util/unroll.h"
+#include "hornetlib/util/big_uint.h"
+#include "hornetlib/util/unroll.h"
 
 namespace hornet {
 namespace util {

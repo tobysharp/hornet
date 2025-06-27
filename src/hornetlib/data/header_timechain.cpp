@@ -5,12 +5,12 @@
 #include <ranges>
 #include <stack>
 
-#include "data/header_chain.h"
-#include "data/header_context.h"
-#include "data/header_timechain.h"
-#include "protocol/block_header.h"
-#include "protocol/hash.h"
-#include "util/throw.h"
+#include "hornetlib/data/header_chain.h"
+#include "hornetlib/data/header_context.h"
+#include "hornetlib/data/header_timechain.h"
+#include "hornetlib/protocol/block_header.h"
+#include "hornetlib/protocol/hash.h"
+#include "hornetlib/util/throw.h"
 
 namespace hornet::data {
 

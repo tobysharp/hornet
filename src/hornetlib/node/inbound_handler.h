@@ -4,8 +4,8 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
-#include "message/visitor.h"
-#include "node/inbound_message.h"
+#include "hornetlib/message/visitor.h"
+#include "hornetlib/node/inbound_message.h"
 
 namespace hornet::node {
 

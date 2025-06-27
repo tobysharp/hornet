@@ -2,17 +2,17 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "net/bitcoind.h"
+#include "hornetlib/net/bitcoind.h"
 
-#include "message/registry.h"
-#include "message/version.h"
-#include "net/constants.h"
-#include "net/receive.h"
-#include "net/socket.h"
-#include "protocol/dispatch.h"
-#include "protocol/factory.h"
-#include "protocol/framer.h"
-#include "protocol/message.h"
+#include "hornetlib/message/registry.h"
+#include "hornetlib/message/version.h"
+#include "hornetlib/net/constants.h"
+#include "hornetlib/net/receive.h"
+#include "hornetlib/net/socket.h"
+#include "hornetlib/protocol/dispatch.h"
+#include "hornetlib/protocol/factory.h"
+#include "hornetlib/protocol/framer.h"
+#include "hornetlib/protocol/message.h"
 
 #include <gtest/gtest.h>
 

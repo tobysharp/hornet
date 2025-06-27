@@ -4,7 +4,7 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
-#include "protocol/constants.h"
+#include "hornetlib/protocol/constants.h"
 
 namespace hornet::protocol {
 

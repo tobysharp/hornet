@@ -11,7 +11,7 @@
 #include <sstream>
 #include <stdexcept>
 
-#include "util/throw.h"
+#include "hornetlib/util/throw.h"
 
 namespace hornet::encoding {
 

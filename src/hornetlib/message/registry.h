@@ -4,14 +4,14 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
-#include "message/getheaders.h"
-#include "message/headers.h"
-#include "message/ping.h"
-#include "message/pong.h"
-#include "message/sendcmpct.h"
-#include "message/verack.h"
-#include "message/version.h"
-#include "protocol/factory.h"
+#include "hornetlib/message/getheaders.h"
+#include "hornetlib/message/headers.h"
+#include "hornetlib/message/ping.h"
+#include "hornetlib/message/pong.h"
+#include "hornetlib/message/sendcmpct.h"
+#include "hornetlib/message/verack.h"
+#include "hornetlib/message/version.h"
+#include "hornetlib/protocol/factory.h"
 
 namespace hornet::message {
 

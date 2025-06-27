@@ -2,14 +2,14 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "message/version.h"
+#include "hornetlib/message/version.h"
 
-#include "message/registry.h"
-#include "protocol/constants.h"
-#include "protocol/dispatch.h"
-#include "protocol/factory.h"
-#include "protocol/framer.h"
-#include "protocol/parser.h"
+#include "hornetlib/message/registry.h"
+#include "hornetlib/protocol/constants.h"
+#include "hornetlib/protocol/dispatch.h"
+#include "hornetlib/protocol/factory.h"
+#include "hornetlib/protocol/framer.h"
+#include "hornetlib/protocol/parser.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>

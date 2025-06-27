@@ -12,11 +12,11 @@
 #include <unordered_set>
 #include <vector>
 
-#include "data/header_context.h"
-#include "protocol/block_header.h"
-#include "protocol/work.h"
-#include "util/assert.h"
-#include "util/log.h"
+#include "hornetlib/data/header_context.h"
+#include "hornetlib/protocol/block_header.h"
+#include "hornetlib/protocol/work.h"
+#include "hornetlib/util/assert.h"
+#include "hornetlib/util/log.h"
 
 namespace hornet::data {
 

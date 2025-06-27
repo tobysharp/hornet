@@ -8,8 +8,8 @@
 #include <ranges>
 #include <unordered_map>
 
-#include "protocol/hash.h"
-#include "util/pointer_iterator.h"
+#include "hornetlib/protocol/hash.h"
+#include "hornetlib/util/pointer_iterator.h"
 
 namespace hornet::data {
 

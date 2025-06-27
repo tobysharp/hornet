@@ -4,7 +4,7 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 // bitcoind.cpp
 
-#include "net/bitcoind.h"
+#include "hornetlib/net/bitcoind.h"
 
 #include <cstdlib>
 #include <filesystem>
@@ -16,9 +16,9 @@
 #include <unistd.h>
 #include <vector>
 
-#include "net/constants.h"
-#include "net/socket.h"
-#include "util/throw.h"
+#include "hornetlib/net/constants.h"
+#include "hornetlib/net/socket.h"
+#include "hornetlib/util/throw.h"
 
 namespace hornet::net {
 

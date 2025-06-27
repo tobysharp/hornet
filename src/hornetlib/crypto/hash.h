@@ -11,8 +11,8 @@
 #include <ostream>
 #include <span>
 
-#include "crypto/sha256.h"
-#include "util/as_span.h"
+#include "hornetlib/crypto/sha256.h"
+#include "hornetlib/util/as_span.h"
 
 namespace hornet::crypto {
 
