@@ -90,6 +90,10 @@
         "locale": "cpp"
     },
     "C_Cpp.default.compilerPath": "/usr/bin/clang++-20",
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+    "C_Cpp.intelliSenseEngine": "default",
+    "C_Cpp.default.configurationProvider": "ms-vcscode.cmake-tools",
+
     // This tells the CMake Tools status bar button how to launch the debugger.
     // It mimics the structure of our launch.json configuration.
     "cmake.debugConfig": {

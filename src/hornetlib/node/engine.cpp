@@ -5,21 +5,21 @@
 #include <atomic>
 #include <queue>
 
-#include "data/timechain.h"
-#include "message/registry.h"
-#include "net/peer.h"
-#include "net/peer_manager.h"
-#include "node/broadcaster.h"
-#include "node/engine.h"
-#include "node/inbound_message.h"
-#include "node/outbound_message.h"
-#include "node/processor.h"
-#include "protocol/constants.h"
-#include "protocol/factory.h"
-#include "protocol/framer.h"
-#include "protocol/parser.h"
-#include "util/log.h"
-#include "util/timeout.h"
+#include "hornetlib/data/timechain.h"
+#include "hornetlib/message/registry.h"
+#include "hornetlib/net/peer.h"
+#include "hornetlib/net/peer_manager.h"
+#include "hornetlib/node/broadcaster.h"
+#include "hornetlib/node/engine.h"
+#include "hornetlib/node/inbound_message.h"
+#include "hornetlib/node/outbound_message.h"
+#include "hornetlib/node/processor.h"
+#include "hornetlib/protocol/constants.h"
+#include "hornetlib/protocol/factory.h"
+#include "hornetlib/protocol/framer.h"
+#include "hornetlib/protocol/parser.h"
+#include "hornetlib/util/log.h"
+#include "hornetlib/util/timeout.h"
 
 namespace hornet::node {
 

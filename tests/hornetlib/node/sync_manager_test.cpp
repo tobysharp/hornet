@@ -2,14 +2,14 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "node/sync_manager.h"
+#include "hornetlib/node/sync_manager.h"
 
-#include "data/timechain.h"
-#include "net/bitcoind.h"
-#include "node/engine.h"
-#include "protocol/handshake.h"
-#include "util/log.h"
-#include "util/timeout.h"
+#include "hornetlib/data/timechain.h"
+#include "hornetlib/net/bitcoind.h"
+#include "hornetlib/node/engine.h"
+#include "hornetlib/protocol/handshake.h"
+#include "hornetlib/util/log.h"
+#include "hornetlib/util/timeout.h"
 
 #include <gtest/gtest.h>
 
