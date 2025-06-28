@@ -16,6 +16,7 @@ namespace hornet::consensus {
 
 class DifficultyAdjustment {
  public:
+  DifficultyAdjustment() {}
   DifficultyAdjustment(const Parameters& parameters) : parameters_(parameters) {}
 
   constexpr int GetBlocksPerPeriod() const { return parameters_.kAdjustmentInterval; }

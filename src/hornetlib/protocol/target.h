@@ -7,6 +7,7 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <optional>
 
 #include "hornetlib/protocol/constants.h"
 #include "hornetlib/protocol/hash.h"
