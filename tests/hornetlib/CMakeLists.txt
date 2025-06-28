@@ -20,6 +20,7 @@ add_executable(hornetlib_tests
    protocol/parser_test.cpp
    util/big_uint_test.cpp
    util/pointer_iterator_test.cpp
+   util/thread_safe_queue_test.cpp
 )
 
 target_compile_features(hornetlib_tests PRIVATE cxx_std_20)

@@ -57,7 +57,7 @@ class ThreadSafeQueue {
   template <typename Pred>
   void EraseIf(Pred&& predicate) {
     std::scoped_lock lock{mutex_};
-    std::remove_if(queue_.begin(), queue_.end(), predicate);
+    std::erase_if(queue_, predicate);
   }
 
   bool Empty() const {
