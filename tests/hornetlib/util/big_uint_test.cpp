@@ -2,7 +2,7 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "hornetlib/util/big_uint.h" // Assuming your BigUint class is in this header
+#include "hornetlib/util/big_uint.h"
 
 #include <limits>
 #include <stdexcept> // For std::invalid_argument
@@ -30,21 +30,19 @@ BigUint<kBits, T> MakeBigUint(std::initializer_list<T> words) {
       temp_words[i] = word;
       i++;
     } else {
-      // For testing, we'll assume valid input, but in production code
-      // you might want to assert or throw if too many words are provided.
+      // For testing, we'll assume valid input.
       break;
     }
   }
   return BigUint<kBits, T>{temp_words};
 }
 
-// Custom GTest printer for BigUint to make EXPECT_EQ output more readable
-// This is the only place we directly access words_, as it's for debug output.
+// Custom GTest printer for BigUint to make EXPECT_EQ output more readable.
 template <size_t kBits, std::unsigned_integral T>
 void PrintTo(const BigUint<kBits, T>& bu, std::ostream* os) {
   *os << "BigUint<" << kBits << ", " << sizeof(T) * 8 << "> {";
   for (int i = BigUint<kBits, T>::kWords - 1; i >= 0; --i) {
-    *os << std::hex << std::setfill('0') << std::setw(sizeof(T) * 2) << bu.words_[i];
+    *os << std::hex << std::setfill('0') << std::setw(sizeof(T) * 2) << bu.Words()[i];
     if (i > 0) {
       *os << "_";
     }
@@ -55,8 +53,6 @@ void PrintTo(const BigUint<kBits, T>& bu, std::ostream* os) {
 
 // Test fixture for BigUint operations
 class BigUintTest : public ::testing::Test {
- protected:
-  // You can set up common test data here if needed
 };
 
 // --- Constructor and Assignment Tests ---
@@ -66,9 +62,6 @@ TEST_F(BigUintTest, ValueInitializationInitializesToZero) {
   TestBigUint64 bu{}; // Value-initialization
   EXPECT_EQ(bu, TestBigUint64::Zero());
 }
-
-// Removed the test for default constructor being zero-initialized,
-// as it's now uninitialized.
 
 TEST_F(BigUintTest, SingleWordConstructor) {
   TestBigUint64 bu(0x12345678);

@@ -343,6 +343,7 @@ class BigUint {
     }
   }
 
+private:
   std::array<T, kWords> words_;
 };
 

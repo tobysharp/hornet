@@ -19,7 +19,9 @@ add_executable(hornetlib_tests
    protocol/handshake_test.cpp
    protocol/parser_test.cpp
    util/big_uint_test.cpp
+   util/pointer_iterator_test.cpp
 )
+
 target_compile_features(hornetlib_tests PRIVATE cxx_std_20)
 target_link_libraries(hornetlib_tests PRIVATE hornetlib gtest_main)
 target_include_directories(hornetlib_tests PRIVATE ${PROJECT_SOURCE_DIR}/src)
