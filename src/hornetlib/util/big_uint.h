@@ -9,6 +9,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <iomanip>
+#include <ostream>
 #include <stdexcept>
 #include <tuple>
 
@@ -283,6 +285,13 @@ class BigUint {
   constexpr void SetBit(int index) {
     if (index >= kBits) throw std::invalid_argument("SetBit index out of range.");
     words_[index / kBitsPerWord] |= T{1} << (index & (kBitsPerWord - 1));
+  }
+
+  friend std::ostream& operator <<(std::ostream& os, const BigUint& obj) {
+    for (int i = kWords - 1; i >= 0; --i) {
+      os << std::hex << std::setfill('0') << std::setw(kBitsPerWord >> 2) << obj.words_[i];
+    }
+    return os;
   }
 
  private:

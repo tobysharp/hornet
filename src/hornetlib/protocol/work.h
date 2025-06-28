@@ -4,8 +4,16 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
-#include "hornetlib/protocol/target.h"
 #include "hornetlib/util/big_uint.h"
+
+// Proof-of-work types and relationships:
+//
+// Hash -> compare leq -> Target <- .Expand() <- CompactTarget
+//                          |
+//                      .GetWork()
+//                          |
+//                         Work
+//
 
 namespace hornet::protocol {
 
@@ -16,11 +24,6 @@ class Work {
   constexpr Work(const Work&) = default;
   constexpr Work(Work&&) = default;
   constexpr Work(const Uint256& value) : value_(value) {}
-
-  // Return a Work object from a compact "bits" representation of a target.
-  static constexpr Work FromBits(uint32_t bits) {
-    return Target::FromCompact(bits).GetWork();
-  }
 
   // Exposes only the operators that are appropriate for work done.
 

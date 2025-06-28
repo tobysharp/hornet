@@ -15,6 +15,7 @@
 #include "hornetlib/consensus/parameters.h"
 #include "hornetlib/data/header_context.h"
 #include "hornetlib/protocol/block_header.h"
+#include "hornetlib/protocol/compact_target.h"
 #include "hornetlib/protocol/hash.h"
 #include "hornetlib/protocol/target.h"
 #include "hornetlib/util/throw.h"
@@ -46,11 +47,11 @@ class Validator {
 
     // Verify PoW target is valid and is achieved by the header's hash.
     const auto hash = header.ComputeHash();
-    const auto target = protocol::Target::FromCompact(header.GetCompactTarget());
+    const auto target = header.GetCompactTarget().Expand();
     if (!(hash <= target)) return HeaderError::InvalidProofOfWork;
 
     // Verify PoW target obeys the difficulty adjustment rules.
-    uint32_t expected_bits = parent.header.GetCompactTarget();
+    protocol::CompactTarget expected_bits = parent.header.GetCompactTarget();
     if (difficulty_adjustment_.IsTransition(height)) {
       const int blocks_per_period = difficulty_adjustment_.GetBlocksPerPeriod();
       Assert(height - blocks_per_period < view.Length());

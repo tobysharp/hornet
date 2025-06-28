@@ -7,6 +7,15 @@
 #include "hornetlib/crypto/hash.h"
 #include "hornetlib/util/hex.h"
 
+// Proof-of-work types and relationships:
+//
+// Hash -> compare leq -> Target <- .Expand() <- CompactTarget
+//                          |
+//                      .GetWork()
+//                          |
+//                         Work
+//
+
 namespace hornet::protocol {
 
 // Represents a 256-bit hash, as a 32-byte array in little-endian order.

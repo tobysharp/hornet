@@ -77,4 +77,12 @@ inline void TransferBool(Streamer &s, Bool &field) {
     s.ReadBool(field);
 }
 
+template <typename Streamer, typename T>
+inline void TransferObject(Streamer& s, T& field) {
+  if constexpr (std::is_const_v<T>)
+    field.Serialize(s);
+  else
+    field.Deserialize(s);
+}
+
 }  // namespace hornet::encoding

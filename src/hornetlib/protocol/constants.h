@@ -7,6 +7,9 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "hornetlib/util/big_uint.h"
+#include "hornetlib/util/hex.h"
+
 namespace hornet::protocol {
 
 // Magic numbers from https://en.bitcoin.it/wiki/Protocol_documentation
@@ -49,4 +52,6 @@ inline constexpr size_t kMaxMessageSize = 4'000'000;
 
 inline constexpr uint32_t kMaxCompactTarget = 0x1D00FFFF;
 
+inline constexpr Uint256 kMaximumTarget = "00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"_h256;
+  
 }  // namespace hornet::protocol

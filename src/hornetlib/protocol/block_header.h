@@ -11,6 +11,7 @@
 #include "hornetlib/encoding/reader.h"
 #include "hornetlib/encoding/transfer.h"
 #include "hornetlib/encoding/writer.h"
+#include "hornetlib/protocol/compact_target.h"
 #include "hornetlib/protocol/constants.h"
 #include "hornetlib/protocol/target.h"
 #include "hornetlib/protocol/work.h"
@@ -23,12 +24,12 @@ class BlockHeader {
  public:
   // Determines whether the hash meets the required target constraints.
   bool IsProofOfWork() const {
-    return ComputeHash() <= Target::FromCompact(bits_);
+    return ComputeHash() <= bits_.Expand();
   }
 
   // Returns the expected amount of work done to achieve the hash target.
   Work GetWork() const {
-    return Work::FromBits(bits_);
+    return bits_.Expand().GetWork();
   }
 
   int GetVersion() const {
@@ -43,7 +44,7 @@ class BlockHeader {
   uint32_t GetTimestamp() const {
     return timestamp_;
   }
-  uint32_t GetCompactTarget() const {
+  CompactTarget GetCompactTarget() const {
     return bits_;
   }
   uint32_t GetNonce() const {
@@ -66,7 +67,7 @@ class BlockHeader {
   void SetTimestamp(uint32_t timestamp) {
     timestamp_ = timestamp;
   }
-  void SetCompactTarget(uint32_t bits) {
+  void SetCompactTarget(CompactTarget bits) {
     bits_ = bits;
   }
   void SetNonce(uint32_t nonce) {
@@ -95,7 +96,7 @@ class BlockHeader {
     TransferBytes(s, util::AsSpan(t.prev_block_));
     TransferBytes(s, util::AsSpan(t.merkle_root_));
     TransferLE4(s, t.timestamp_);
-    TransferLE4(s, t.bits_);
+    TransferObject(s, t.bits_);
     TransferLE4(s, t.nonce_);
     TransferVarInt(s, t.txn_count_);
   }
@@ -105,8 +106,8 @@ class BlockHeader {
   Hash merkle_root_;  // The reference to a Merkle tree collection which is a hash of all
                       // transactions related to this block.
   uint32_t
-      timestamp_;   // A timestamp recording when this block was created (Will overflow in 2106).
-  uint32_t bits_;   // The calculated difficulty target being used for this block.
+      timestamp_;  // A timestamp recording when this block was created (Will overflow in 2106).
+  CompactTarget bits_;  // The calculated difficulty target being used for this block.
   uint32_t nonce_;  // The nonce used to generate this block... to allow variations of the header
                     // and compute different hashes.
   uint32_t txn_count_ = 0;  // Number of transaction entries, this value is always 0.
@@ -120,7 +121,5 @@ class BlockHeader {
 //   Hash hash;
 //   Work work;
 // };
-
-
 
 }  // namespace hornet::protocol
