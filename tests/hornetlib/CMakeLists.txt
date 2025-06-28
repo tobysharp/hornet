@@ -18,6 +18,7 @@ add_executable(hornetlib_tests
    node/engine_test.cpp
    node/sync_manager_test.cpp
    protocol/block_header_test.cpp
+   protocol/compact_target_test.cpp
    protocol/dispatch_test.cpp
    protocol/factory_test.cpp
    protocol/framer_test.cpp
