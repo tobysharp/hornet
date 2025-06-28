@@ -9,6 +9,7 @@
 #include <unordered_map>
 
 #include "hornetlib/protocol/hash.h"
+#include "hornetlib/util/assert.h"
 #include "hornetlib/util/pointer_iterator.h"
 
 namespace hornet::data {
@@ -59,12 +60,12 @@ class HashedTree {
     return iterator != list_.cend();
   }
 
-  ConstIterator Find(const protocol::Hash& hash) const {
+  ConstIterator Find(const Hash& hash) const {
     const auto it = map_.find(hash);
     return it == map_.end() ? list_.cend() : it->second;
   }
 
-  Iterator Find(const protocol::Hash& hash) {
+  Iterator Find(const Hash& hash) {
     const auto it = map_.find(hash);
     return it == map_.end() ? list_.end() : it->second;
   }

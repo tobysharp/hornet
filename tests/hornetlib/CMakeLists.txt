@@ -1,6 +1,7 @@
 # Unit test binary using GoogleTest
 add_executable(hornetlib_tests
    crypto/hash_test.cpp
+   data/hashed_tree_test.cpp
    encoding/reader_test.cpp
    encoding/writer_test.cpp
    message/version_test.cpp
