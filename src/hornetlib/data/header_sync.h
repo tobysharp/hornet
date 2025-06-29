@@ -20,15 +20,19 @@
 
 namespace hornet::data {
 
+class HeaderSyncHandler {
+ public:
+  virtual ~HeaderSyncHandler() = default;
+  virtual void OnRequestHeaders(const net::PeerPtr& peer, message::GetHeaders&&) = 0;
+  virtual void OnError(net::PeerId id, const protocol::BlockHeader& header, consensus::HeaderError error) = 0;
+  virtual void OnComplete(net::PeerId id) = 0;
+};
+
 // HeaderSync performs header synchronization. It receives headers messages from peers, validates
 // them against consensus rules in a background thread, and adds them to the header timechain.
 class HeaderSync {
  public:
-  using OnError =
-      std::function<void(net::PeerId, const protocol::BlockHeader&, consensus::HeaderError)>;
-  using OnNeedHeaders = std::function<void(const std::shared_ptr<net::Peer>&, message::GetHeaders&&)>;
-
-  HeaderSync(HeaderTimechain& timechain);
+  HeaderSync(HeaderTimechain& timechain, HeaderSyncHandler& handler);
   ~HeaderSync();
 
   // Sets the maximum number of items allowed in the queue.
@@ -37,10 +41,10 @@ class HeaderSync {
   }
 
   // Registers a peer to use for headers sync, and provides its getheaders callback.
-  void RegisterPeer(net::PeerId id, OnNeedHeaders callback);
+  void RegisterPeer(net::PeerId id);
 
   // Queues a headers message received from a peer for validation.
-  void OnHeaders(net::PeerId peer, const message::Headers& message, OnError on_error);
+  void OnHeaders(net::PeerId peer, const message::Headers& message);
 
   // Returns true if there is validation work to be done.
   bool HasPendingWork() const {
@@ -53,7 +57,6 @@ class HeaderSync {
   struct Item {
     net::PeerId peer;
     Batch batch;
-    OnError on_error;
   };
 
   // Validates queued headers, and adds them to the headers timechain.
@@ -71,17 +74,17 @@ class HeaderSync {
     return std::ssize(batch) == protocol::kMaxBlockHeaders;
   }
 
-  util::ThreadSafeQueue<Item> queue_;  // Queue of unverified headers to process.
   HeaderTimechain& timechain_;         // Timechain to receive validated headers.
+  HeaderSyncHandler& handler_;         // Callbacks for peer-related behavior.
+  util::ThreadSafeQueue<Item> queue_;  // Queue of unverified headers to process.
   consensus::Validator validator_;     // Performs consensus rule checks.
   std::thread worker_thread_;          // Background worker thread for processing.
   int max_queue_items_ = 16;           // Default queue capacity to hide download latency.
-  OnNeedHeaders on_getheaders_;        // Callback for sending a getheaders message.
   std::atomic_flag send_blocked_;      // Whether getheaders messages are currently blocked.
 };
 
-inline HeaderSync::HeaderSync(HeaderTimechain& timechain)
-    : timechain_(timechain), worker_thread_([this] { this->Process(); }) {}
+inline HeaderSync::HeaderSync(HeaderTimechain& timechain, HeaderSyncHandler& handler)
+    : timechain_(timechain), handler_(handler), worker_thread_([this] { this->Process(); }) {}
 
 inline HeaderSync::~HeaderSync() {
   queue_.Stop();
@@ -90,32 +93,30 @@ inline HeaderSync::~HeaderSync() {
 
 // Requests more headers via the callback supplied in RegisterPeer.
 inline void HeaderSync::RequestHeadersFrom(net::PeerId id, const protocol::Hash& previous) {
-  if (on_getheaders_ && queue_.Size() < max_queue_items_) {
+  if (queue_.Size() < max_queue_items_) {
     if (!send_blocked_.test_and_set(std::memory_order_acquire)) {
       const auto peer = net::Peer::FromId(id);
       const int version = peer ? peer->GetCapabilities().GetVersion() : protocol::kCurrentVersion;
       message::GetHeaders getheaders{version};
       getheaders.AddLocatorHash(previous);
-      on_getheaders_(peer, std::move(getheaders));
+      handler_.OnRequestHeaders(peer, std::move(getheaders));
     }
   }
 }
 
 // Registers a peer to use for headers sync, and provides its getheaders callback.
-inline void HeaderSync::RegisterPeer(net::PeerId id, OnNeedHeaders callback) {
-  on_getheaders_ = callback;
+inline void HeaderSync::RegisterPeer(net::PeerId id) {
   send_blocked_.clear(std::memory_order::release);
   RequestHeadersFrom(id, timechain_.HeaviestTip().second->hash);
 }
 
 // Queues a headers message received from a peer for validation.
-inline void HeaderSync::OnHeaders(net::PeerId peer, const message::Headers& message,
-                                  OnError on_error) {
+inline void HeaderSync::OnHeaders(net::PeerId peer, const message::Headers& message) {
   Assert(send_blocked_.test());
   const auto& headers = message.GetBlockHeaders();
 
   // Pushes work onto the thread-safe async work queue.
-  queue_.Push({peer, Batch{headers.begin(), headers.end()}, on_error});
+  queue_.Push({peer, Batch{headers.begin(), headers.end()}});
 
   if (IsFullBatch(headers)) {
     send_blocked_.clear(std::memory_order::release);
@@ -126,38 +127,45 @@ inline void HeaderSync::OnHeaders(net::PeerId peer, const message::Headers& mess
 // Validates queued headers, and adds them to the headers timechain.
 inline void HeaderSync::Process() {
   for (std::optional<Item> item; (item = queue_.WaitPop());) {
-    if (item->batch.empty()) continue;
 
-    // As soon as we pop from the queue, request new headers if appropriate.
-    const auto& last_item = queue_.Empty() ? *item : queue_.Back();
-    RequestHeadersFrom(item->peer, last_item.batch.back().ComputeHash());
+    if (!item->batch.empty()) {
+      // As soon as we pop from the queue, request new headers if appropriate.
+      const auto& last_item = queue_.Empty() ? *item : queue_.Back();
+      if (IsFullBatch(last_item.batch))
+        RequestHeadersFrom(item->peer, last_item.batch.back().ComputeHash());
 
-    // Locates the parent of this header in the timechain.
-    auto [parent_iterator, parent_context] = timechain_.Find(item->batch[0].GetPreviousBlockHash());
-    if (!parent_iterator || !parent_context) {
-      HandleError(*item, item->batch[0], consensus::HeaderError::ParentNotFound);
-      continue;
-    }
-
-    // Creates an implementation-independent view onto the timechain history for the validator.
-    const std::unique_ptr<const HeaderTimechain::ValidationView> view =
-        timechain_.GetValidationView(parent_iterator);
-
-    for (const auto& header : item->batch) {
-      // Validates the header against consensus rules.
-      const auto validated = validator_.ValidateDownloadedHeader(*parent_context, header, *view);
-
-      // Handles consensus failures, breaking out of this batch.
-      if (const auto* error = std::get_if<consensus::HeaderError>(&validated)) {
-        // Notifies caller of consensus failure and discards future batches from the same peer.
-        HandleError(*item, header, *error);
-        break;
+      // Locates the parent of this header in the timechain.
+      auto [parent_iterator, parent_context] = timechain_.Find(item->batch[0].GetPreviousBlockHash());
+      if (!parent_iterator || !parent_context) {
+        HandleError(*item, item->batch[0], consensus::HeaderError::ParentNotFound);
+        continue;
       }
 
-      // Adds the validated header to the headers timechain.
-      const auto& context = std::get<data::HeaderContext>(validated);
-      parent_iterator = timechain_.Add(context, parent_iterator);
-      parent_context = context;
+      // Creates an implementation-independent view onto the timechain history for the validator.
+      const std::unique_ptr<HeaderTimechain::ValidationView> view =
+          timechain_.GetValidationView(parent_iterator);
+
+      for (const auto& header : item->batch) {
+        // Validates the header against consensus rules.
+        const auto validated = validator_.ValidateDownloadedHeader(*parent_context, header, *view);
+
+        // Handles consensus failures, breaking out of this batch.
+        if (const auto* error = std::get_if<consensus::HeaderError>(&validated)) {
+          // Notifies caller of consensus failure and discards future batches from the same peer.
+          HandleError(*item, header, *error);
+          break;
+        }
+
+        // Adds the validated header to the headers timechain.
+        const auto& context = std::get<data::HeaderContext>(validated);
+        view->SetTip(parent_iterator = timechain_.Add(context, parent_iterator));
+        parent_context = context;
+      }
+    }
+
+    // Notify if the sync is complete.
+    if (!IsFullBatch(item->batch)) {
+      handler_.OnComplete(item->peer);
     }
   }
 }
@@ -165,7 +173,7 @@ inline void HeaderSync::Process() {
 // Calls error handler and deletes peer's other queued items.
 inline void HeaderSync::HandleError(const Item& item, const protocol::BlockHeader& header,
                                     consensus::HeaderError error) {
-  item.on_error(item.peer, header, error);
+  handler_.OnError(item.peer, header, error);
   queue_.EraseIf([&](const Item& queued) { return net::Peer::IsSame(item.peer, queued.peer); });
 }
 

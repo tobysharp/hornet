@@ -16,6 +16,7 @@
 namespace hornet::net {
 
 class Peer;
+using PeerPtr = std::shared_ptr<Peer>;
 using PeerId = std::weak_ptr<Peer>;
 
 class Peer {

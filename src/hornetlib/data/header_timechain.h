@@ -194,6 +194,9 @@ class HeaderTimechain::ValidationView : public consensus::HeaderAncestryView {
   ValidationView(const HeaderTimechain& timechain, ParentIterator tip)
       : timechain_(timechain), tip_(tip) {}
 
+  void SetTip(ParentIterator tip) {
+    tip_ = tip;
+  }
   virtual int Length() const override;
   virtual uint32_t TimestampAt(int height) const override;
   virtual std::vector<uint32_t> LastNTimestamps(int count) const override;
