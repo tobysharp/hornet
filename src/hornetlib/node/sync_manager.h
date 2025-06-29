@@ -6,19 +6,19 @@
 
 #include <chrono>
 
-#include "hornetlib/data/header_sync.h"
 #include "hornetlib/data/timechain.h"
 #include "hornetlib/message/getheaders.h"
 #include "hornetlib/message/headers.h"
 #include "hornetlib/message/verack.h"
 #include "hornetlib/node/broadcaster.h"
+#include "hornetlib/node/header_sync.h"
 #include "hornetlib/node/inbound_handler.h"
 #include "hornetlib/protocol/constants.h"
 
 namespace hornet::node {
 
 // Class for managing initial block download
-class SyncManager : public InboundHandler, protected data::HeaderSyncHandler {
+class SyncManager : public InboundHandler, protected HeaderSyncHandler {
  public:
   SyncManager(data::Timechain& timechain, Broadcaster& broadcaster)
       : InboundHandler(&broadcaster), headers_(timechain.Headers(), *this) {}
@@ -49,7 +49,7 @@ class SyncManager : public InboundHandler, protected data::HeaderSyncHandler {
     headers_.OnHeaders(GetSync(), headers);
   }
 
-  const data::HeaderSync& GetHeaderSync() const {
+  const HeaderSync& GetHeaderSync() const {
     return headers_;
   }
 
@@ -107,7 +107,7 @@ class SyncManager : public InboundHandler, protected data::HeaderSyncHandler {
   }
 
   std::weak_ptr<net::Peer> sync_;  // The peer used for timechain synchronization requests.
-  data::HeaderSync headers_;
+  HeaderSync headers_;
 };
 
 }  // namespace hornet::node

@@ -18,7 +18,7 @@
 #include "hornetlib/protocol/hash.h"
 #include "hornetlib/util/thread_safe_queue.h"
 
-namespace hornet::data {
+namespace hornet::node {
 
 class HeaderSyncHandler {
  public:
@@ -32,7 +32,7 @@ class HeaderSyncHandler {
 // them against consensus rules in a background thread, and adds them to the header timechain.
 class HeaderSync {
  public:
-  HeaderSync(HeaderTimechain& timechain, HeaderSyncHandler& handler);
+  HeaderSync(data::HeaderTimechain& timechain, HeaderSyncHandler& handler);
   ~HeaderSync();
 
   // Sets the maximum number of items allowed in the queue.
@@ -74,7 +74,7 @@ class HeaderSync {
     return std::ssize(batch) == protocol::kMaxBlockHeaders;
   }
 
-  HeaderTimechain& timechain_;         // Timechain to receive validated headers.
+  data::HeaderTimechain& timechain_;   // Timechain to receive validated headers.
   HeaderSyncHandler& handler_;         // Callbacks for peer-related behavior.
   util::ThreadSafeQueue<Item> queue_;  // Queue of unverified headers to process.
   consensus::Validator validator_;     // Performs consensus rule checks.
@@ -83,7 +83,7 @@ class HeaderSync {
   std::atomic_flag send_blocked_;      // Whether getheaders messages are currently blocked.
 };
 
-inline HeaderSync::HeaderSync(HeaderTimechain& timechain, HeaderSyncHandler& handler)
+inline HeaderSync::HeaderSync(data::HeaderTimechain& timechain, HeaderSyncHandler& handler)
     : timechain_(timechain), handler_(handler), worker_thread_([this] { this->Process(); }) {}
 
 inline HeaderSync::~HeaderSync() {
@@ -142,7 +142,7 @@ inline void HeaderSync::Process() {
       }
 
       // Creates an implementation-independent view onto the timechain history for the validator.
-      const std::unique_ptr<HeaderTimechain::ValidationView> view =
+      const std::unique_ptr<data::HeaderTimechain::ValidationView> view =
           timechain_.GetValidationView(parent_iterator);
 
       for (const auto& header : item->batch) {
@@ -177,4 +177,4 @@ inline void HeaderSync::HandleError(const Item& item, const protocol::BlockHeade
   queue_.EraseIf([&](const Item& queued) { return net::Peer::IsSame(item.peer, queued.peer); });
 }
 
-}  // namespace hornet::data
+}  // namespace hornet::node
