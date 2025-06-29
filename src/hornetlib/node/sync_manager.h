@@ -33,7 +33,7 @@ class SyncManager : public InboundHandler, protected HeaderSyncHandler {
     sync_ = peer;
 
     // Send a message requesting headers (example only).
-    headers_.RegisterPeer(sync_);
+    headers_.StartSync(sync_);
   }
 
   virtual void Visit(const message::Verack&) override {

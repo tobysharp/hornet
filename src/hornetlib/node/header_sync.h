@@ -40,8 +40,8 @@ class HeaderSync {
     max_queue_items_ = max_queue_size;
   }
 
-  // Registers a peer to use for headers sync, and provides its getheaders callback.
-  void RegisterPeer(net::PeerId id);
+  // Begins downloading and validating headers from a given peer.
+  void StartSync(net::PeerId id);
 
   // Queues a headers message received from a peer for validation.
   void OnHeaders(net::PeerId peer, const message::Headers& message);
@@ -104,8 +104,8 @@ inline void HeaderSync::RequestHeadersFrom(net::PeerId id, const protocol::Hash&
   }
 }
 
-// Registers a peer to use for headers sync, and provides its getheaders callback.
-inline void HeaderSync::RegisterPeer(net::PeerId id) {
+  // Begins downloading and validating headers from a given peer.
+inline void HeaderSync::StartSync(net::PeerId id) {
   send_blocked_.clear(std::memory_order::release);
   RequestHeadersFrom(id, timechain_.HeaviestTip().second->hash);
 }
