@@ -90,10 +90,11 @@ inline HeaderSync::~HeaderSync() {
 
 // Requests more headers via the callback supplied in RegisterPeer.
 inline void HeaderSync::RequestHeadersFrom(net::PeerId id, const protocol::Hash& previous) {
-  const auto peer = net::Peer::FromId(id);
-  if (peer && on_getheaders_ && queue_.Size() < max_queue_items_) {
+  if (on_getheaders_ && queue_.Size() < max_queue_items_) {
     if (!send_blocked_.test_and_set(std::memory_order_acquire)) {
-      message::GetHeaders getheaders{peer->GetCapabilities().GetVersion()};
+      const auto peer = net::Peer::FromId(id);
+      const int version = peer ? peer->GetCapabilities().GetVersion() : protocol::kCurrentVersion;
+      message::GetHeaders getheaders{version};
       getheaders.AddLocatorHash(previous);
       on_getheaders_(peer, std::move(getheaders));
     }

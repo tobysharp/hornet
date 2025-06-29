@@ -32,7 +32,9 @@ class Peer {
   }
 
   static bool IsSame(PeerId a, PeerId b) {
-    return FromId(a) == FromId(b);
+    const auto pa = FromId(a);
+    const auto pb = FromId(b);
+    return (pa || pb) && (pa == pb);
   }
 
   bool IsDropped() const {
