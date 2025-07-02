@@ -76,16 +76,13 @@ class BlockHeader {
 
   void Deserialize(encoding::Reader& r) {
     Transfer(r, *this);
-    if (txn_count_ != 0)
-      util::ThrowOutOfRange("In block header, tx_count has nonzero value ", txn_count_, ".");
   }
 
   Hash ComputeHash() const {
     static constexpr size_t kHashedSize = 80;
-    static_assert(offsetof(BlockHeader, txn_count_) - offsetof(BlockHeader, version_) ==
-                  kHashedSize);
+    static_assert(sizeof(*this) == kHashedSize);
     static_assert(encoding::IsLittleEndian());
-    const uint8_t* bytes = reinterpret_cast<const uint8_t*>(&version_);
+    const uint8_t* bytes = reinterpret_cast<const uint8_t*>(this);
     return crypto::DoubleSha256(bytes, bytes + kHashedSize);
   }
 
@@ -98,7 +95,6 @@ class BlockHeader {
     TransferLE4(s, t.timestamp_);
     TransferObject(s, t.bits_);
     TransferLE4(s, t.nonce_);
-    TransferVarInt(s, t.txn_count_);
   }
 
   int32_t version_;   // Block version information (note, this is signed).
@@ -110,7 +106,6 @@ class BlockHeader {
   CompactTarget bits_;  // The calculated difficulty target being used for this block.
   uint32_t nonce_;  // The nonce used to generate this block... to allow variations of the header
                     // and compute different hashes.
-  uint32_t txn_count_ = 0;  // Number of transaction entries, this value is always 0.
 };
 
 // struct HeaderDetail {
