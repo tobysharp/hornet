@@ -8,40 +8,9 @@
 #include "hornetlib/encoding/reader.h"
 #include "hornetlib/encoding/writer.h"
 #include "hornetlib/protocol/hash.h"
+#include "hornetlib/util/subarray.h"
 
 namespace hornet::protocol {
-
-template <typename T, std::integral Count = int>
-class SubArray {
- public:
-  SubArray() : start_(0), count_(0) {}
-  SubArray(int start, Count count) : start_(start), count_(count) {}
-  SubArray(const SubArray&) = default;
-  SubArray& operator=(const SubArray&) = default;
-
-  int StartIndex() const {
-    return start_;
-  }
-  Count Size() const {
-    return count_;
-  }
-
-  bool IsEmpty() const {
-    return count_ <= 0;
-  }
-
-  std::span<T> Span(std::span<T> data) {
-    return data.subspan(start_, count_);
-  }
-
-  std::span<const T> Span(std::span<const T> data) const {
-    return data.subspan(start_, count_);
-  }
-
- private:
-  int start_;
-  Count count_;
-};
 
 struct OutPoint {
   Hash hash;
@@ -53,13 +22,17 @@ struct OutPoint {
   }
 };
 
-using ScriptArray = SubArray<uint8_t, uint16_t>;
+using ScriptArray = util::SubArray<uint8_t, uint16_t>;
 using Component = ScriptArray;
-using Witness = SubArray<Component>;
+using Witness = util::SubArray<Component>;
 
 struct Input;
 struct Output;
 
+// The TransactionData struct stores all the variable-sized array elements for one or more
+// transactions. The purpose of separating out the data in this way is to allow for flat allocation
+// of all fields across a block of transactions, completely eliminating jagged arrays and their heap
+// fragmentation, while also improving cache coherence.
 struct TransactionData {
   std::vector<Input> inputs;
   std::vector<Output> outputs;
@@ -67,16 +40,16 @@ struct TransactionData {
   std::vector<Component> components;
   std::vector<uint8_t> scripts;
 
-  SubArray<Input> AddInputs(int size) {
+  util::SubArray<Input> AddInputs(int size) {
     return AddToVector(inputs, size);
   }
-  SubArray<Output> AddOutputs(int size) {
+  util::SubArray<Output> AddOutputs(int size) {
     return AddToVector(outputs, size);
   }
-  SubArray<Witness> AddWitnesses(int size) {
+  util::SubArray<Witness> AddWitnesses(int size) {
     return AddToVector(witnesses, size);
   }
-  SubArray<Component> AddComponents(int size) {
+  util::SubArray<Component> AddComponents(int size) {
     return AddToVector(components, size);
   }
   ScriptArray AddScriptBytes(uint16_t size) {
@@ -85,7 +58,7 @@ struct TransactionData {
 
  private:
   template <typename T, std::integral Count>
-  static SubArray<T, Count> AddToVector(std::vector<T>& vec, Count size) {
+  static util::SubArray<T, Count> AddToVector(std::vector<T>& vec, Count size) {
     vec.resize(vec.size() + size);
     return {static_cast<int>(std::ssize(vec) - size), size};
   }
@@ -115,17 +88,18 @@ struct Output {
   }
 };
 
-class TransactionDetail {
- public:
-  std::span<const Input> Inputs(const TransactionData& data) const {
-    return inputs_.Span(data.inputs);
-  }
-  std::span<Input> Inputs(TransactionData& data) {
-    return inputs_.Span(data.inputs);
-  }
+// The TransactionDetail struct holds the data fields of a transaction, and the
+// metadata needed for its variable-length array fields. The actual data for those
+// arrays is held in TransactionData.
+struct TransactionDetail {
+  uint32_t version;
+  util::SubArray<Input> inputs;
+  util::SubArray<Output> outputs;
+  util::SubArray<Witness> witnesses;
+  uint32_t lock_time;
 
   bool IsWitness() const {
-    return !witnesses_.IsEmpty();
+    return !witnesses.IsEmpty();
   }
 
   void Serialize(encoding::Writer&, const TransactionData&) const {
@@ -134,7 +108,7 @@ class TransactionDetail {
 
   void Deserialize(encoding::Reader& reader, TransactionData& data) {
     // Version
-    reader.ReadLE4(version_);
+    reader.ReadLE4(version);
 
     // Optional witness flag
     bool witness = false;
@@ -150,17 +124,17 @@ class TransactionDetail {
     }
 
     // Inputs
-    inputs_ = data.AddInputs(reader.ReadVarInt());
-    for (Input& input : inputs_.Span(data.inputs)) input.Deserialize(reader, data);
+    inputs = data.AddInputs(reader.ReadVarInt());
+    for (Input& input : inputs.Span(data.inputs)) input.Deserialize(reader, data);
 
     // Outputs
-    outputs_ = data.AddOutputs(reader.ReadVarInt());
-    for (Output& output : outputs_.Span(data.outputs)) output.Deserialize(reader, data);
+    outputs = data.AddOutputs(reader.ReadVarInt());
+    for (Output& output : outputs.Span(data.outputs)) output.Deserialize(reader, data);
 
     // Witnesses
     if (witness) {
-      witnesses_ = data.AddWitnesses(inputs_.Size());
-      for (Witness& witness : witnesses_.Span(data.witnesses)) {
+      witnesses = data.AddWitnesses(inputs.Size());
+      for (Witness& witness : witnesses.Span(data.witnesses)) {
         witness = data.AddComponents(reader.ReadVarInt<int>());
         for (ScriptArray& component : witness.Span(data.components)) {
           component = data.AddScriptBytes(reader.ReadVarInt<uint16_t>());
@@ -169,41 +143,72 @@ class TransactionDetail {
       }
     }
   }
-
- private:
-  uint32_t version_;
-  SubArray<Input> inputs_;
-  SubArray<Output> outputs_;
-  SubArray<Witness> witnesses_;
-  [[maybe_unused]] uint32_t lock_time_;
 };
 
+// The TransactionViewT class represents the join of data and metadata stored in
+// TransactionData and TransactionDetail respectively. This allows for semantically
+// meaningful operations on transaction fields and sub-fields, and hides the implementation
+// details of flat allocation via SubArray.
 template <typename Data, typename Detail>
 class TransactionViewT {
  public:
   TransactionViewT(Data& data, Detail& detail) : data_(data), detail_(detail) {}
-   
+
+  // The following const member methods are chosen by the compiler in the case where
+  // the TransactionViewT object is const, e.g. the method is called on a const object that
+  // derives from TransactionViewT.
   uint32_t Version() const {
-    return detail_.version_;
+    return detail_.version;
   }
-  std::span<const Input> Inputs() const {
-    return detail_.Inputs(data_);
+  bool IsWitness() const {
+    return detail_.IsWitness();
   }
-  std::span<const Output> Ouptuts() const {
-    return detail_.Outputs(data_);
+  const Input& Input(int index) const {
+    return detail_.inputs.Span(data_.inputs)[index];
   }
-  std::span<const Witness> Witnesses() const {
-    return detail_.Witnesses(data);
+  const Output& Output(int index) const {
+    return detail_.outputs.Span(data_.outputs)[index];
+  }
+  std::span<const uint8_t> SignatureScript(int input) const {
+    return Input(input).signature_script.Span(data_.scripts);
+  }
+  std::span<const uint8_t> PkScript(int output) const {
+    return Output(output).pk_script.Span(data_.scripts);
+  }
+  std::span<const uint8_t> WitnessScript(int input, int component) const {
+    const Witness& witness = detail_.witnesses.Span(data_.witnesses)[input];
+    const Component& subarray = witness.Span(data_.components)[component];
+    return subarray.Span(data_.scripts);
   }
   uint32_t LockTime() const {
     return detail_.lock_time;
   }
 
-  // This non-const method is chosen when the view itself is passed around.
-  // The returned Input objects will be const if Data and Detail are const.
-  // Hence the return type is auto.
-  auto Inputs() {
-    return detail_.Inputs(data_);
+  // The following non-const member methods are chosen by the compiler in the case where
+  // the TransactionViewT object is non-const. In this case, the constness of the return value
+  // depends on the constness of the templated types (Data, Detail).
+  auto& Version() {
+    return detail_.version;
+  }
+  auto& Input(int index) {
+    return detail_.inputs.Span(data_.inputs)[index];
+  }
+  auto& Output(int index) {
+    return detail_.outputs.Span(data_.outputs)[index];
+  }
+  auto SignatureScript(int input) {
+    return Input(input).signature_script.Span(data_.scripts);
+  }
+  auto PkScript(int output) {
+    return Output(output).pk_script.Span(data_.scripts);
+  }
+  auto WitnessScript(int input, int component) {
+    const Witness& witness = detail_.witnesses.Span(data_.witnesses)[input];
+    const Component& subarray = witness.Span(data_.components)[component];
+    return subarray.Span(data_.scripts);
+  }
+  auto& LockTime() {
+    return detail_.lock_time;
   }
 
  protected:
@@ -214,7 +219,7 @@ class TransactionViewT {
 using TransactionView = TransactionViewT<TransactionData, TransactionDetail>;
 using TransactionConstView = TransactionViewT<const TransactionData, const TransactionDetail>;
 
-// Standalone transaction class
+// Standalone transaction class, inheriting TransactionView behavior.
 class Transaction : public TransactionView {
  public:
   Transaction() : TransactionView(data_, detail_) {}
@@ -227,20 +232,5 @@ class Transaction : public TransactionView {
   TransactionData data_;
   TransactionDetail detail_;
 };
-
-inline void foo() {
-  Transaction tx1;
-  const Transaction tx2;
-  [[maybe_unused]] std::span<Input> in = tx1.Inputs();
-  [[maybe_unused]] std::span<const Input> in2 = tx2.Inputs();
-
-  // Mimics
-  //   TransactionConstView Block::GetTransaction(int index) const;
-  const TransactionData data;
-  const TransactionDetail detail = {};
-  TransactionConstView v{data, detail};
-
-  [[maybe_unused]] std::span<const Input> in3 = v.Inputs();
-}
 
 }  // namespace hornet::protocol

@@ -17,11 +17,11 @@ class Block {
   Block& operator =(const Block&) = default;
   Block& operator =(Block&&) = default;
 
-  TransactionView GetTransaction(int index) {
+  TransactionView Transaction(int index) {
     return {data_, transactions_[index]};
   }
 
-  TransactionConstView GetTransaction(int index) const {
+  TransactionConstView Transaction(int index) const {
     return {data_, transactions_[index]};
   }
   
@@ -50,11 +50,5 @@ class Block {
   std::vector<TransactionDetail> transactions_;
   TransactionData data_;
 };
-
-inline void goo() {
-  const Block b;
-  const auto tx = b.GetTransaction(0);
-  [[maybe_unused]] auto in = tx.Inputs();
-}
 
 }  // namespace hornet::protocol
