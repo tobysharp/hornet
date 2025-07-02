@@ -6,6 +6,8 @@
 
 namespace hornet::message {
 
+class Block;
+class GetData;
 class GetHeaders;
 class Headers;
 class Ping;
@@ -17,6 +19,8 @@ class Version;
 class Visitor {
  public:
   virtual ~Visitor() {}
+  virtual void Visit(const Block&) {}
+  virtual void Visit(const GetData&) {}
   virtual void Visit(const GetHeaders&) {}
   virtual void Visit(const Headers&) {}
   virtual void Visit(const Ping&) {}
