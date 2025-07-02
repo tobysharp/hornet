@@ -125,24 +125,32 @@ class Reader {
     t = NarrowOrThrow<T>(ReadBE<uint16_t>());
   }
 
+  template <std::integral T, std::unsigned_integral R>
+  T ValidateCompactSize(R x, bool check_max = true, R min = 0) {
+    constexpr uint32_t kMaxCompactSize = 0x02000000;  // 33,554,432
+    if (x < min) util::ThrowOutOfRange("Non-canonical CompactSize");
+    if (check_max && x > kMaxCompactSize) util::ThrowOutOfRange("CompactSize too large.");
+    return NarrowOrThrow<T>(x);
+  }
+
   // Read a VarInt as per Bitcoin CompactSize
-  template <std::unsigned_integral T = uint64_t>
-  T ReadVarInt() {
+  template <std::integral T = uint64_t>
+  T ReadVarInt(bool check_max = true) {
     uint8_t prefix = ReadByte();
     if (prefix < 0xFD) {
-      return prefix;
+      return ValidateCompactSize<T, uint8_t>(prefix, check_max);
     } else if (prefix == 0xFD) {
-      return ReadLE2<T>();
+      return ValidateCompactSize<T, uint16_t>(ReadLE2(), check_max, 0xFD);
     } else if (prefix == 0xFE) {
-      return ReadLE4<T>();
+      return ValidateCompactSize<T, uint32_t>(ReadLE4(), check_max, 0x10000);
     } else {
-      return ReadLE8<T>();
+      return ValidateCompactSize<T, uint64_t>(ReadLE8(), check_max, 0x100000000);
     }
   }
 
   template <std::unsigned_integral T>
-  void ReadVarInt(T &t) {
-    t = ReadVarInt<T>();
+  void ReadVarInt(T &t, bool check_max = true) {
+    t = ReadVarInt<T>(check_max);
   }
 
   std::string ReadVarString() {
