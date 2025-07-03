@@ -14,25 +14,18 @@
 #include "hornetlib/message/getheaders.h"
 #include "hornetlib/message/headers.h"
 #include "hornetlib/net/peer.h"
+#include "hornetlib/node/sync_handler.h"
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/hash.h"
 #include "hornetlib/util/thread_safe_queue.h"
 
 namespace hornet::node {
 
-class HeaderSyncHandler {
- public:
-  virtual ~HeaderSyncHandler() = default;
-  virtual void OnRequestHeaders(const net::PeerPtr& peer, message::GetHeaders&&) = 0;
-  virtual void OnError(net::PeerId id, const protocol::BlockHeader& header, consensus::HeaderError error) = 0;
-  virtual void OnComplete(net::PeerId id) = 0;
-};
-
 // HeaderSync performs header synchronization. It receives headers messages from peers, validates
 // them against consensus rules in a background thread, and adds them to the header timechain.
 class HeaderSync {
  public:
-  HeaderSync(data::HeaderTimechain& timechain, HeaderSyncHandler& handler);
+  HeaderSync(data::HeaderTimechain& timechain, SyncHandler& handler);
   ~HeaderSync();
 
   // Sets the maximum number of items allowed in the queue.
@@ -75,7 +68,7 @@ class HeaderSync {
   }
 
   data::HeaderTimechain& timechain_;   // Timechain to receive validated headers.
-  HeaderSyncHandler& handler_;         // Callbacks for peer-related behavior.
+  SyncHandler& handler_;               // Callbacks for peer-related behavior.
   util::ThreadSafeQueue<Item> queue_;  // Queue of unverified headers to process.
   consensus::Validator validator_;     // Performs consensus rule checks.
   std::thread worker_thread_;          // Background worker thread for processing.
@@ -83,7 +76,7 @@ class HeaderSync {
   std::atomic_flag send_blocked_;      // Whether getheaders messages are currently blocked.
 };
 
-inline HeaderSync::HeaderSync(data::HeaderTimechain& timechain, HeaderSyncHandler& handler)
+inline HeaderSync::HeaderSync(data::HeaderTimechain& timechain, SyncHandler& handler)
     : timechain_(timechain), handler_(handler), worker_thread_([this] { this->Process(); }) {}
 
 inline HeaderSync::~HeaderSync() {
@@ -99,7 +92,7 @@ inline void HeaderSync::RequestHeadersFrom(net::PeerId id, const protocol::Hash&
       const int version = peer ? peer->GetCapabilities().GetVersion() : protocol::kCurrentVersion;
       message::GetHeaders getheaders{version};
       getheaders.AddLocatorHash(previous);
-      handler_.OnRequestHeaders(peer, std::move(getheaders));
+      handler_.OnRequest(peer, std::make_unique<message::GetHeaders>(std::move(getheaders)));
     }
   }
 }
@@ -171,9 +164,11 @@ inline void HeaderSync::Process() {
 }
 
 // Calls error handler and deletes peer's other queued items.
-inline void HeaderSync::HandleError(const Item& item, const protocol::BlockHeader& header,
+inline void HeaderSync::HandleError(const Item& item, const protocol::BlockHeader&,
                                     consensus::HeaderError error) {
-  handler_.OnError(item.peer, header, error);
+  std::ostringstream oss;
+  oss << "Header validation error code " << static_cast<int>(error) << ".";
+  handler_.OnError(item.peer, oss.str());
   queue_.EraseIf([&](const Item& queued) { return net::Peer::IsSame(item.peer, queued.peer); });
 }
 

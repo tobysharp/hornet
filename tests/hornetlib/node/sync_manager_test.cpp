@@ -33,12 +33,21 @@ TEST(SyncManagerTest, TestMainnetSyncHeaders) {
     data::Timechain timechain;
     Engine engine{timechain, node.GetMagic()};
     const auto peer = engine.AddOutboundPeer(net::kLocalhost, node.GetPort());
-    util::Timeout timeout(1000);  // Wait up to one second for the hanshake to complete.
     engine.RunMessageLoop([&](const Engine&) {
         return timechain.Headers().GetHeaviestLength() >= 9000;
     });
     LogDebug() << "Header count: " << timechain.Headers().GetHeaviestLength();
-    EXPECT_TRUE(timechain.Headers().GetHeaviestLength() >= 6000);
+    EXPECT_TRUE(timechain.Headers().GetHeaviestLength() >= 9000);
+}
+
+TEST(SyncManagerTest, TestMainnetSyncBlocks) {
+    net::Bitcoind node = net::Bitcoind::Connect();
+    data::Timechain timechain;
+    Engine engine{timechain, node.GetMagic()};
+    engine.AddOutboundPeer(net::kLocalhost, node.GetPort());
+    engine.RunMessageLoop([&](const Engine&) {
+        return false;
+    });
 }
 
 }  // namespace
