@@ -38,7 +38,7 @@ TEST(MessageReaderTest, ReadVarInt) {
 
   EXPECT_EQ(r.ReadVarInt(), 0xFCu);
   EXPECT_EQ(r.ReadVarInt(), 0x1234u);
-  EXPECT_EQ(r.ReadVarInt(), 0x12345678u);
+  EXPECT_THROW(r.ReadVarInt(), std::out_of_range);
 }
 
 TEST(ReaderTest, ReadVarString) {

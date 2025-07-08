@@ -4,15 +4,15 @@
 
 #include "hornetlib/encoding/reader.h"
 #include "hornetlib/encoding/writer.h"
-#include "hornetlib/message/visitor.h"
 #include "hornetlib/protocol/inventory.h"
 #include "hornetlib/protocol/message.h"
+#include "hornetlib/protocol/message_handler.h"
 
-namespace hornet::message {
+namespace hornet::protocol::message {
 
-class GetData : public protocol::Message {
+class GetData : public Message {
  public:
-  void AddInventory(const protocol::Inventory& inv) {
+  void AddInventory(const Inventory& inv) {
     inventory_.push_back(inv);
   }
 
@@ -20,24 +20,24 @@ class GetData : public protocol::Message {
     return "getdata";
   }
 
-  virtual void Accept(message::Visitor& v) const override {
-    v.Visit(*this);
+  virtual void Notify(MessageHandler& handler) const override {
+    handler.OnMessage(*this);
   }
 
   virtual void Serialize(encoding::Writer& writer) const override {
     writer.WriteVarInt(inventory_.size());
     for (const auto& inv : inventory_)
-      protocol::Inventory::Transfer(writer, inv);
+      Inventory::Transfer(writer, inv);
   }
 
   virtual void Deserialize(encoding::Reader& reader) override {
     inventory_.resize(reader.ReadVarInt<size_t>());
     for (auto& inv : inventory_)
-      protocol::Inventory::Transfer(reader, inv);
+      Inventory::Transfer(reader, inv);
   }
 
  private:
-  std::vector<protocol::Inventory> inventory_;
+  std::vector<Inventory> inventory_;
 };
 
-}  // namespace hornet::message
+}  // namespace hornet::protocol::message

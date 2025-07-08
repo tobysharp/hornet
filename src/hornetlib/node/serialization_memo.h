@@ -10,24 +10,24 @@
 #include <optional>
 #include <vector>
 
-#include "hornetlib/node/outbound_message.h"
 #include "hornetlib/protocol/constants.h"
 #include "hornetlib/protocol/framer.h"
+#include "hornetlib/protocol/message.h"
 
 namespace hornet::node {
 
 class SerializationMemo {
  public:
-  SerializationMemo(OutboundMessage&& message) : message_(std::move(message)) {}
+  SerializationMemo(std::unique_ptr<protocol::Message> message) : message_(std::move(message)) {}
   SerializationMemo(const SerializationMemo&) = delete;
   SerializationMemo(SerializationMemo&& rhs)
       : message_(std::move(rhs.message_)), serialized_(std::move(rhs.serialized_)) {}
   SerializationMemo(const SerializationMemo&&) = delete;
 
-  std::shared_ptr<const std::vector<uint8_t>> GetSerializedBuffer(protocol::Magic magic) const {
+  std::shared_ptr<const std::vector<uint8_t>> GetSerializedBuffer(protocol::Magic magic = protocol::Magic::Main) const {
     std::lock_guard lock(serialize_mutex_);
     if (!serialized_ && message_) {
-      const auto buffer = protocol::Framer::FrameToBuffer(magic, message_->GetMessage());
+      const auto buffer = protocol::Framer::FrameToBuffer(magic, *message_);
       serialized_ = std::make_shared<const std::vector<uint8_t>>(std::move(buffer));
       message_.reset();
     }
@@ -43,7 +43,7 @@ class SerializationMemo {
   }
 
  private:
-  mutable std::optional<OutboundMessage> message_;
+  mutable std::unique_ptr<protocol::Message> message_;
   mutable std::shared_ptr<const std::vector<uint8_t>> serialized_;
   mutable std::mutex serialize_mutex_;
 };

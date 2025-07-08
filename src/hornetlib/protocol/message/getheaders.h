@@ -7,15 +7,15 @@
 #include "hornetlib/crypto/hash.h"
 #include "hornetlib/encoding/reader.h"
 #include "hornetlib/encoding/writer.h"
-#include "hornetlib/message/visitor.h"
 #include "hornetlib/protocol/constants.h"
 #include "hornetlib/protocol/message.h"
+#include "hornetlib/protocol/message_handler.h"
 
-namespace hornet::message {
+namespace hornet::protocol::message {
 
-class GetHeaders : public protocol::Message {
+class GetHeaders : public Message {
  public:
-  GetHeaders() : version_(protocol::kCurrentVersion) {}
+  GetHeaders() : version_(kCurrentVersion) {}
   explicit GetHeaders(int version) : version_(version) {}
   GetHeaders(const GetHeaders&) = default;
   GetHeaders(GetHeaders&&) = default;
@@ -51,8 +51,8 @@ class GetHeaders : public protocol::Message {
     r.ReadBytes(stop_hash_);
   }
 
-  virtual void Accept(message::Visitor& v) const override {
-    v.Visit(*this);
+  virtual void Notify(MessageHandler& handler) const override {
+    handler.OnMessage(*this);
   }
 
  private:
@@ -61,4 +61,4 @@ class GetHeaders : public protocol::Message {
   crypto::bytes32_t stop_hash_ = {};
 };
 
-}  // namespace hornet::message
+}  // namespace hornet::protocol::message

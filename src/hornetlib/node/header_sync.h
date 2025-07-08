@@ -11,12 +11,12 @@
 #include "hornetlib/consensus/validator.h"
 #include "hornetlib/data/header_context.h"
 #include "hornetlib/data/header_timechain.h"
-#include "hornetlib/message/getheaders.h"
-#include "hornetlib/message/headers.h"
 #include "hornetlib/net/peer.h"
 #include "hornetlib/node/sync_handler.h"
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/hash.h"
+#include "hornetlib/protocol/message/getheaders.h"
+#include "hornetlib/protocol/message/headers.h"
 #include "hornetlib/util/thread_safe_queue.h"
 
 namespace hornet::node {
@@ -34,10 +34,10 @@ class HeaderSync {
   }
 
   // Begins downloading and validating headers from a given peer.
-  void StartSync(net::PeerId id);
+  void StartSync(net::WeakPeer id);
 
   // Queues a headers message received from a peer for validation.
-  void OnHeaders(net::PeerId peer, const message::Headers& message);
+  void OnHeaders(net::WeakPeer peer, const protocol::message::Headers& message);
 
   // Returns true if there is validation work to be done.
   bool HasPendingWork() const {
@@ -48,7 +48,7 @@ class HeaderSync {
   using Batch = std::vector<protocol::BlockHeader>;
 
   struct Item {
-    net::PeerId peer;
+    net::WeakPeer weak_peer;
     Batch batch;
   };
 
@@ -56,7 +56,7 @@ class HeaderSync {
   void Process();
 
   // Requests more headers via the callback supplied in RegisterPeer.
-  void RequestHeadersFrom(net::PeerId id, const protocol::Hash& previous);
+  bool RequestHeadersFrom(net::WeakPeer id, const protocol::Hash& previous);
 
   // Calls error handler and deletes peer's other queued items.
   void HandleError(const Item& item, const protocol::BlockHeader& header,
@@ -85,26 +85,31 @@ inline HeaderSync::~HeaderSync() {
 }
 
 // Requests more headers via the callback supplied in RegisterPeer.
-inline void HeaderSync::RequestHeadersFrom(net::PeerId id, const protocol::Hash& previous) {
+inline bool HeaderSync::RequestHeadersFrom(net::WeakPeer weak_peer, const protocol::Hash& previous) {
   if (queue_.Size() < max_queue_items_) {
     if (!send_blocked_.test_and_set(std::memory_order_acquire)) {
-      const auto peer = net::Peer::FromId(id);
+      const auto peer = weak_peer.lock();
       const int version = peer ? peer->GetCapabilities().GetVersion() : protocol::kCurrentVersion;
-      message::GetHeaders getheaders{version};
+      protocol::message::GetHeaders getheaders{version};
       getheaders.AddLocatorHash(previous);
-      handler_.OnRequest(peer, std::make_unique<message::GetHeaders>(std::move(getheaders)));
+      bool ok = handler_.OnRequest(peer, std::make_unique<protocol::message::GetHeaders>(std::move(getheaders)));
+      if (!ok)
+        send_blocked_.clear();
+      return ok;
     }
   }
+  return false;
 }
 
   // Begins downloading and validating headers from a given peer.
-inline void HeaderSync::StartSync(net::PeerId id) {
+inline void HeaderSync::StartSync(net::WeakPeer peer) {
   send_blocked_.clear(std::memory_order::release);
-  RequestHeadersFrom(id, timechain_.HeaviestTip().second->hash);
+  if (!RequestHeadersFrom(peer, timechain_.HeaviestTip().second->hash))
+    handler_.OnComplete(peer);  // No headers will ever reach the queue.
 }
 
 // Queues a headers message received from a peer for validation.
-inline void HeaderSync::OnHeaders(net::PeerId peer, const message::Headers& message) {
+inline void HeaderSync::OnHeaders(net::WeakPeer peer, const protocol::message::Headers& message) {
   Assert(send_blocked_.test());
   const auto& headers = message.GetBlockHeaders();
 
@@ -125,7 +130,7 @@ inline void HeaderSync::Process() {
       // As soon as we pop from the queue, request new headers if appropriate.
       const auto& last_item = queue_.Empty() ? *item : queue_.Back();
       if (IsFullBatch(last_item.batch))
-        RequestHeadersFrom(item->peer, last_item.batch.back().ComputeHash());
+        RequestHeadersFrom(item->weak_peer, last_item.batch.back().ComputeHash());
 
       // Locates the parent of this header in the timechain.
       auto [parent_iterator, parent_context] = timechain_.Find(item->batch[0].GetPreviousBlockHash());
@@ -158,7 +163,7 @@ inline void HeaderSync::Process() {
 
     // Notify if the sync is complete.
     if (!IsFullBatch(item->batch)) {
-      handler_.OnComplete(item->peer);
+      handler_.OnComplete(item->weak_peer);
     }
   }
 }
@@ -168,8 +173,8 @@ inline void HeaderSync::HandleError(const Item& item, const protocol::BlockHeade
                                     consensus::HeaderError error) {
   std::ostringstream oss;
   oss << "Header validation error code " << static_cast<int>(error) << ".";
-  handler_.OnError(item.peer, oss.str());
-  queue_.EraseIf([&](const Item& queued) { return net::Peer::IsSame(item.peer, queued.peer); });
+  handler_.OnError(item.weak_peer, oss.str());
+  queue_.EraseIf([&](const Item& queued) { return item.weak_peer == queued.weak_peer; });
 }
 
 }  // namespace hornet::node

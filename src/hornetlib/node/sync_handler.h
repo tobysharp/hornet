@@ -15,9 +15,9 @@ namespace hornet::node {
 class SyncHandler {
  public:
   virtual ~SyncHandler() = default;
-  virtual void OnRequest(net::PeerId peer, std::unique_ptr<const protocol::Message> message) = 0;
-  virtual void OnError(net::PeerId id, std::string_view error) = 0;
-  virtual void OnComplete(net::PeerId id) = 0;
+  virtual bool OnRequest(net::WeakPeer peer, std::unique_ptr<protocol::Message> message) = 0;
+  virtual void OnError(net::WeakPeer peer, std::string_view error) = 0;
+  virtual void OnComplete(net::WeakPeer peer) = 0;
 };
 
 }  // namespace hornet::node

@@ -9,10 +9,9 @@
 #include <stdexcept>
 
 #include "hornetlib/net/socket.h"
-#include "hornetlib/message/registry.h"
 #include "hornetlib/protocol/constants.h"
 #include "hornetlib/protocol/dispatch.h"
-#include "hornetlib/protocol/factory.h"
+#include "hornetlib/protocol/message_factory.h"
 
 namespace hornet::net {
 
@@ -29,7 +28,7 @@ std::unique_ptr<T> ReceiveMessage(const Socket& sock, protocol::Magic magic) {
   if (*reinterpret_cast<const protocol::Magic*>(&buf[0]) != magic)
     throw std::runtime_error("Received incorrect magic bytes.");
 
-  const auto factory = message::CreateMessageFactory();
+  const auto& factory = protocol::MessageFactory::Default();
   return protocol::ParseMessage<T>(factory, magic, {buf.data(), *length});
 }
 

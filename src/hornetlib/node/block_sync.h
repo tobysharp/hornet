@@ -5,9 +5,9 @@
 #pragma once
 
 #include "hornetlib/data/timechain.h"
-#include "hornetlib/message/getdata.h"
 #include "hornetlib/net/peer.h"
 #include "hornetlib/node/sync_handler.h"
+#include "hornetlib/protocol/message/getdata.h"
 
 namespace hornet::node {
 
@@ -16,18 +16,18 @@ class BlockSync {
   BlockSync(data::Timechain& timechain, SyncHandler& handler)
       : timechain_(timechain), handler_(handler) {}
 
-  void StartSync(net::PeerId id);
+  void StartSync(net::WeakPeer peer);
 
  protected:
   data::Timechain& timechain_;
   SyncHandler& handler_;
 };
 
-inline void BlockSync::StartSync(net::PeerId id) {
+inline void BlockSync::StartSync(net::WeakPeer peer) {
   const protocol::Hash& hash = timechain_.Headers().HeaviestChain().GetHash(0);
-  message::GetData getdata;
+  protocol::message::GetData getdata;
   getdata.AddInventory(protocol::Inventory::WitnessBlock(hash));
-  handler_.OnRequest(id, std::make_unique<message::GetData>(std::move(getdata)));
+  handler_.OnRequest(peer, std::make_unique<protocol::message::GetData>(std::move(getdata)));
 }
 
 }  // namespace hornet::node

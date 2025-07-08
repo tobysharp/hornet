@@ -8,30 +8,30 @@
 #include <string_view>
 
 #include "hornetlib/data/timechain.h"
-#include "hornetlib/message/getheaders.h"
-#include "hornetlib/message/headers.h"
-#include "hornetlib/message/verack.h"
+#include "hornetlib/net/peer_registry.h"
 #include "hornetlib/node/block_sync.h"
 #include "hornetlib/node/broadcaster.h"
+#include "hornetlib/node/event_handler.h"
 #include "hornetlib/node/header_sync.h"
-#include "hornetlib/node/inbound_handler.h"
 #include "hornetlib/node/sync_handler.h"
 #include "hornetlib/protocol/constants.h"
+#include "hornetlib/protocol/message/getheaders.h"
+#include "hornetlib/protocol/message/headers.h"
+#include "hornetlib/protocol/message/verack.h"
 
 namespace hornet::node {
 
 // Class for managing initial block download
-class SyncManager : public InboundHandler {
+class SyncManager : public EventHandler {
  public:
-  SyncManager(data::Timechain& timechain, Broadcaster& broadcaster)
-      : InboundHandler(&broadcaster),
-        header_sync_(timechain.Headers(), header_sync_handler_),
+  SyncManager(data::Timechain& timechain)
+      : header_sync_(timechain.Headers(), header_sync_handler_),
         block_sync_(timechain, block_sync_handler_) {}
   SyncManager() = delete;
 
-  void OnHandshakeCompleted(std::shared_ptr<net::Peer> peer) {
+  void OnHandshakeCompleted(net::WeakPeer peer) {
     {
-      const std::shared_ptr<net::Peer> sync = sync_.lock();
+      const net::SharedPeer sync = sync_.lock();
       if (sync && !sync->IsDropped()) return;  // We already have a sync peer
     }
     // Adopt a new peer to use for timechain sync requests
@@ -41,17 +41,20 @@ class SyncManager : public InboundHandler {
     header_sync_.StartSync(sync_);
   }
 
-  virtual void Visit(const message::Verack&) override {
-    if (GetPeer()->GetHandshake().IsComplete()) OnHandshakeCompleted(GetPeer());
+  virtual void OnMessage(const protocol::message::Verack& message) override {
+    if (const auto peer = GetPeer(message)) {
+      if (peer->GetHandshake().IsComplete()) 
+        OnHandshakeCompleted(peer);
+    }
   }
 
-  virtual void Visit(const message::Headers& headers) override {
+  virtual void OnMessage(const protocol::message::Headers& headers) override {
     // TODO: [HOR-20: Request tracking]
     // (https://linear.app/hornet-node/issue/HOR-20/request-tracking)
-    if (!IsSyncPeer()) return;
+    if (!IsSyncPeer(headers)) return;
 
     // Pass the headers message to the HeaderSync object.
-    header_sync_.OnHeaders(GetSync(), headers);
+    header_sync_.OnHeaders(sync_, headers);
   }
 
   const HeaderSync& GetHeaderSync() const {
@@ -60,16 +63,20 @@ class SyncManager : public InboundHandler {
 
  protected:
   // Called by HeaderSync or BlockSync when a validation occurred. Drops the sync peer.
-  void OnSyncError(net::PeerId id, std::string_view error) {
+  void OnSyncError(net::WeakPeer weak, std::string_view error) {
     LogWarn() << error;
-    if (auto peer = net::Peer::FromId(id)) peer->Drop();
+    if (const auto peer = weak.lock()) peer->Drop();
   }
-  void OnSyncRequest(net::PeerId id, std::unique_ptr<const protocol::Message> message) {
-    if (auto peer = net::Peer::FromId(id)) broadcaster_->SendMessage(peer, std::move(message));
+  virtual bool OnSyncRequest(net::WeakPeer weak, std::unique_ptr<protocol::Message> message) {
+    if (const auto peer = weak.lock()) {
+      broadcaster_->SendMessage(peer, std::move(message));
+      return true;
+    }
+    return false;
   }
   // Called by HeaderSync when a peer's header validation is up-to-date.
-  void OnHeaderSyncComplete(net::PeerId id) {
-    Assert(net::Peer::IsSame(id, sync_));
+  virtual void OnHeaderSyncComplete(net::WeakPeer weak) {
+    Assert(weak == sync_);
     // TODO: When we support multiple peers, this will be called when each peer finishes
     // syncing its headers. At this point, we can store the cumulative work on the heaviest
     // chain with the peer, so that we track how much work each peer is advertising.
@@ -83,21 +90,21 @@ class SyncManager : public InboundHandler {
     //
     // Since we are deferring the implementation of multiple peers, we will return here
     // later to implement the above logic. For now, we just move on to block sync.
-    block_sync_.StartSync(id);
+    block_sync_.StartSync(weak);
   }
 
   class HeaderSyncHandler final : public node::SyncHandler {
    public:
     HeaderSyncHandler(SyncManager& manager) : manager_(manager) {}
-    virtual void OnComplete(net::PeerId id) override {
-      manager_.OnHeaderSyncComplete(id);
+    virtual void OnComplete(net::WeakPeer peer) override {
+      manager_.OnHeaderSyncComplete(peer);
     }
-    virtual void OnRequest(net::PeerId id,
-                           std::unique_ptr<const protocol::Message> message) override {
-      manager_.OnSyncRequest(id, std::move(message));
+    virtual bool OnRequest(net::WeakPeer peer,
+                           std::unique_ptr<protocol::Message> message) override {
+      return manager_.OnSyncRequest(peer, std::move(message));
     }
-    virtual void OnError(net::PeerId id, std::string_view error) override {
-      manager_.OnSyncError(id, error);
+    virtual void OnError(net::WeakPeer peer, std::string_view error) override {
+      manager_.OnSyncError(peer, error);
     }
 
    private:
@@ -107,13 +114,13 @@ class SyncManager : public InboundHandler {
   class BlockSyncHandler final : public node::SyncHandler {
    public:
     BlockSyncHandler(SyncManager& manager) : manager_(manager) {}
-    virtual void OnComplete(net::PeerId) override {}
-    virtual void OnRequest(net::PeerId id,
-                           std::unique_ptr<const protocol::Message> message) override {
-      manager_.OnSyncRequest(id, std::move(message));
+    virtual void OnComplete(net::WeakPeer) override {}
+    virtual bool OnRequest(net::WeakPeer peer,
+                           std::unique_ptr<protocol::Message> message) override {
+      return manager_.OnSyncRequest(peer, std::move(message));
     }
-    virtual void OnError(net::PeerId id, std::string_view error) override {
-      manager_.OnSyncError(id, error);
+    virtual void OnError(net::WeakPeer peer, std::string_view error) override {
+      manager_.OnSyncError(peer, error);
     }
 
    private:
@@ -121,12 +128,12 @@ class SyncManager : public InboundHandler {
   } block_sync_handler_ = *this;
 
  private:
-  std::shared_ptr<net::Peer> GetSync() const {
+  net::SharedPeer GetSync() const {
     return sync_.lock();
   }
-  bool IsSyncPeer() const {
+  bool IsSyncPeer(const protocol::Message& message) const {
     const auto sync = GetSync();
-    return sync && (sync == GetPeer());
+    return sync && (sync == GetPeer(message));
   }
   template <typename T, typename... Args>
   void Send(Args&&... args) {
@@ -139,7 +146,7 @@ class SyncManager : public InboundHandler {
       broadcaster_->SendMessage<T>(sync, std::make_unique<T>(std::forward<T>(msg)));
   }
 
-  std::weak_ptr<net::Peer> sync_;  // The peer used for timechain synchronization requests.
+  net::WeakPeer sync_;  // The peer used for timechain synchronization requests.
   HeaderSync header_sync_;
   BlockSync block_sync_;
 };

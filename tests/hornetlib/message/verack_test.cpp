@@ -2,26 +2,15 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "hornetlib/message/verack.h"
+#include "hornetlib/protocol/message/verack.h"
 
 #include <array>
 
-#include "hornetlib/message/registry.h"
-#include "hornetlib/message/version.h"
-#include "hornetlib/net/bitcoind.h"
-#include "hornetlib/net/connection.h"
-#include "hornetlib/net/constants.h"
-#include "hornetlib/net/receive.h"
-#include "hornetlib/net/socket.h"
-#include "hornetlib/protocol/constants.h"
-#include "hornetlib/protocol/dispatch.h"
-#include "hornetlib/protocol/factory.h"
-#include "hornetlib/protocol/framer.h"
-#include "hornetlib/protocol/parser.h"
+#include "hornetlib/encoding/writer.h"
 
 #include <gtest/gtest.h>
 
-namespace hornet::message {
+namespace hornet::protocol::message {
 namespace {
 
 TEST(VerackMessageTest, TestVerack) {
@@ -34,4 +23,4 @@ TEST(VerackMessageTest, TestVerack) {
 }
 
 }  // namespace
-}  // namespace hornet::message
+}  // namespace hornet::protocol::message

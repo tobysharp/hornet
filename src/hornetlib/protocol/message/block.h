@@ -2,20 +2,20 @@
 
 #include <string>
 
-#include "hornetlib/message/visitor.h"
 #include "hornetlib/protocol/block.h"
-#include "hornetlib/protocol/message.h"
 #include "hornetlib/protocol/transaction.h"
+#include "hornetlib/protocol/message.h"
+#include "hornetlib/protocol/message_handler.h"
 
-namespace hornet::message {
+namespace hornet::protocol::message {
 
-class Block : public protocol::Message {
+class Block : public Message {
  public:
   virtual std::string GetName() const override {
     return "block";
   }
-  virtual void Accept(Visitor& visitor) const override {
-    visitor.Visit(*this);
+  virtual void Notify(MessageHandler& handler) const override {
+    handler.OnMessage(*this);
   }
   virtual void Serialize(encoding::Writer& writer) const override {
     block_.Serialize(writer);
@@ -28,4 +28,4 @@ class Block : public protocol::Message {
   protocol::Block block_;
 };
 
-}  // namespace hornet::message
+}  // namespace hornet::protocol::message

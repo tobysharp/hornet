@@ -6,6 +6,7 @@
 
 #include <ostream>
 #include <string>
+#include <sstream>
 #include <stdexcept>
 
 #include "hornetlib/util/assert.h"
@@ -21,19 +22,16 @@ inline std::string ToString(const Args&... args) {
 
 template <typename... Args>
 [[noreturn]] inline void ThrowRuntimeError(const Args&... args) {
-    Assert(false);
     throw std::runtime_error{ToString(args...)};
 }
 
 template <typename... Args>
 [[noreturn]] inline void ThrowOutOfRange(const Args&... args) {
-    Assert(false);
     throw std::out_of_range{ToString(args...)};
 }
 
 template <typename... Args>
 [[noreturn]] inline void ThrowInvalidArgument(const Args&... args) {
-    Assert(false);
     throw std::invalid_argument{ToString(args...)};
 }
 

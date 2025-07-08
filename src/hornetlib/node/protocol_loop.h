@@ -8,67 +8,73 @@
 #include <deque>
 #include <optional>
 #include <queue>
+#include <vector>
 
 #include "hornetlib/data/timechain.h"
 #include "hornetlib/net/peer.h"
+#include "hornetlib/net/peer_registry.h"
 #include "hornetlib/net/peer_manager.h"
 #include "hornetlib/node/broadcaster.h"
-#include "hornetlib/node/inbound_message.h"
-#include "hornetlib/node/outbound_message.h"
-#include "hornetlib/node/processor.h"
+#include "hornetlib/node/event_handler.h"
 #include "hornetlib/node/serialization_memo.h"
-#include "hornetlib/node/sync_manager.h"
 #include "hornetlib/protocol/constants.h"
-#include "hornetlib/protocol/factory.h"
 #include "hornetlib/util/timeout.h"
 
 namespace hornet::node {
 
-class Engine : public Broadcaster {
+class ProtocolLoop : public Broadcaster {
  public:
   struct BreakOnTimeout {
     BreakOnTimeout(int timeout_ms = 0) : timeout_(timeout_ms) {}
-    bool operator()(const Engine&) const { return timeout_.IsExpired(); }
+    bool operator()(const ProtocolLoop&) const { return timeout_.IsExpired(); }
     util::Timeout timeout_;
   };
-  using BreakCondition = std::function<bool(const Engine&)>;
+  using BreakCondition = std::function<bool(const ProtocolLoop&)>;
  
-  Engine(data::Timechain& timechain, protocol::Magic magic = protocol::Magic::Main);
+  ProtocolLoop(net::PeerManager& peers) : peers_(peers) {}
+
+  void AddEventHandler(EventHandler* handler) {
+    Assert(handler != nullptr);
+    handler->SetBroadcaster(*this);
+    handler->SetPeerRegistry(peers_.GetRegistry());
+    event_handlers_.push_back(handler);
+  }
+  
+  std::shared_ptr<net::Peer> AddOutboundPeer(const std::string& host, uint16_t port);
+
   void RunMessageLoop(BreakCondition condition = BreakOnTimeout{});
 
   void Abort() {
     abort_ = true;
   }
 
-  const SyncManager& GetSyncManager() const { return *sync_manager_; }
-
-  std::shared_ptr<net::Peer> AddOutboundPeer(const std::string& host, uint16_t port);
-
-  virtual void SendToOne(const std::shared_ptr<net::Peer>& peer, OutboundMessage&& msg) override;
-  virtual void SendToAll(OutboundMessage&& msg) override;
+  virtual void SendToOne(std::shared_ptr<net::Peer> peer, std::unique_ptr<protocol::Message> message) override;
+  virtual void SendToAll(std::unique_ptr<protocol::Message> message) override;
 
  private:
-  using Inbox = std::queue<InboundMessage>;
-  using OutboundMessageQueue = std::deque<SerializationMemoPtr>;
-  using Outbox = std::map<PeerPtr, OutboundMessageQueue, std::owner_less<PeerPtr>>;
+  using Inbox = std::queue<std::unique_ptr<protocol::Message>>;
+  using SharedOutboundMessage = std::shared_ptr<SerializationMemo>;
+  using OutboundMessageQueue = std::deque<SharedOutboundMessage>;
+  using OutboxKey = std::weak_ptr<net::Peer>;
+  using OutboxCompare = std::owner_less<OutboxKey>;
+  using Outbox = std::map<OutboxKey, OutboundMessageQueue, OutboxCompare>;
 
-  void ReadSocketsToBuffers(net::PeerManager& peers, std::queue<PeerPtr>& peers_for_parsing);
-  void ParseBuffersToMessages(std::queue<PeerPtr>& peers_for_parsing, Inbox& inbox);
-  void ProcessMessages(Inbox& inbox);
+  void ReadToInbox();
+  void WriteFromOutbox();
+  void NotifyLoop();
+  void ReadSocketsToBuffers(net::PeerManager& peers, std::queue<net::WeakPeer>& peers_for_parsing);
+  void ParseBuffersToMessages(std::queue<net::WeakPeer>& peers_for_parsing, Inbox& inbox);
+  void ProcessMessages();
   void FrameMessagesToBuffers(Outbox& outbox);
   void WriteBuffersToSockets(net::PeerManager& peers);
   void ManagePeers(net::PeerManager& peers);
 
-  data::Timechain& timechain_;
-  protocol::Magic magic_;
-  net::PeerManager peers_;
+  net::PeerManager& peers_;
   std::atomic<bool> abort_ = false;
-  std::queue<PeerPtr> peers_for_parsing_;
-  protocol::Factory factory_;
+  std::queue<net::WeakPeer> peers_for_parsing_;
   Inbox inbox_;
-  std::optional<Processor> processor_;
   Outbox outbox_;
-  std::optional<SyncManager> sync_manager_;
+  std::vector<EventHandler*> event_handlers_;
 
   // The maximum number of milliseconds to wait per loop iteration for data to arrive.
   // Smaller values lead to more spinning in the message loop during inactivity, while

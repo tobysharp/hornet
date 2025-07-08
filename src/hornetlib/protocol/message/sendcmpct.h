@@ -7,19 +7,19 @@
 #include "hornetlib/encoding/reader.h"
 #include "hornetlib/encoding/writer.h"
 #include "hornetlib/protocol/message.h"
-#include "hornetlib/message/visitor.h"
+#include "hornetlib/protocol/message_handler.h"
 
-namespace hornet::message {
+namespace hornet::protocol::message {
 
-class SendCompact : public protocol::Message {
+class SendCompact : public Message {
  public:
   bool IsCompact() const { return flag_; }
   int GetVersion() const { return version_; }
   virtual std::string GetName() const override {
     return "sendcmpct";
   }
-  virtual void Accept(Visitor& v) const override {
-    v.Visit(*this);
+  virtual void Notify(MessageHandler& handler) const override {
+    handler.OnMessage(*this);
   }
   virtual void Serialize(encoding::Writer& w) const override {
     w.WriteBool(flag_);
@@ -34,4 +34,4 @@ class SendCompact : public protocol::Message {
   int version_ = 1;
 };
 
-}  // namespace hornet::message
+}  // namespace hornet::protocol::message

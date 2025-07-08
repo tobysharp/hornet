@@ -16,54 +16,92 @@
 namespace hornet::net {
 
 class Peer;
-using PeerPtr = std::shared_ptr<Peer>;
-using PeerId = std::weak_ptr<Peer>;
+using SharedPeer = std::shared_ptr<Peer>;
+using WeakPeer = std::weak_ptr<Peer>;
+using PeerId = uint64_t;
 
 class Peer {
-  public:
+ public:
+  enum class Direction { Inbound, Outbound };
+
   Peer(const std::string& host, uint16_t port)
-      : conn_(host, port), address_(host), handshake_(protocol::Handshake::Role::Outbound) {}
-  Peer(Connection conn, std::string address)
-      : conn_(std::move(conn)), address_(std::move(address)), handshake_(protocol::Handshake::Role::Outbound) {}
+      : id_(0), conn_(host, port),
+        direction_(Direction::Outbound),
+        address_(host),
+        handshake_(protocol::Handshake::Role::Outbound) {}
+  // Peer(Connection conn, std::string address)
+  //     : conn_(std::move(conn)),
+  //       direction_(Direction::Outbound),
+  //       address_(std::move(address)),
+  //       handshake_(protocol::Handshake::Role::Outbound) {}
 
-  static std::shared_ptr<Peer> FromId(PeerId id) {
-    // If in the future we change PeerId to an integer type for persistence, then we can replace this
-    // call to std::weak_ptr::lock with one like PeerManager::Instance().Lookup(id) etc.
-    return id.lock();
-  }
-
-  static bool IsSame(PeerId a, PeerId b) {
-    const auto pa = FromId(a);
-    const auto pb = FromId(b);
-    return (pa || pb) && (pa == pb);
+  PeerId GetId() const {
+    return id_;
   }
 
   bool IsDropped() const {
     return !conn_.GetSocket().IsOpen();
   }
 
-  const std::string& Address() const { return address_; }
-  Connection& GetConnection() { return conn_; }
-  const Connection& GetConnection() const { return conn_; }
+  const std::string& Address() const {
+    return address_;
+  }
+  Connection& GetConnection() {
+    return conn_;
+  }
+  const Connection& GetConnection() const {
+    return conn_;
+  }
 
-  protocol::Handshake& GetHandshake() { return handshake_; }
+  Direction GetDirection() const {
+    return direction_;
+  }
+  bool IsInbound() const {
+    return direction_ == Direction::Inbound;
+  }
+  bool IsOutbound() const {
+    return direction_ == Direction::Outbound;
+  }
 
-  protocol::Capabilities& GetCapabilities() { return capabilities_; }
-  const protocol::Capabilities& GetCapabilities() const { return capabilities_; }
+  protocol::Handshake& GetHandshake() {
+    return handshake_;
+  }
+
+  protocol::Capabilities& GetCapabilities() {
+    return capabilities_;
+  }
+  const protocol::Capabilities& GetCapabilities() const {
+    return capabilities_;
+  }
 
   void Drop() {
     conn_.Drop();
   }
 
-  friend std::ostream& operator <<(std::ostream& os, const Peer& peer) {
+  friend std::ostream& operator<<(std::ostream& os, const Peer& peer) {
     return os << "{ fd = " << peer.conn_.GetSocket().GetFD() << " }";
   }
+
  private:
+  friend class PeerRegistry;
+  
+  void SetId(PeerId id) {
+    id_ = id;
+  }
+
+  PeerId id_;
   Connection conn_;
+  Direction direction_;
   std::string address_;
   protocol::Handshake handshake_;
   protocol::Capabilities capabilities_;
 };
+
+inline bool operator==(WeakPeer a, WeakPeer b) {
+  const auto sa = a.lock();
+  const auto sb = b.lock();
+  return (sa || sb) && (sa == sb);
+}
 
 }  // namespace hornet::net
 
