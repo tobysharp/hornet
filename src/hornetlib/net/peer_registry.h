@@ -13,22 +13,12 @@
 
 namespace hornet::net {
 
+class PeerManager;
+
 class PeerRegistry final {
+  friend class PeerManager;
+
  public:
-  PeerId RegisterPeer(SharedPeer peer) {
-    std::scoped_lock lock(mutex_);
-    const uint64_t id = next_session_++;
-    map_[id] = peer;    
-    peer->SetId(id);
-    return id;
-  }
-
-  void UnregisterPeer(PeerId id) {
-    std::scoped_lock lock(mutex_);
-    if (const auto it = map_.find(id); it != map_.end())
-      map_.erase(it);
-  }
-
   SharedPeer FromId(PeerId id) const {
     std::scoped_lock lock(mutex_);
     const auto it = map_.find(id);
@@ -43,6 +33,20 @@ class PeerRegistry final {
   }
 
  private:
+  PeerId RegisterPeer(SharedPeer peer) {
+    std::scoped_lock lock(mutex_);
+    const uint64_t id = next_session_++;
+    map_[id] = peer;    
+    peer->SetId(id);
+    return id;
+  }
+
+  void UnregisterPeer(PeerId id) {
+    std::scoped_lock lock(mutex_);
+    if (const auto it = map_.find(id); it != map_.end())
+      map_.erase(it);
+  }  
+  
   uint64_t next_session_ = 1;
   std::unordered_map<PeerId, SharedPeer> map_;
   mutable std::mutex mutex_;
