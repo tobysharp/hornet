@@ -29,7 +29,7 @@ class SyncManager : public EventHandler {
         block_sync_(timechain, block_sync_handler_) {}
   SyncManager() = delete;
 
-  void OnHandshakeCompleted(net::WeakPeer peer) {
+  virtual void OnHandshakeComplete(net::SharedPeer peer) override  {
     {
       const net::SharedPeer sync = sync_.lock();
       if (sync && !sync->IsDropped()) return;  // We already have a sync peer
@@ -39,13 +39,6 @@ class SyncManager : public EventHandler {
 
     // Send a message requesting headers (example only).
     header_sync_.StartSync(sync_);
-  }
-
-  virtual void OnMessage(const protocol::message::Verack& message) override {
-    if (const auto peer = GetPeer(message)) {
-      if (peer->GetHandshake().IsComplete()) 
-        OnHandshakeCompleted(peer);
-    }
   }
 
   virtual void OnMessage(const protocol::message::Headers& headers) override {

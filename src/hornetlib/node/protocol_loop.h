@@ -8,6 +8,7 @@
 #include <deque>
 #include <optional>
 #include <queue>
+#include <unordered_set>
 #include <vector>
 
 #include "hornetlib/data/timechain.h"
@@ -61,13 +62,15 @@ class ProtocolLoop : public Broadcaster {
 
   void ReadToInbox();
   void WriteFromOutbox();
+  void NotifyEvents();
+  void NotifyHandshake();
   void NotifyLoop();
   void ReadSocketsToBuffers(net::PeerManager& peers, std::queue<net::WeakPeer>& peers_for_parsing);
   void ParseBuffersToMessages(std::queue<net::WeakPeer>& peers_for_parsing, Inbox& inbox);
   void ProcessMessages();
   void FrameMessagesToBuffers(Outbox& outbox);
   void WriteBuffersToSockets(net::PeerManager& peers);
-  void ManagePeers(net::PeerManager& peers);
+  void ManagePeers();
 
   net::PeerManager& peers_;
   std::atomic<bool> abort_ = false;
@@ -75,6 +78,7 @@ class ProtocolLoop : public Broadcaster {
   Inbox inbox_;
   Outbox outbox_;
   std::vector<EventHandler*> event_handlers_;
+  std::unordered_set<net::PeerId> handshake_complete_;
 
   // The maximum number of milliseconds to wait per loop iteration for data to arrive.
   // Smaller values lead to more spinning in the message loop during inactivity, while

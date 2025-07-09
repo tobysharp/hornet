@@ -59,12 +59,8 @@ class NoHeadersSyncManager : public SyncManager {
   virtual bool OnSyncRequest(net::WeakPeer weak, std::unique_ptr<protocol::Message> message) override {
     if (message->GetName() == "getheaders")
         return false;
-    return SyncManager::OnSyncRequest(weak, std::move(message));
-  }
-
-  virtual void OnHeaderSyncComplete(net::WeakPeer weak) override {
-    SyncManager::OnHeaderSyncComplete(weak);
     done_ = true;
+    return SyncManager::OnSyncRequest(weak, std::move(message));
   }
 
   bool done_ = false;

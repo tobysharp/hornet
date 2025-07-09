@@ -32,7 +32,7 @@ class PeerNegotiator : public EventHandler {
  public:
   PeerNegotiator() = default;
 
-  virtual void OnPeerConnect(net::WeakPeer weak) override;
+  virtual void OnPeerConnect(net::SharedPeer weak) override;
   virtual void OnLoop(net::PeerManager& manager) override;
 
   // Message handlers

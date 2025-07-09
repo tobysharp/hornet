@@ -58,9 +58,8 @@ void PeerNegotiator::OnMessage(const protocol::message::Version& v) {
 }
 
 // Sets the Handshake state machine into the Start state, ready to begin negotiation.
-void PeerNegotiator::OnPeerConnect(net::WeakPeer weak) {
-  if (const auto peer = weak.lock())
-    AdvanceHandshake(peer, protocol::Handshake::Transition::Begin);
+void PeerNegotiator::OnPeerConnect(net::SharedPeer peer) {
+  AdvanceHandshake(peer, protocol::Handshake::Transition::Begin);
 }
 
 void PeerNegotiator::OnLoop(net::PeerManager& manager) {

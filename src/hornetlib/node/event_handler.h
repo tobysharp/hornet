@@ -29,8 +29,9 @@ class EventHandler : public protocol::MessageHandler {
     registry_ = &registry;
   }
 
-  virtual void OnPeerConnect(net::WeakPeer) {}
-  virtual void OnPeerDisconnect(net::WeakPeer) {}
+  virtual void OnPeerConnect(net::SharedPeer) {}
+  virtual void OnPeerDisconnect(net::SharedPeer) {}
+  virtual void OnHandshakeComplete(net::SharedPeer) {}
   virtual void OnLoop(net::PeerManager&) {}
 
  protected:

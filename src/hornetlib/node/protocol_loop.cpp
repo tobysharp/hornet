@@ -53,13 +53,10 @@ void ProtocolLoop::RunMessageLoop(BreakCondition condition /* = BreakOnTimeout{}
 
   while (!abort_ && !condition(*this)) {
     ReadToInbox();
-
-    // Message Dispatch / Processing.
     ProcessMessages();
-
     WriteFromOutbox();
-
-    NotifyLoop();
+    NotifyEvents();
+    ManagePeers();
   }
 }
 
@@ -77,6 +74,26 @@ void ProtocolLoop::WriteFromOutbox() {
 
     // 5. Writing.
     WriteBuffersToSockets(peers_);
+}
+
+void ProtocolLoop::NotifyEvents() {
+  NotifyHandshake();
+  NotifyLoop();
+}
+
+void ProtocolLoop::NotifyHandshake() {
+  for (const auto& peer : peers_.GetRegistry().Snapshot()) {
+    if (!peer->GetHandshake().IsComplete())
+      continue;
+
+    if (handshake_complete_.insert(peer->GetId()).second) {
+      for (EventHandler* handler : event_handlers_)
+        handler->OnHandshakeComplete(peer);
+    }
+  }
+
+  // Remove old peer IDs from handshake_complete_
+  std::erase_if(handshake_complete_, [&](auto id) { return !peers_.GetRegistry().FromId(id); });
 }
 
 void ProtocolLoop::NotifyLoop() {
@@ -224,9 +241,9 @@ void ProtocolLoop::WriteBuffersToSockets(net::PeerManager& peers) {
   }
 }
 
-void ProtocolLoop::ManagePeers(net::PeerManager& peers) {
+void ProtocolLoop::ManagePeers() {
   // Removes all the peers whose sockets have been closed.
-  peers.RemoveClosedPeers();
+  peers_.RemoveClosedPeers();
 
   // TODO: Other bookkeeping and network tasks.
 }
