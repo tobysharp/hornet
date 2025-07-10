@@ -82,22 +82,22 @@ class ProtocolLoop : public Broadcaster {
   std::unordered_set<net::PeerId> handshake_complete_;
 
   // Loop tuning parameters — control per-peer and per-frame limits
-  
+
   // Maximum number of bytes to read per peer in a single frame.
   // Protects against peers flooding us with large or continuous data.
-  static constexpr size_t kMaxReadBytesPerFrame = 64 * 1024;  // 64 KiB
+  static constexpr int kMaxReadBytesPerFrame = 64 * 1024;  // 64 KiB
 
   // Maximum number of messages to parse per peer in a single frame.
   // Prevents noisy peers from overwhelming the parser with many tiny messages.
-  static constexpr size_t kMaxParsedMessagesPerFrame = 5;
+  static constexpr int kMaxParsedMessagesPerFrame = 5;
 
   // Maximum processing time allowed per frame across all peers.
   // Prevents processing inbound messages from starving timely responses.
-  static constexpr size_t kMaxProcessMsPerFrame = 50;
+  static constexpr int kMaxProcessMsPerFrame = 50;
 
   // Maximum number of pending write buffers per peer.
   // Prevents a peer from queuing unbounded outbound data and consuming excessive memory.
-  static constexpr size_t kMaxWriteBuffersPerPeer = 10;
+  static constexpr int kMaxWriteBuffersPerPeer = 10;
 
   // Maximum time to block when polling if we don't have any messages queued already.
   // Balances between allowing idle time and being responsive to aborts. 
