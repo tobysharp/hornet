@@ -105,15 +105,15 @@ bool Socket::HasReadData(int timeout_ms /* = 0 */) const {
 
 // Returns the number of bytes available to read at this moment.
 // Non-blocking.
-size_t Socket::GetReadCapacity() const {
+int32_t Socket::GetReadCapacity() const {
   int bytes_available = 0;
   if (ioctl(fd_, FIONREAD, &bytes_available) == 0) {
-    return static_cast<size_t>(bytes_available);
+    return bytes_available;
   }
   return 0;
 }
   
-std::optional<size_t> Socket::Write(std::span<const uint8_t> data) const {
+std::optional<int> Socket::Write(std::span<const uint8_t> data) const {
   if (fd_ < 0) {
     throw std::runtime_error("Write on closed socket.");
   }
@@ -124,10 +124,10 @@ std::optional<size_t> Socket::Write(std::span<const uint8_t> data) const {
       return {};  // Non-blocking mode with full pipe.
   throw std::runtime_error("Socket write failed");
   }
-  return static_cast<size_t>(n);
+  return n;
 }
 
-std::optional<size_t> Socket::Read(std::span<uint8_t> buffer) const {
+std::optional<int> Socket::Read(std::span<uint8_t> buffer) const {
   if (fd_ < 0) {
     throw std::runtime_error("Read on closed socket.");
   }
@@ -138,7 +138,7 @@ std::optional<size_t> Socket::Read(std::span<uint8_t> buffer) const {
       return {};  // Non-blocking mode without data.
     throw std::runtime_error("Socket read failed");
   }
-  return static_cast<size_t>(n);
+  return n;
 }
 
 }  // namespace hornet::net

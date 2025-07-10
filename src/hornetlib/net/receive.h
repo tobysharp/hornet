@@ -29,7 +29,7 @@ std::unique_ptr<T> ReceiveMessage(const Socket& sock, protocol::Magic magic) {
     throw std::runtime_error("Received incorrect magic bytes.");
 
   const auto& factory = protocol::MessageFactory::Default();
-  return protocol::ParseMessage<T>(factory, magic, {buf.data(), *length});
+  return protocol::ParseMessage<T>(factory, magic, {buf.data(), static_cast<size_t>(*length)});
 }
 
 }  // namespace hornet::net

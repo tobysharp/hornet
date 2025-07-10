@@ -47,7 +47,7 @@ TEST(PeerManagerTest, AddAndRemovePeer) {
 
   PeerManager manager;
   manager.AddPeer("127.0.0.1", kTestPort);
-  auto write_ready = manager.PollWrite(1000);
+  auto write_ready = manager.PollReadWrite(1000).second;
   ASSERT_FALSE(write_ready.empty());
 
   auto peer = *(write_ready.begin());

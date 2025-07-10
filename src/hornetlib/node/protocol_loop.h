@@ -60,17 +60,18 @@ class ProtocolLoop : public Broadcaster {
   using OutboxCompare = std::owner_less<OutboxKey>;
   using Outbox = std::map<OutboxKey, OutboundMessageQueue, OutboxCompare>;
 
-  void ReadToInbox();
-  void WriteFromOutbox();
+  net::PeerManager::PollResult PollReadWrite();
+  void ReadToInbox(std::span<net::SharedPeer> read);
+  void WriteFromOutbox(std::span<net::SharedPeer> write);
   void NotifyEvents();
   void NotifyHandshake();
   void NotifyLoop();
-  void ReadSocketsToBuffers(net::PeerManager& peers, std::queue<net::WeakPeer>& peers_for_parsing);
-  void ParseBuffersToMessages(std::queue<net::WeakPeer>& peers_for_parsing, Inbox& inbox);
+  static void ReadSocketsToBuffers(std::span<net::SharedPeer> read, std::queue<net::WeakPeer>& peers_for_parsing);
+  static void ParseBuffersToMessages(std::queue<net::WeakPeer>& peers_for_parsing, Inbox& inbox);
   void ProcessMessages();
-  void FrameMessagesToBuffers(Outbox& outbox);
-  void WriteBuffersToSockets(net::PeerManager& peers);
-  void ManagePeers();
+  static void FrameMessagesToBuffers(Outbox& outbox);
+  static int WriteBuffersToSockets(std::span<net::SharedPeer> write);
+  void Cleanup();
 
   net::PeerManager& peers_;
   std::atomic<bool> abort_ = false;
@@ -80,22 +81,27 @@ class ProtocolLoop : public Broadcaster {
   std::vector<EventHandler*> event_handlers_;
   std::unordered_set<net::PeerId> handshake_complete_;
 
-  // The maximum number of milliseconds to wait per loop iteration for data to arrive.
-  // Smaller values lead to more spinning in the message loop during inactivity, while
-  // larger values can lead to delays in servicing other stages of the loop pipeline.
-  static constexpr int kPollReadTimeoutMs = 2;  // 2 ms
-
-  // The maximum number of bytes to read per peer per frame.
+  // Loop tuning parameters — control per-peer and per-frame limits
+  
+  // Maximum number of bytes to read per peer in a single frame.
+  // Protects against peers flooding us with large or continuous data.
   static constexpr size_t kMaxReadBytesPerFrame = 64 * 1024;  // 64 KiB
 
-  // The maximum number of messages to parse per peer per frame.
-  static constexpr size_t kMaxParsedMessagesPerFrame = 1;
+  // Maximum number of messages to parse per peer in a single frame.
+  // Prevents noisy peers from overwhelming the parser with many tiny messages.
+  static constexpr size_t kMaxParsedMessagesPerFrame = 5;
 
-  // The maximum number of messages to process per frame.
-  static constexpr size_t kMaxProcessedMessagesPerFrame = 16;
+  // Maximum processing time allowed per frame across all peers.
+  // Prevents processing inbound messages from starving timely responses.
+  static constexpr size_t kMaxProcessMsPerFrame = 50;
 
-  static constexpr int kPollWriteTimeoutMs = 50;  // 50 ms
+  // Maximum number of pending write buffers per peer.
+  // Prevents a peer from queuing unbounded outbound data and consuming excessive memory.
   static constexpr size_t kMaxWriteBuffersPerPeer = 10;
+
+  // Maximum time to block when polling if we don't have any messages queued already.
+  // Balances between allowing idle time and being responsive to aborts. 
+  static constexpr int kMaxPollTimeoutMs = 100;
 };
 
 }  // namespace hornet::node

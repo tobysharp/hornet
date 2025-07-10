@@ -29,11 +29,6 @@ class Peer {
         direction_(Direction::Outbound),
         address_(host),
         handshake_(protocol::Handshake::Role::Outbound) {}
-  // Peer(Connection conn, std::string address)
-  //     : conn_(std::move(conn)),
-  //       direction_(Direction::Outbound),
-  //       address_(std::move(address)),
-  //       handshake_(protocol::Handshake::Role::Outbound) {}
 
   PeerId GetId() const {
     return id_;
@@ -79,7 +74,7 @@ class Peer {
   }
 
   friend std::ostream& operator<<(std::ostream& os, const Peer& peer) {
-    return os << "{ fd = " << peer.conn_.GetSocket().GetFD() << " }";
+    return os << "{ id = " << peer.id_ << " }";
   }
 
  private:
@@ -104,24 +99,3 @@ inline bool operator==(WeakPeer a, WeakPeer b) {
 }
 
 }  // namespace hornet::net
-
-/*
-struct SendJob {
-  std::shared_ptr<const std::vector<uint8_t>> buffer;
-  size_t cursor = 0;
-};
-
-struct PeerContext {
-  Connection conn;
-  protocol::Magic magic;
-  protocol::HandshakeState handshake = protocol::HandshakeState::Disconnected;
-
-  std::vector<uint8_t> recv_buffer;
-  size_t parse_cursor = 0;
-
-  std::deque<std::unique_ptr<protocol::Message>> inbound_queue;
-  std::deque<SendJob> outbound_queue;
-
-  protocol::MessageFactory factory = protocol::CreateMessageFactory();
-};
-*/

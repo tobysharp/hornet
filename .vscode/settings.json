@@ -89,7 +89,10 @@
         "__threading_support": "cpp",
         "locale": "cpp",
         "charconv": "cpp",
-        "regex": "cpp"
+        "regex": "cpp",
+        "__node_handle": "cpp",
+        "queue": "cpp",
+        "stack": "cpp"
     },
     "C_Cpp.default.compilerPath": "/usr/bin/clang++-20",
     "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
