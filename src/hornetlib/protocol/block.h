@@ -17,12 +17,27 @@ class Block {
   Block& operator =(const Block&) = default;
   Block& operator =(Block&&) = default;
 
+  const BlockHeader& Header() const {
+    return header_;
+  }
+  void SetHeader(const BlockHeader& header) {
+    header_ = header;
+  }
+
+  int GetTransactionCount() const {
+    return std::ssize(transactions_);
+  }
   TransactionView Transaction(int index) {
     return {data_, transactions_[index]};
   }
-
   TransactionConstView Transaction(int index) const {
     return {data_, transactions_[index]};
+  }
+  template <TransactionViewType View>
+  void AddTransaction(const View& view) {
+    TransactionDetail detail;
+    TransactionView{data_, detail}.CopyFrom(view);
+    transactions_.push_back(detail);
   }
   
   void Serialize(encoding::Writer& writer) const {

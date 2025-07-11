@@ -22,6 +22,7 @@ add_executable(hornetlib_tests
    protocol/dispatch_test.cpp
    protocol/factory_test.cpp
    protocol/framer_test.cpp
+   protocol/genesis_test.cpp
    protocol/handshake_test.cpp
    protocol/parser_test.cpp
    util/big_uint_test.cpp

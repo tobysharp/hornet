@@ -21,6 +21,10 @@ class SubArray {
     return start_;
   }
   
+  int EndIndex() const {
+    return start_ + count_;
+  }
+
   Count Size() const {
     return count_;
   }

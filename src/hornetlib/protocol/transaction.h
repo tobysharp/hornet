@@ -8,13 +8,19 @@
 #include "hornetlib/encoding/reader.h"
 #include "hornetlib/encoding/writer.h"
 #include "hornetlib/protocol/hash.h"
+#include "hornetlib/util/log.h"
 #include "hornetlib/util/subarray.h"
 
 namespace hornet::protocol {
 
 struct OutPoint {
-  Hash hash;
-  uint32_t index;
+  Hash hash = {};
+  uint32_t index = 0;
+
+  void Serialize(encoding::Writer& writer) const {
+    writer.WriteBytes(hash);
+    writer.WriteLE4(index);
+  }
 
   void Deserialize(encoding::Reader& reader) {
     reader.ReadBytes(hash);
@@ -40,51 +46,83 @@ struct TransactionData {
   std::vector<Component> components;
   std::vector<uint8_t> scripts;
 
-  util::SubArray<Input> AddInputs(int size) {
-    return AddToVector(inputs, size);
+  void ResizeInputs(util::SubArray<Input>& subarray, int size) {
+    subarray = ResizeVector(inputs, subarray, size);
   }
-  util::SubArray<Output> AddOutputs(int size) {
-    return AddToVector(outputs, size);
+  void ResizeOutputs(util::SubArray<Output>& subarray, int size) {
+    subarray = ResizeVector(outputs, subarray, size);
   }
-  util::SubArray<Witness> AddWitnesses(int size) {
-    return AddToVector(witnesses, size);
+  void ResizeWitnesses(util::SubArray<Witness>& subarray, int size) {
+    subarray = ResizeVector(witnesses, subarray, size);
   }
-  util::SubArray<Component> AddComponents(int size) {
-    return AddToVector(components, size);
+  void ResizeComponents(util::SubArray<Component>& subarray, int size) {
+    subarray = ResizeVector(components, subarray, size);
   }
-  ScriptArray AddScriptBytes(uint16_t size) {
-    return AddToVector(scripts, size);
+  void ResizeScriptBytes(ScriptArray& subarray, uint16_t size) {
+    subarray = ResizeVector(scripts, subarray, size);
   }
 
  private:
   template <typename T, std::integral Count>
-  static util::SubArray<T, Count> AddToVector(std::vector<T>& vec, Count size) {
-    vec.resize(vec.size() + size);
-    return {static_cast<int>(std::ssize(vec) - size), size};
+  static util::SubArray<T, Count> ResizeVector(std::vector<T>& vec, const util::SubArray<T, Count>& subarray, Count size) {
+    const int length = std::ssize(vec);
+    const int start = subarray.StartIndex();
+    const int end = subarray.EndIndex();
+    Assert(end <= length);
+
+    if (end == length) {
+      // Rewind if the old subarray was the tail
+      vec.resize(start + size);
+      return {start, size};
+    } else if (start + size <= end) {
+      // Reuse existing slice (may leave garbage past end)
+      return {start, size};
+    } else {
+      if (start < end) {
+        // Can't recover space from previous allocation -- burn and log.
+        LogWarn() << "Overwriting transaction data cost " << (end - start) << " bytes of memory.";
+      }
+      vec.resize(length + size);
+      return {length, size};
+    }
   }
 };
 
 struct Input {
   OutPoint previous_output;
   ScriptArray signature_script;
-  uint32_t sequence;
+  uint32_t sequence = 0;
+
+  void Serialize(encoding::Writer& writer, const TransactionData& data) const {
+    previous_output.Serialize(writer);
+    writer.WriteVarInt(signature_script.Size());
+    writer.WriteBytes(signature_script.Span(data.scripts));
+    writer.WriteLE4(sequence);
+  }
 
   void Deserialize(encoding::Reader& reader, TransactionData& data) {
     previous_output.Deserialize(reader);
-    signature_script = data.AddScriptBytes(reader.ReadVarInt<uint16_t>());
-    reader.ReadBytes(util::AsByteSpan(signature_script.Span(data.scripts)));
+    data.ResizeScriptBytes(signature_script, reader.ReadVarInt<uint16_t>());
+    reader.ReadBytes(signature_script.Span(data.scripts));
     reader.ReadLE4(sequence);
   }
+
 };
 
 struct Output {
-  int64_t value;
+  int64_t value = 0;
   ScriptArray pk_script;
+
+  void Serialize(encoding::Writer& writer, const TransactionData& data) const {
+    writer.WriteLE8(value);
+    writer.WriteVarInt(pk_script.Size());
+    writer.WriteBytes(pk_script.Span(data.scripts));
+  }
 
   void Deserialize(encoding::Reader& reader, TransactionData& data) {
     reader.ReadLE8(value);
-    pk_script = data.AddScriptBytes(reader.ReadVarInt<uint16_t>());
-    reader.ReadBytes(util::AsByteSpan(pk_script.Span(data.scripts)));
+    data.ResizeScriptBytes(pk_script, reader.ReadVarInt<uint16_t>());
+    reader.ReadBytes(pk_script.Span(data.scripts));
   }
 };
 
@@ -92,18 +130,46 @@ struct Output {
 // metadata needed for its variable-length array fields. The actual data for those
 // arrays is held in TransactionData.
 struct TransactionDetail {
-  uint32_t version;
+  uint32_t version = 0;
   util::SubArray<Input> inputs;
   util::SubArray<Output> outputs;
   util::SubArray<Witness> witnesses;
-  uint32_t lock_time;
+  uint32_t lock_time = 0;
 
   bool IsWitness() const {
     return !witnesses.IsEmpty();
   }
 
-  void Serialize(encoding::Writer&, const TransactionData&) const {
-    // TODO
+  void Serialize(encoding::Writer& writer, const TransactionData& data) const {
+    // Version
+    writer.WriteLE4(version);
+
+    // Optional witness flag
+    if (IsWitness()) writer.WriteLE2(0x0100);
+
+    // Inputs
+    writer.WriteVarInt(inputs.Size());
+    for (const Input& input : inputs.Span(data.inputs)) 
+      input.Serialize(writer, data);
+
+    // Outputs
+    writer.WriteVarInt(outputs.Size());
+    for (const Output& output : outputs.Span(data.outputs)) 
+      output.Serialize(writer, data);
+
+    // Witnesses
+    if (IsWitness()) {
+      for (const Witness& witness : witnesses.Span(data.witnesses)) {
+        writer.WriteVarInt(witness.Size());
+        for (const ScriptArray& component : witness.Span(data.components)) {
+          writer.WriteVarInt(component.Size());
+          writer.WriteBytes(component.Span(data.scripts));
+        }
+      }
+    }
+
+    // Lock time
+    writer.WriteLE4(lock_time);
   }
 
   void Deserialize(encoding::Reader& reader, TransactionData& data) {
@@ -124,24 +190,27 @@ struct TransactionDetail {
     }
 
     // Inputs
-    inputs = data.AddInputs(reader.ReadVarInt());
+    data.ResizeInputs(inputs, reader.ReadVarInt());
     for (Input& input : inputs.Span(data.inputs)) input.Deserialize(reader, data);
 
     // Outputs
-    outputs = data.AddOutputs(reader.ReadVarInt());
+    data.ResizeOutputs(outputs, reader.ReadVarInt());
     for (Output& output : outputs.Span(data.outputs)) output.Deserialize(reader, data);
 
     // Witnesses
     if (witness) {
-      witnesses = data.AddWitnesses(inputs.Size());
+      data.ResizeWitnesses(witnesses, inputs.Size());
       for (Witness& witness : witnesses.Span(data.witnesses)) {
-        witness = data.AddComponents(reader.ReadVarInt<int>());
+        data.ResizeComponents(witness, reader.ReadVarInt<int>());
         for (ScriptArray& component : witness.Span(data.components)) {
-          component = data.AddScriptBytes(reader.ReadVarInt<uint16_t>());
-          reader.ReadBytes(util::AsByteSpan(component.Span(data.scripts)));
+          data.ResizeScriptBytes(component, reader.ReadVarInt<uint16_t>());
+          reader.ReadBytes(component.Span(data.scripts));
         }
       }
     }
+
+    // Lock time
+    reader.ReadLE4(lock_time);
   }
 };
 
@@ -153,6 +222,16 @@ template <typename Data, typename Detail>
 class TransactionViewT {
  public:
   TransactionViewT(Data& data, Detail& detail) : data_(data), detail_(detail) {}
+
+  int InputCount() const {
+    return detail_.inputs.Size();
+  }
+  int OutputCount() const {
+    return detail_.outputs.Size();
+  }
+  int WitnessCount() const {
+    return detail_.witnesses.Size();
+  }
 
   // The following const member methods are chosen by the compiler in the case where
   // the TransactionViewT object is const, e.g. the method is called on a const object that
@@ -169,6 +248,12 @@ class TransactionViewT {
   const Output& Output(int index) const {
     return detail_.outputs.Span(data_.outputs)[index];
   }
+  const Witness& Witness(int input) const {
+    return detail_.witnesses.Span(data_.witnesses)[input];
+  }
+  const Component& Component(int input, int component) const {
+    return Witness(input).Span(data_.components)[component];
+  }
   std::span<const uint8_t> SignatureScript(int input) const {
     return Input(input).signature_script.Span(data_.scripts);
   }
@@ -176,9 +261,7 @@ class TransactionViewT {
     return Output(output).pk_script.Span(data_.scripts);
   }
   std::span<const uint8_t> WitnessScript(int input, int component) const {
-    const Witness& witness = detail_.witnesses.Span(data_.witnesses)[input];
-    const Component& subarray = witness.Span(data_.components)[component];
-    return subarray.Span(data_.scripts);
+    return Component(input, component).Span(data_.scripts);
   }
   uint32_t LockTime() const {
     return detail_.lock_time;
@@ -196,6 +279,12 @@ class TransactionViewT {
   auto& Output(int index) {
     return detail_.outputs.Span(data_.outputs)[index];
   }
+  auto& Witness(int input) {
+    return detail_.witnesses.Span(data_.witnesses)[input];
+  }
+  auto& Component(int input, int component) {
+    return Witness(input).Span(data_.components)[component];
+  }
   auto SignatureScript(int input) {
     return Input(input).signature_script.Span(data_.scripts);
   }
@@ -203,26 +292,104 @@ class TransactionViewT {
     return Output(output).pk_script.Span(data_.scripts);
   }
   auto WitnessScript(int input, int component) {
-    const Witness& witness = detail_.witnesses.Span(data_.witnesses)[input];
-    const Component& subarray = witness.Span(data_.components)[component];
-    return subarray.Span(data_.scripts);
+    return Component(input, component).Span(data_.scripts);
   }
   auto& LockTime() {
     return detail_.lock_time;
   }
 
+  // The following methods are only valid on mutable views, and will cause compile errors if
+  // called on immutable views, i.e. where detail_ and data_ are const.
+  void SetVersion(int version) {
+    detail_.version = version;
+  }
+  void ResizeInputs(int inputs) {
+    data_.ResizeInputs(detail_.inputs, inputs);
+  }
+  void ResizeOutputs(int outputs) {
+    data_.ResizeOutputs(detail_.outputs, outputs);
+  }
+  void ResizeWitnesses(int witnesses) {
+    data_.ResizeWitnesses(detail_.witnesses, witnesses);
+  }
+  void ResizeComponents(int input, int components) {
+    data_.ResizeComponents(Witness(input), components);
+  }
+  void SetSignatureScript(int input, std::span<const uint8_t> script) {
+    SetScript(Input(input).signature_script, script);
+  }
+  void SetPkScript(int output, std::span<const uint8_t> script) {
+    SetScript(Output(output).pk_script, script);
+  }
+  void SetWitnessScript(int input, int component, std::span<const uint8_t> script) {
+    SetScript(Component(input, component), script);
+  }
+  void SetLockTime(uint32_t lock_time) {
+    detail_.lock_time = lock_time;
+  }
+
+  template <typename Data2, typename Detail2>
+  void CopyFrom(const TransactionViewT<Data2, Detail2>& rhs) {
+    SetVersion(rhs.Version());
+    ResizeInputs(rhs.InputCount());
+    ResizeOutputs(rhs.OutputCount());
+    ResizeWitnesses(rhs.WitnessCount());
+    SetLockTime(rhs.LockTime());
+
+    for (int i = 0; i < InputCount(); ++i)
+    {
+      Input(i).previous_output = rhs.Input(i).previous_output;
+      Input(i).sequence = rhs.Input(i).sequence;
+      SetSignatureScript(i, rhs.SignatureScript(i));
+    }
+    for (int i = 0; i < OutputCount(); ++i)
+    {
+      Output(i).value = rhs.Output(i).value;
+      SetPkScript(i, rhs.PkScript(i));
+    }
+    for (int i = 0; i < rhs.WitnessCount(); ++i) {
+      ResizeComponents(i, rhs.Witness(i).Size());
+      for (int j = 0; j < Witness(i).Size(); ++j)
+        SetWitnessScript(i, j, rhs.WitnessScript(i, j));
+    }
+  }
+
  protected:
+  void SetScript(ScriptArray& script_array, std::span<const uint8_t> script) {
+    data_.ResizeScriptBytes(script_array, static_cast<uint16_t>(script.size()));
+    std::copy(script.begin(), script.end(), script_array.Span(data_.scripts).begin());
+  }
+
   Data& data_;
   Detail& detail_;
 };
 
+// Define mutable and immutable transaction views.
 using TransactionView = TransactionViewT<TransactionData, TransactionDetail>;
 using TransactionConstView = TransactionViewT<const TransactionData, const TransactionDetail>;
+
+// Define a concept for transaction view.
+template <typename T>
+class IsTransactionViewConvertible {
+  template <typename Data, typename Detail> static std::true_type Test(const TransactionViewT<Data, Detail>*);
+  static std::false_type Test(...);
+ public:
+  static constexpr bool value = decltype(Test(std::declval<T*>()))::value;
+};
+template <typename T> concept TransactionViewType = IsTransactionViewConvertible<std::remove_cvref_t<T>>::value;
 
 // Standalone transaction class, inheriting TransactionView behavior.
 class Transaction : public TransactionView {
  public:
   Transaction() : TransactionView(data_, detail_) {}
+
+  operator TransactionConstView() const {
+    return {data_, detail_};
+  }
+
+  void Serialize(encoding::Writer& writer) const {
+    detail_.Serialize(writer, data_);
+  }
 
   void Deserialize(encoding::Reader& reader) {
     detail_.Deserialize(reader, data_);

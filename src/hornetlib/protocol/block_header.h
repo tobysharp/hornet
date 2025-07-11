@@ -97,24 +97,14 @@ class BlockHeader {
     TransferLE4(s, t.nonce_);
   }
 
-  int32_t version_;   // Block version information (note, this is signed).
-  Hash prev_block_;   // The hash value of the previous block this particular block references.
-  Hash merkle_root_;  // The reference to a Merkle tree collection which is a hash of all
-                      // transactions related to this block.
-  uint32_t
-      timestamp_;  // A timestamp recording when this block was created (Will overflow in 2106).
-  CompactTarget bits_;  // The calculated difficulty target being used for this block.
-  uint32_t nonce_;  // The nonce used to generate this block... to allow variations of the header
-                    // and compute different hashes.
+  int32_t version_ = 0;    // Block version information (note, this is signed).
+  Hash prev_block_ = {};   // The hash value of the previous block this particular block references.
+  Hash merkle_root_ = {};  // The reference to a Merkle tree collection which is a hash of all
+                           // transactions related to this block.
+  uint32_t timestamp_ = 0;  // A timestamp recording when this block was created. Overflows in 2106.
+  CompactTarget bits_ = 0;  // The calculated difficulty target being used for this block.
+  uint32_t nonce_ = 0;      // The nonce used to generate this block... to allow variations of the
+                            // header and compute different hashes.
 };
-
-// struct HeaderDetail {
-//   HeaderDetail(BlockHeader header)
-//       : header(std::move(header)), hash(header.ComputeHash()), work(header.GetWork()) {}
-
-//   BlockHeader header;
-//   Hash hash;
-//   Work work;
-// };
 
 }  // namespace hornet::protocol
