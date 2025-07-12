@@ -3,8 +3,10 @@
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #include <atomic>
+#include <chrono>
 #include <queue>
 #include <span>
+#include <thread>
 #include <vector>
 
 #include "hornetlib/data/timechain.h"
@@ -56,13 +58,13 @@ void ProtocolLoop::RunMessageLoop(BreakCondition condition /* = BreakOnTimeout{}
   NotifyLoop();
   while (!abort_ && !condition(*this)) {
     // Poll.
-    auto [read, write] = PollReadWrite();
+    auto polled = PollReadWrite();
     // Read and parse.
-    ReadToInbox(read);
+    ReadToInbox(polled.read);
     // Dispatch.
     ProcessMessages();
     // Frame and write.
-    WriteFromOutbox(write);
+    WriteFromOutbox(polled.write);
     // Notify.
     NotifyEvents();
     // Bookkeeping.
@@ -93,15 +95,23 @@ net::PeerManager::PollResult ProtocolLoop::PollReadWrite() {
     return peer.GetConnection().QueuedWriteBufferCount() > 0;
   });
 
+  // If there were no connected peers to poll, then we should sleep to prevent a tight spin loop.
+  // When we awake, if there are new peers connected, we will start servicing them in the next iteration.
+  // This is expected to be an edge case (no connected peers). But if the latency of this sleep becomes
+  // an issue, we can add a condition variable so new peers force immediate wake-up from this sleep.
+  if (ready.empty) {
+    LogDebug() << "ProtocolLoop::PollReadWrite has nothing to poll.";
+    std::this_thread::sleep_for(std::chrono::milliseconds{timeout_ms});
+  }
+
   // Create a fast, non-cryptographic pseudo-random generator seeded with current time.
   static thread_local std::mt19937 rng{
       static_cast<unsigned long>(std::chrono::steady_clock::now().time_since_epoch().count())};
 
   // Shuffle read order to avoid any structural bias in message dispatching priority.
   // Maybe irrelevant when inbox is per-peer.
-  std::ranges::shuffle(ready.first, rng);
-  std::ranges::shuffle(ready.second, rng);
-
+  std::ranges::shuffle(ready.read, rng);
+  std::ranges::shuffle(ready.write, rng);
   return ready;
 }
 
@@ -128,7 +138,8 @@ void ProtocolLoop::NotifyEvents() {
 
 void ProtocolLoop::NotifyHandshake() {
   for (const auto& peer : peers_.GetRegistry().Snapshot()) {
-    if (!peer->GetHandshake().IsComplete()) continue;
+    if (peer->IsDropped() || !peer->GetHandshake().IsComplete()) 
+      continue;
 
     if (handshake_complete_.insert(peer->GetId()).second) {
       for (EventHandler* handler : event_handlers_) handler->OnHandshakeComplete(peer);
@@ -174,7 +185,8 @@ void ProtocolLoop::NotifyLoop() {
   while (!peers_for_parsing.empty()) {
     const net::SharedPeer peer = peers_for_parsing.front().lock();
     peers_for_parsing.pop();
-    if (!peer) continue;
+    if (!peer || peer->IsDropped()) 
+      continue;
 
     try {
       const auto& factory = protocol::MessageFactory::Default();
@@ -256,7 +268,9 @@ void ProtocolLoop::ProcessMessages() {
 /* static */ void ProtocolLoop::FrameMessagesToBuffers(Outbox& outbox) {
   for (auto& [wpeer, queue] : outbox) {
     const auto peer = wpeer.lock();
-    if (!peer || peer->IsDropped()) continue;
+    if (!peer || peer->IsDropped())
+      continue;
+
     try {
       size_t queue_size = peer->GetConnection().QueuedWriteBufferCount();
       // Skip serialization if peer has reached max buffer count, preventing unbounded memory use.
@@ -286,11 +300,13 @@ void ProtocolLoop::Cleanup() {
   // Removes all the peers whose sockets have been closed,
   // and cleans up any auxiliary associated data.
   for (const auto& peer : peers_.GetRegistry().Snapshot()) {
-    if (!peer->GetConnection().GetSocket().IsOpen()) {
-      outbox_.erase(peer);
-      handshake_complete_.erase(peer->GetId());
-      peers_.RemovePeer(peer);
-    }
+    if (!peer->IsDropped())
+      continue;
+    outbox_.erase(peer);
+    handshake_complete_.erase(peer->GetId());
+    for (EventHandler* handler : event_handlers_)
+      handler->OnPeerDisconnect(peer);
+    peers_.RemovePeer(peer);
   }
 
   // TODO: Other bookkeeping and network tasks.

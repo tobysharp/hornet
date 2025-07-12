@@ -20,7 +20,11 @@ namespace hornet::net {
 class PeerManager {
  public:
   using PeerArray = std::vector<SharedPeer>;
-  using PollResult = std::pair<PeerArray, PeerArray>;
+  struct PollResult {
+    PeerArray read;
+    PeerArray write;
+    bool empty;       // True if no peers were available to poll.
+  };
 
   const PeerRegistry& GetRegistry() const {
     return registry_;
@@ -44,7 +48,6 @@ class PeerManager {
 
   template <typename Select = SelectAll>
   [[nodiscard]] PollResult PollReadWrite(int timeout_ms = 0, Select select_write = Select{}) {
-
     std::vector<pollfd> poll_fds;
     std::unordered_map<int, SharedPeer> fd_to_peer;
 
@@ -59,20 +62,20 @@ class PeerManager {
       }
     }
 
+    PollResult result;
+    result.empty = poll_fds.empty();
     int rc = poll(poll_fds.data(), poll_fds.size(), timeout_ms);
 
-    PeerArray read, write;
     if (rc > 0) {
       for (const auto& pfd : poll_fds) {
         if (pfd.revents & (POLLIN | POLLOUT)) {
           const SharedPeer& peer = fd_to_peer[pfd.fd];
-          if (pfd.revents & POLLIN) read.push_back(peer);
-          if (pfd.revents & POLLOUT) write.push_back(peer);
+          if (pfd.revents & POLLIN) result.read.push_back(peer);
+          if (pfd.revents & POLLOUT) result.write.push_back(peer);
         }
       }
     }
-
-    return {std::move(read), std::move(write)};
+    return result;
   }
 
   // Removes all the peers whose sockets have been closed.

@@ -62,10 +62,6 @@ void PeerNegotiator::OnPeerConnect(net::SharedPeer peer) {
   AdvanceHandshake(peer, protocol::Handshake::Transition::Begin);
 }
 
-void PeerNegotiator::OnLoop(net::PeerManager& manager) {
-  manager.RemoveClosedPeers();
-}
-
 // Advances the Handshake state machine and performs any necessary resulting actions.
 void PeerNegotiator::AdvanceHandshake(net::SharedPeer peer,
                                  protocol::Handshake::Transition transition) {
