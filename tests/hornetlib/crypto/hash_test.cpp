@@ -45,7 +45,7 @@ TEST(HashTest, ValidHexDigits) {
 
 TEST(HashTest, GenesisMerkleRootHash) {
   using namespace hornet::util;
-  constexpr auto bytes = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"_h;
+  constexpr auto bytes = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"_hash;
   // Check first few bytes (reversed)
   EXPECT_EQ(bytes[0], 0x3b);
   EXPECT_EQ(bytes[1], 0xa3);

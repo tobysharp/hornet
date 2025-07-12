@@ -8,6 +8,7 @@
 #include "hornetlib/encoding/writer.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/constants.h"
+#include "hornetlib/protocol/hash.h"
 #include "hornetlib/util/hex.h"
 
 namespace hornet::protocol {
@@ -74,7 +75,7 @@ TEST(GenesisTest, DeserializeMatchesFields) {
   EXPECT_EQ(block.Header().GetVersion(), 1);
   EXPECT_EQ(block.Header().GetPreviousBlockHash(), Hash{});
   EXPECT_EQ(block.Header().GetMerkleRoot(),
-            "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"_h);
+            "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"_hash);
   EXPECT_EQ(block.Header().GetTimestamp(), 0x495FAB29);
   EXPECT_EQ(block.Header().GetNonce(), 0x7C2BAC1D);
   EXPECT_EQ(block.Header().GetCompactTarget(), 0x1D00FFFF);
@@ -127,7 +128,7 @@ TEST(GenesisTest, ConstructFromFields) {
   BlockHeader header;
   header.SetVersion(1);
   header.SetTimestamp(0x495FAB29);
-  header.SetMerkleRoot("4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"_h);
+  header.SetMerkleRoot("4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"_hash);
   header.SetCompactTarget(0x1D00FFFF);
   header.SetNonce(0x7C2BAC1D);
 

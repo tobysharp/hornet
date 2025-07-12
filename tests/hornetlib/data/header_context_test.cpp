@@ -19,7 +19,7 @@ static protocol::BlockHeader MakeHeader(const protocol::Hash& prev,
   protocol::BlockHeader h;
   h.SetVersion(1);
   h.SetPreviousBlockHash(prev);
-  h.SetMerkleRoot("4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"_h);
+  h.SetMerkleRoot("4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"_hash);
   h.SetTimestamp(timestamp);
   h.SetCompactTarget(0x1d00ffff);
   h.SetNonce(nonce);
