@@ -11,6 +11,9 @@ namespace hornet::protocol::message {
 
 class Block : public Message {
  public:
+  std::shared_ptr<const protocol::Block> GetBlock() const {
+    return block_;
+  }
   virtual std::string GetName() const override {
     return "block";
   }
@@ -18,14 +21,17 @@ class Block : public Message {
     handler.OnMessage(*this);
   }
   virtual void Serialize(encoding::Writer& writer) const override {
-    block_.Serialize(writer);
+    if (block_)
+      block_->Serialize(writer);
   }
   virtual void Deserialize(encoding::Reader& reader) override {
-    block_.Deserialize(reader);
+    protocol::Block block;
+    block.Deserialize(reader);
+    block_ = std::make_shared<const protocol::Block>(std::move(block));
   };
 
  protected:
-  protocol::Block block_;
+  std::shared_ptr<const protocol::Block> block_;
 };
 
 }  // namespace hornet::protocol::message

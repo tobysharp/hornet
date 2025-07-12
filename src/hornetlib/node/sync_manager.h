@@ -50,6 +50,13 @@ class SyncManager : public EventHandler {
     header_sync_.OnHeaders(sync_, headers);
   }
 
+  virtual void OnMessage(const protocol::message::Block& block) override {
+    if (!IsSyncPeer(block)) return;
+
+    // Pass the block message to the BlockSync object.
+    block_sync_.OnBlock(sync_, block);
+  }
+
   const HeaderSync& GetHeaderSync() const {
     return header_sync_;
   }
