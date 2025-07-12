@@ -5,6 +5,7 @@ add_library(hornetlib STATIC
    net/socket.cpp
    node/protocol_loop.cpp
    node/peer_negotiator.cpp
+   protocol/block.cpp
    protocol/message_factory.cpp
    protocol/message_handler.cpp
 )

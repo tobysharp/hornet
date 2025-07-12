@@ -17,6 +17,7 @@ add_executable(hornetlib_tests
    net/socket_test.cpp
    node/protocol_loop_test.cpp
    node/sync_manager_test.cpp
+   protocol/block_test.cpp
    protocol/block_header_test.cpp
    protocol/compact_target_test.cpp
    protocol/dispatch_test.cpp

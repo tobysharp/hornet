@@ -17,6 +17,8 @@ class Block {
   Block& operator =(const Block&) = default;
   Block& operator =(Block&&) = default;
 
+  static const Block& Genesis();
+
   const BlockHeader& Header() const {
     return header_;
   }
@@ -39,7 +41,12 @@ class Block {
     TransactionView{data_, detail}.CopyFrom(view);
     transactions_.push_back(detail);
   }
-  
+  int SizeBytes() const {
+    int size = sizeof(*this) - sizeof(data_);
+    size += transactions_.capacity() * sizeof(TransactionDetail);
+    size += data_.SizeBytes();
+    return size;
+  }
   void Serialize(encoding::Writer& writer) const {
     header_.Serialize(writer);
     writer.WriteVarInt(transactions_.size());

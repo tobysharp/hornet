@@ -61,7 +61,7 @@ struct TransactionData {
   void ResizeScriptBytes(ScriptArray& subarray, uint16_t size) {
     subarray = ResizeVector(scripts, subarray, size);
   }
-
+  int SizeBytes() const;
  private:
   template <typename T, std::integral Count>
   static util::SubArray<T, Count> ResizeVector(std::vector<T>& vec, const util::SubArray<T, Count>& subarray, Count size) {
@@ -106,7 +106,6 @@ struct Input {
     reader.ReadBytes(signature_script.Span(data.scripts));
     reader.ReadLE4(sequence);
   }
-
 };
 
 struct Output {
@@ -126,6 +125,16 @@ struct Output {
   }
 };
 
+inline int TransactionData::SizeBytes() const {
+  size_t size = sizeof(*this);
+  size += inputs.capacity() * sizeof(Input);
+  size += outputs.capacity() * sizeof(Output);
+  size += witnesses.capacity() * sizeof(Witness);
+  size += components.capacity() * sizeof(Component);
+  size += scripts.capacity() * sizeof(uint8_t);
+  return static_cast<int>(size);
+}
+ 
 // The TransactionDetail struct holds the data fields of a transaction, and the
 // metadata needed for its variable-length array fields. The actual data for those
 // arrays is held in TransactionData.
