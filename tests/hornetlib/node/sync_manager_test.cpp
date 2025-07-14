@@ -55,14 +55,14 @@ class NoHeadersSyncManager : public SyncManager {
   NoHeadersSyncManager(data::Timechain& timechain) : SyncManager(timechain) {}
   bool IsDone() const { return done_; }
 
- protected:
-  virtual bool OnSyncRequest(net::WeakPeer weak, std::unique_ptr<protocol::Message> message) override {
-    if (message->GetName() == "getheaders")
-        return false;
-    done_ = true;
-    return SyncManager::OnSyncRequest(weak, std::move(message));
+  virtual void OnMessage(const protocol::message::Headers& headers) override {
+    protocol::message::Headers v2;
+    v2.SetEnvelope(*headers.GetEnvelope());
+    v2.AddBlockHeader(headers.GetBlockHeaders()[0]);
+    SyncManager::OnMessage(v2);
   }
 
+ protected:
   bool done_ = false;
 };
 
