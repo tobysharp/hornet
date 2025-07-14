@@ -45,11 +45,13 @@ class HeaderTimechain {
   // Public methods
   ParentIterator Add(const HeaderContext& context);
   ParentIterator Add(const HeaderContext& context, ParentIterator parent);
+  const protocol::BlockHeader* Find(int height, const protocol::Hash& hash) const;
   FindResult Find(const protocol::Hash& hash);
   FindResult HeaviestTip() const;
-
   std::unique_ptr<ValidationView> GetValidationView(const ParentIterator& tip) const;
-
+  const HeaderChain& HeaviestChain() const {
+    return chain_;
+  }
   int GetHeaviestTipHeight() const {
     return chain_.GetTipHeight();
   }
@@ -194,6 +196,9 @@ class HeaderTimechain::ValidationView : public consensus::HeaderAncestryView {
   ValidationView(const HeaderTimechain& timechain, ParentIterator tip)
       : timechain_(timechain), tip_(tip) {}
 
+  void SetTip(ParentIterator tip) {
+    tip_ = tip;
+  }
   virtual int Length() const override;
   virtual uint32_t TimestampAt(int height) const override;
   virtual std::vector<uint32_t> LastNTimestamps(int count) const override;

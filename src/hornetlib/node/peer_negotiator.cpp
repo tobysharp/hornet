@@ -5,28 +5,29 @@
 #include <queue>
 #include <utility>
 
-#include "hornetlib/message/ping.h"
-#include "hornetlib/message/pong.h"
-#include "hornetlib/message/registry.h"
-#include "hornetlib/message/verack.h"
-#include "hornetlib/message/version.h"
 #include "hornetlib/net/constants.h"
+#include "hornetlib/net/peer.h"
+#include "hornetlib/net/peer_manager.h"
+#include "hornetlib/net/peer_registry.h"
 #include "hornetlib/node/broadcaster.h"
-#include "hornetlib/node/inbound_message.h"
-#include "hornetlib/node/processor.h"
+#include "hornetlib/node/peer_negotiator.h"
+#include "hornetlib/protocol/capabilities.h"
 #include "hornetlib/protocol/handshake.h"
+#include "hornetlib/protocol/message_factory.h"
+#include "hornetlib/protocol/message/ping.h"
+#include "hornetlib/protocol/message/pong.h"
+#include "hornetlib/protocol/message/sendcmpct.h"
+#include "hornetlib/protocol/message/verack.h"
+#include "hornetlib/protocol/message/version.h"
 #include "hornetlib/util/throw.h"
 
 namespace hornet::node {
 
-Processor::Processor(const protocol::Factory& factory, Broadcaster& broadcaster)
-    : InboundHandler(&broadcaster), factory_(factory) {}
-
-void Processor::Visit(const message::Ping& ping) {
-  Reply<message::Pong>(ping.GetNonce());
+void PeerNegotiator::OnMessage(const protocol::message::Ping& ping) {
+  Reply<protocol::message::Pong>(ping, ping.GetNonce());
 }
 
-void Processor::Visit(const message::SendCompact& sendcmpct) {
+void PeerNegotiator::OnMessage(const protocol::message::SendCompact& sendcmpct) {
   // The sendcmpct message was introduced in BIP-152. Details here:
   // https://github.com/bitcoin/bips/blob/master/bip-0152.mediawiki
 
@@ -36,52 +37,53 @@ void Processor::Visit(const message::SendCompact& sendcmpct) {
   if (sendcmpct.GetVersion() != 1) return;
 
   // Set or clear the flag for compact blocks based on the value in the message.
-  GetPeerCapabilities().SetCompactBlocks(sendcmpct.IsCompact());
+  if (auto peer = GetPeer(sendcmpct))
+    peer->GetCapabilities().SetCompactBlocks(sendcmpct.IsCompact());
 }
 
-void Processor::Visit(const message::Verack&) {
-  AdvanceHandshake(GetPeer(), protocol::Handshake::Transition::ReceiveVerack);
+void PeerNegotiator::OnMessage(const protocol::message::Verack& verack) {
+  AdvanceHandshake(GetPeer(verack), protocol::Handshake::Transition::ReceiveVerack);
 }
 
-void Processor::Visit(const message::Version& v) {
+void PeerNegotiator::OnMessage(const protocol::message::Version& v) {
   if (v.version < protocol::kMinSupportedVersion)
     util::ThrowRuntimeError("Received unsupported protocol version number ", v.version, ".");
   
   // The peer's version number is sent to the minimum of the two exchanged versions.
-  GetPeerCapabilities().SetVersion(std::min(protocol::kCurrentVersion, v.version));
-  GetPeerCapabilities().SetStartHeight(v.start_height);
-
-  AdvanceHandshake(GetPeer(), protocol::Handshake::Transition::ReceiveVersion);
+  if (const auto peer = GetPeer(v)) {
+    peer->GetCapabilities().SetVersion(std::min(protocol::kCurrentVersion, v.version));
+    peer->GetCapabilities().SetStartHeight(v.start_height);
+    AdvanceHandshake(peer, protocol::Handshake::Transition::ReceiveVersion);
+  }
 }
 
 // Sets the Handshake state machine into the Start state, ready to begin negotiation.
-void Processor::InitiateHandshake(std::shared_ptr<net::Peer> peer) {
+void PeerNegotiator::OnPeerConnect(net::SharedPeer peer) {
   AdvanceHandshake(peer, protocol::Handshake::Transition::Begin);
 }
 
 // Advances the Handshake state machine and performs any necessary resulting actions.
-void Processor::AdvanceHandshake(std::shared_ptr<net::Peer> peer,
+void PeerNegotiator::AdvanceHandshake(net::SharedPeer peer,
                                  protocol::Handshake::Transition transition) {
   auto& handshake = peer->GetHandshake();
 
   // Run the state machine forward until we complete or must wait for new input.
   auto action = handshake.AdvanceState(transition);
   while (action.next != protocol::Handshake::Transition::None) {
-    Send(peer, factory_.Create(action.command));
+    Send(peer, protocol::MessageFactory::Default().Create(action.command));
     action = handshake.AdvanceState(action.next);
   }
 
   // Once the handshake is complete, send our preference notifications.
   if (handshake.IsComplete()) {
-    SendPeerPreferences();
-    //sync_manager_.OnHandshakeComplete(GetPeer());
+    SendPeerPreferences(peer);
   }
 }
 
-void Processor::SendPeerPreferences() {
+void PeerNegotiator::SendPeerPreferences(std::shared_ptr<net::Peer> peer) {
   // Request compact blocks if available
-  if (GetPeerCapabilities().GetVersion() >= protocol::kMinVersionForSendCompact)
-    Reply<message::SendCompact>();
+  if (peer->GetCapabilities().GetVersion() >= protocol::kMinVersionForSendCompact)
+    Reply<protocol::message::SendCompact>(peer);
 }
 
 }  // namespace hornet::node

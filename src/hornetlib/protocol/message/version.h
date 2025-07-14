@@ -10,16 +10,16 @@
 #include "hornetlib/encoding/reader.h"
 #include "hornetlib/encoding/transfer.h"
 #include "hornetlib/encoding/writer.h"
-#include "hornetlib/message/visitor.h"
 #include "hornetlib/protocol/constants.h"
 #include "hornetlib/protocol/message.h"
+#include "hornetlib/protocol/message_handler.h"
 #include "hornetlib/util/as_span.h"
 
-namespace hornet::message {
+namespace hornet::protocol::message {
 
-class Version : public protocol::Message {
+class Version : public Message {
  public:
-  int32_t version = protocol::kCurrentVersion;
+  int32_t version = kCurrentVersion;
   uint64_t services = 0;
   int64_t timestamp = 0;
   std::array<uint8_t, 26> addr_recv{};
@@ -47,8 +47,8 @@ class Version : public protocol::Message {
     Transfer(*this, r);
   }
 
-  void Accept(Visitor& v) const override {
-    v.Visit(*this);
+  void Notify(MessageHandler& handler) const override {
+    handler.OnMessage(*this);
   }
 
  private:
@@ -66,4 +66,4 @@ class Version : public protocol::Message {
   }
 };
 
-}  // namespace hornet::message
+}  // namespace hornet::protocol::message

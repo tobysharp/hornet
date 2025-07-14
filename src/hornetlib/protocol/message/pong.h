@@ -6,12 +6,12 @@
 
 #include "hornetlib/encoding/reader.h"
 #include "hornetlib/encoding/writer.h"
-#include "hornetlib/message/visitor.h"
 #include "hornetlib/protocol/message.h"
+#include "hornetlib/protocol/message_handler.h"
 
-namespace hornet::message {
+namespace hornet::protocol::message {
 
-class Pong : public protocol::Message {
+class Pong : public Message {
  public:
   Pong(uint64_t nonce = 0) : nonce_(nonce) {}
 
@@ -27,12 +27,12 @@ class Pong : public protocol::Message {
   virtual void Deserialize(encoding::Reader& r) override {
     r.ReadLE8(nonce_);
   }
-  virtual void Accept(message::Visitor& v) const override {
-    return v.Visit(*this);
+  virtual void Notify(MessageHandler& handler) const override {
+    return handler.OnMessage(*this);
   }
 
  private:
   uint64_t nonce_;
 };
 
-}  // namespace hornet::message
+}  // namespace hornet::protocol::message

@@ -9,14 +9,17 @@
 
 namespace hornet::util {
 
-template <int... kIndices, typename Function>
-constexpr void UnrollImpl(std::integer_sequence<int, kIndices...>, Function&& function) {
-    (function(std::integral_constant<int, kIndices>{}), ...);
+template <int Start, int End, typename Function>
+constexpr void UnrollRange(Function&& function) {
+  if constexpr (Start < End) {
+    function(std::integral_constant<int, Start>{});
+    UnrollRange<Start + 1, End>(std::forward<Function>(function));
+  }
 }
 
 template <int kCount, typename Function>
 constexpr void Unroll(Function&& function) {
-    UnrollImpl(std::make_integer_sequence<int, kCount>{}, std::forward<Function>(function));
+  UnrollRange<0, kCount>(std::forward<Function>(function));
 }
 
 }  // namespace hornet::util

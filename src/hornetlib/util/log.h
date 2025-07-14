@@ -19,10 +19,13 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
+#include <format>
 #include <fstream>
 #include <iostream>
 #include <mutex>
 #include <sstream>
+#include <string>
 
 // Compile with e.g. -DHORNET_MAX_LOG_LEVEL="None" to disable all logging at compile time.
 #ifndef HORNET_MAX_LOG_LEVEL
@@ -58,26 +61,37 @@ class LogContext {
 
   void Emit(LogLevel level, const std::string& message) {
     std::lock_guard lock(mutex_);
-    const std::string full = std::string(Prefix(level)) + message + "\n";
+    const std::string full = Prefix(level) + message + "\n";
     if (to_stdout_) std::cout << full;
     if (file_.is_open()) file_ << full;
   }
 
  private:
   LogContext() = default;
-  constexpr const char* Prefix(LogLevel level) const {
-    switch (level) {
-      case LogLevel::Debug:
-        return "[DEBUG] ";
-      case LogLevel::Info:
-        return "[INFO ] ";
-      case LogLevel::Warn:
-        return "[WARN ] ";
-      case LogLevel::Error:
-        return "[ERROR] ";
-      default:
-        return "";
-    }
+  std::string Prefix(LogLevel level) const {
+    const std::string prefix = [&]() {
+      switch (level) {
+        case LogLevel::Debug:
+          return "[DEBUG";
+        case LogLevel::Info:
+          return "[INFO ";
+        case LogLevel::Warn:
+          return "[WARN ";
+        case LogLevel::Error:
+          return "[ERROR";
+        default:
+          return "";
+      }
+    }();
+    return prefix + Time() + "] ";
+  }
+
+  static std::string Time() {
+    using namespace std::chrono;
+    const auto now = system_clock::now();
+    std::string time = std::format("{:%H:%M:%S}", floor<seconds>(now));
+    const auto us = duration_cast<microseconds>(now.time_since_epoch()) % 1'000'000;
+    return time + std::format(".{:04}", us.count() / 100);
   }
 
   mutable std::mutex mutex_;

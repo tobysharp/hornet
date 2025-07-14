@@ -33,11 +33,11 @@ class Socket {
     return is_blocking_;
   }
   
-  std::optional<size_t> Write(std::span<const uint8_t> data) const;
+  std::optional<int> Write(std::span<const uint8_t> data) const;
 
   // Reads data from the socket, blocking if data is not currently
   // available to be read. Use HasReadData to check for available data.
-  std::optional<size_t> Read(std::span<uint8_t> buffer) const;
+  std::optional<int> Read(std::span<uint8_t> buffer) const;
 
   int GetFD() const {
     return fd_;
@@ -51,7 +51,7 @@ class Socket {
 
   // Returns the number of bytes available to read at this moment.
   // Non-blocking.
-  size_t GetReadCapacity() const;
+  int GetReadCapacity() const;
 
  private:
   Socket(const Socket&) = delete;

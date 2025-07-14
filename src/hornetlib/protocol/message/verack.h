@@ -6,19 +6,19 @@
 
 #include <string>
 
-#include "hornetlib/message/visitor.h"
 #include "hornetlib/protocol/message.h"
+#include "hornetlib/protocol/message_handler.h"
 
-namespace hornet::message {
+namespace hornet::protocol::message {
 
-class Verack : public protocol::Message {
+class Verack : public Message {
   public:
     virtual std::string GetName() const override {
         return "verack";
     }
-    virtual void Accept(Visitor& v) const override {
-      return v.Visit(*this);
+    virtual void Notify(MessageHandler& handler) const override {
+      handler.OnMessage(*this);
     }
 };
 
-}  // namespace hornet::message
+}  // namespace hornet::protocol::message

@@ -25,7 +25,7 @@ class Parser {
     std::span<const uint8_t> payload;
   };
 
-  explicit Parser(Magic expected_magic = Magic::Testnet) : magic_(expected_magic) {}
+  explicit Parser(Magic expected_magic = Magic::Main) : magic_(expected_magic) {}
 
   // Reads a 24-byte header from a buffer.
   static Header ReadHeader(std::span<const uint8_t> buffer) {

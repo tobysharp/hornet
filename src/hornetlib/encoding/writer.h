@@ -102,20 +102,23 @@ class Writer {
   }
 
   // Writes a variable-length unsigned integer
-  template <std::unsigned_integral T>
+  template <std::integral T>
   size_t WriteVarInt(T value) {
+    if (value < 0)
+      util::ThrowInvalidArgument("Encoder::WriteVarInt passed negative value ", value, ".");
     size_t pos = GetPos();
-    if (value < 0xFD) {
-      WriteByte(static_cast<uint8_t>(value));
-    } else if (value <= 0xFFFF) {
+    const uint64_t x = static_cast<uint64_t>(value);
+    if (x < 0xFD) {
+      WriteByte(static_cast<uint8_t>(x));
+    } else if (x <= 0xFFFF) {
       WriteByte(0xFD);
-      WriteLE(static_cast<uint16_t>(value));
-    } else if (value <= 0xFFFFFFFF) {
+      WriteLE(static_cast<uint16_t>(x));
+    } else if (x <= 0xFFFFFFFF) {
       WriteByte(0xFE);
-      WriteLE(static_cast<uint32_t>(value));
+      WriteLE(static_cast<uint32_t>(x));
     } else {
       WriteByte(0xFF);
-      WriteLE(static_cast<uint64_t>(value));
+      WriteLE(x);
     }
     return pos;
   }
@@ -135,7 +138,7 @@ class Writer {
     }
     std::array<char, kLength> cstr = {};
     std::copy_n(str.data(), std::min(str.size(), kLength), cstr.begin());
-    return WriteBytes({reinterpret_cast<const uint8_t*>(cstr.data()), sizeof(cstr)});
+    return WriteBytes({reinterpret_cast<const uint8_t *>(cstr.data()), sizeof(cstr)});
   }
 
   // Returns the current seek position
@@ -156,7 +159,7 @@ class Writer {
   }
 
   // Buffer access
-  const std::vector<uint8_t>& Buffer() const {
+  const std::vector<uint8_t> &Buffer() const {
     return buffer_;
   }
 

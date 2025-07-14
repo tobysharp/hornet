@@ -25,7 +25,7 @@ class DummyMessage : public Message {
   void Deserialize(encoding::Reader &r) override {
     r.ReadLE4();
   }
-  void Accept(message::Visitor&) const override {}
+  void Notify(MessageHandler&) const override {}
 };
 
 TEST(MessageFramerTest, FrameFormatsCorrectHeader) {

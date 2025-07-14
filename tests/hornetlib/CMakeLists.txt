@@ -15,16 +15,19 @@ add_executable(hornetlib_tests
    net/peer_test.cpp
    net/peer_manager_test.cpp
    net/socket_test.cpp
-   node/engine_test.cpp
+   node/protocol_loop_test.cpp
    node/sync_manager_test.cpp
+   protocol/block_test.cpp
    protocol/block_header_test.cpp
    protocol/compact_target_test.cpp
    protocol/dispatch_test.cpp
    protocol/factory_test.cpp
    protocol/framer_test.cpp
+   protocol/genesis_test.cpp
    protocol/handshake_test.cpp
    protocol/parser_test.cpp
    util/big_uint_test.cpp
+   util/hex_test.cpp
    util/pointer_iterator_test.cpp
    util/thread_safe_queue_test.cpp
 )

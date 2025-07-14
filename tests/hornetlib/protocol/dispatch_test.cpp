@@ -4,11 +4,11 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #include "hornetlib/protocol/dispatch.h"
 
-#include "hornetlib/message/registry.h"
-#include "hornetlib/message/version.h"
+#include "hornetlib/protocol/message/version.h"
 #include "hornetlib/protocol/constants.h"
 #include "hornetlib/protocol/framer.h"
 #include "hornetlib/protocol/message.h"
+#include "hornetlib/protocol/message_factory.h"
 
 #include <gtest/gtest.h>
 
@@ -27,7 +27,7 @@ TEST(DispatchTest, ParsesAndDeserializesVersionMessage) {
   original.start_height = 800000;
   original.relay = true;
 
-  const Factory factory = message::CreateMessageFactory();
+  const auto& factory = MessageFactory::Default();
   const auto buffer = FrameMessage(Magic::Main, original);
   auto msg = ParseMessage<message::Version>(factory, Magic::Main, buffer);
 

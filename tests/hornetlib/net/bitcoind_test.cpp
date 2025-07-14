@@ -4,15 +4,14 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #include "hornetlib/net/bitcoind.h"
 
-#include "hornetlib/message/registry.h"
-#include "hornetlib/message/version.h"
 #include "hornetlib/net/constants.h"
 #include "hornetlib/net/receive.h"
 #include "hornetlib/net/socket.h"
 #include "hornetlib/protocol/dispatch.h"
-#include "hornetlib/protocol/factory.h"
 #include "hornetlib/protocol/framer.h"
 #include "hornetlib/protocol/message.h"
+#include "hornetlib/protocol/message_factory.h"
+#include "hornetlib/protocol/message/version.h"
 
 #include <gtest/gtest.h>
 
@@ -27,10 +26,10 @@ void SwapVersionMessages(Network network) {
   Socket sock = Socket::Connect(kLocalhost, node.GetPort());
 
   // Send a version message
-  sock.Write(protocol::FrameMessage(node.GetMagic(), message::Version{}));
+  sock.Write(protocol::FrameMessage(node.GetMagic(), protocol::message::Version{}));
 
   // Receive a version message
-  const auto msgin = ReceiveMessage<message::Version>(sock, node.GetMagic());
+  const auto msgin = ReceiveMessage<protocol::message::Version>(sock, node.GetMagic());
   EXPECT_TRUE(msgin->GetName() == "version");
 }
 

@@ -45,6 +45,15 @@ inline void TransferLE8(Streamer &s, T &field) {
     s.ReadLE8(field);
 }
 
+template <typename Streamer, typename Enum>
+void TransferEnumLE4(Streamer& s, Enum& e) {
+  using U = std::underlying_type_t<Enum>;
+  if constexpr (std::is_const_v<Enum>)
+    s.WriteLE4(static_cast<U>(e));
+  else
+    e = static_cast<Enum>(s.template ReadLE4<U>());
+}
+
 template <typename Streamer, std::integral T>
 inline void TransferBytes(Streamer &s, std::span<T> field) {
   if constexpr (std::is_const_v<T>)

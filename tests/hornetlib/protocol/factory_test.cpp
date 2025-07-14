@@ -2,10 +2,9 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "hornetlib/protocol/factory.h"
+#include "hornetlib/protocol/message_factory.h"
 
-#include "hornetlib/message/registry.h"
-#include "hornetlib/message/version.h"
+#include "hornetlib/protocol/message/version.h"
 
 #include <gtest/gtest.h>
 
@@ -13,7 +12,7 @@ namespace hornet::protocol {
 namespace {
 
 TEST(FactoryTest, CanCreateRegisteredMessage) {
-  Factory factory = message::CreateMessageFactory();
+  const auto& factory = MessageFactory::Default();
 
   std::unique_ptr<Message> msg = factory.Create("version");
 
@@ -23,7 +22,7 @@ TEST(FactoryTest, CanCreateRegisteredMessage) {
 }
 
 TEST(FactoryTest, NoThrowOnUnknownMessage) {
-  Factory factory = message::CreateMessageFactory();
+  const auto& factory = MessageFactory::Default();
 
   EXPECT_EQ(factory.Create("nonexistent"), nullptr);
 }

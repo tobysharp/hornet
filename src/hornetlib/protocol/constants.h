@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "hornetlib/protocol/hash.h"
 #include "hornetlib/util/big_uint.h"
 #include "hornetlib/util/hex.h"
 
@@ -14,11 +15,11 @@ namespace hornet::protocol {
 
 // Magic numbers from https://en.bitcoin.it/wiki/Protocol_documentation
 enum class Magic : uint32_t {
-  Main = 0xD9B4BEF9,     // main
-  Regtest = 0xDAB5BFFA,  // testnet/regnet
-  Testnet = 0x0709110B,  // testnet3
-  Signet = 0x40CF030A,   // signet
-  Namecoin = 0xFEB4BEF9, // namecoin
+  Main = 0xD9B4BEF9,      // main
+  Regtest = 0xDAB5BFFA,   // testnet/regnet
+  Testnet = 0x0709110B,   // testnet3
+  Signet = 0x40CF030A,    // signet
+  Namecoin = 0xFEB4BEF9,  // namecoin
   None = 0xFFFFFFFF
 };
 
@@ -52,6 +53,13 @@ inline constexpr size_t kMaxMessageSize = 4'000'000;
 
 inline constexpr uint32_t kMaxCompactTarget = 0x1D00FFFF;
 
-inline constexpr Uint256 kMaximumTarget = "00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"_h256;
-  
+inline constexpr Uint256 kMaximumTarget =
+    "00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"_h256;
+
+inline constexpr int64_t kSatoshisPerCoin = 100'000'000;
+
+// The hash of the genesis block header.
+inline constexpr Hash kGenesisHash =
+    "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"_hash;
+
 }  // namespace hornet::protocol
