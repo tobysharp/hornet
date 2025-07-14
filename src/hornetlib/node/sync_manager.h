@@ -54,7 +54,7 @@ class SyncManager : public EventHandler {
     if (!IsSyncPeer(block)) return;
 
     // Pass the block message to the BlockSync object.
-    block_sync_.OnBlock(sync_, block);
+    block_sync_.OnBlock(GetSync(), block);
   }
 
   const HeaderSync& GetHeaderSync() const {
