@@ -45,6 +45,7 @@ class HeaderTimechain {
   // Public methods
   ParentIterator Add(const HeaderContext& context);
   ParentIterator Add(const HeaderContext& context, ParentIterator parent);
+  const protocol::BlockHeader* Find(int height, const protocol::Hash& hash) const;
   FindResult Find(const protocol::Hash& hash);
   FindResult HeaviestTip() const;
   std::unique_ptr<ValidationView> GetValidationView(const ParentIterator& tip) const;

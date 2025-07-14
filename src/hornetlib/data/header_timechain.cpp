@@ -90,6 +90,17 @@ HeaderTimechain::FindResult HeaderTimechain::Find(const protocol::Hash& hash) {
   return {{*this}, std::nullopt};
 }
 
+const protocol::BlockHeader* HeaderTimechain::Find(int height, const protocol::Hash& hash) const {
+  if (height < chain_.Length() && chain_.GetHash(height) == hash)
+    return &chain_.At(height);
+
+  const HeaderTree::ConstIterator node = tree_.Find(hash);
+  if (tree_.IsValidNode(node) && node->data.Height() == height) 
+    return &node->data.context.header;
+  
+  return nullptr;
+}
+
 HeaderTimechain::FindResult HeaderTimechain::HeaviestTip() const {
   if (chain_.Empty()) return {{*this}, std::nullopt};
   return {BeginChain(chain_.GetTipHeight()), chain_.GetTipContext()};
