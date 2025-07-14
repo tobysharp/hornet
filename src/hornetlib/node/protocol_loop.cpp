@@ -161,12 +161,8 @@ void ProtocolLoop::NotifyLoop() {
     // Limit the number of bytes read per peer per frame to avoid memory pressure from bursty peers.
     const size_t bytes = peer->GetConnection().ReadToBuffer(kMaxReadBytesPerFrame);
 
-    if (bytes == 0) {
-      // Either the socket was closed, or else the socket is in non-blocking mode
-      // and there was no data actually readable. The latter case would be very
-      // strange, and worth noting, but not necessarily an error. In either case,
-      // we don't need to do anything here because later we will remove any closed
-      // sockets from the peer manager before the next iteration.
+    if (bytes == 0) {  // The socket was closed.
+      peer->Drop();
       continue;
     }
 
@@ -255,7 +251,8 @@ void ProtocolLoop::ProcessMessages() {
     } catch (std::exception& e) {
       // On unexpected exception, treat as protocol violation: close socket.
       if (const auto envelope = message->GetEnvelope())
-        if (const auto peer = peers_.GetRegistry().FromId(envelope->peer_id)) peer->Drop();
+        if (const auto peer = peers_.GetRegistry().FromId(envelope->peer_id)) 
+          peer->Drop();
     }
   }
   if (timeout.IsExpired() && !inbox_.empty())
