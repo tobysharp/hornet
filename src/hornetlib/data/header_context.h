@@ -31,11 +31,11 @@ struct HeaderContext {
   }
 
   HeaderContext Rewind(const protocol::BlockHeader& prev) const {
-    const auto hash = header.GetPreviousBlockHash();
+    const auto hash = data.GetPreviousBlockHash();
     return {prev, hash, prev.GetWork(), total_work - local_work, height - 1};
   }
 
-  protocol::BlockHeader header;
+  protocol::BlockHeader data;
   protocol::Hash hash;
   protocol::Work local_work;
   protocol::Work total_work;

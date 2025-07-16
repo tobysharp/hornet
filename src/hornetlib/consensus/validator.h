@@ -51,15 +51,15 @@ class Validator {
     if (!(hash <= target)) return HeaderError::InvalidProofOfWork;
 
     // Verify PoW target obeys the difficulty adjustment rules.
-    protocol::CompactTarget expected_bits = parent.header.GetCompactTarget();
+    protocol::CompactTarget expected_bits = parent.data.GetCompactTarget();
     if (difficulty_adjustment_.IsTransition(height)) {
       const int blocks_per_period = difficulty_adjustment_.GetBlocksPerPeriod();
       Assert(height - blocks_per_period < view.Length());
       const uint32_t period_start_time =
           view.TimestampAt(height - blocks_per_period);               // block[height - 2016].time
-      const uint32_t period_end_time = parent.header.GetTimestamp();  // block[height - 1].time
+      const uint32_t period_end_time = parent.data.GetTimestamp();  // block[height - 1].time
       expected_bits = difficulty_adjustment_.ComputeCompactTarget(
-          height, parent.header.GetCompactTarget(), period_start_time, period_end_time);
+          height, parent.data.GetCompactTarget(), period_start_time, period_end_time);
     }
     if (expected_bits != header.GetCompactTarget()) return HeaderError::BadDifficultyTransition;
 

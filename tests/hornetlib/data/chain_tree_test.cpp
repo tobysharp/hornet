@@ -85,7 +85,7 @@ TEST(ChainTreeTest, PromoteBranchPromotesFork) {
 
   // Reorg to promote alt_tip
   auto hashes = {MakeHash(3)};
-  tree.PromoteBranch(alt_tip, hashes);
+  tree.PromoteBranch(alt_tip, std::span<const protocol::Hash>{hashes});
 
   auto [new_tip, ctx] = tree.ChainTip();
   ASSERT_TRUE(ctx.has_value());

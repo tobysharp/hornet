@@ -18,12 +18,19 @@ struct ContextWrapper {
 
 template <typename TData>
 struct DefaultContextPolicy {
+  int fork_height;
+  std::span<const protocol::Hash> old_chain_hashes;
+
   using Context = ContextWrapper<TData>;
-  static Context Extend(const Context& parent, const TData& next, const protocol::Hash& hash) {
-    return Context{.data = next, .hash = hash, .height = parent.height + 1};
+
+  const protocol::Hash& GetChainHash(int height) const {
+    return old_chain_hashes[height - 1 - fork_height];
   }
-  static Context Rewind(const Context& child, const TData& prev, const protocol::Hash& hash) {
-    return Context{.data = prev, .hash = hash, .height = child.height - 1};
+  Context Extend(const Context& parent, const TData& next) const {
+    return Context{.data = next, .hash = GetChainHash(parent.height + 1), .height = parent.height + 1};
+  }
+  Context Rewind(const Context& child, const TData& prev) const {
+    return Context{.data = prev, .hash = GetChainHash(child.height - 1), .height = child.height - 1};
   }
 };
 
@@ -75,16 +82,17 @@ class ChainTree {
 
   // This method performs a chain reorg, i.e. it walks from the given tip node in the forest up
   // to its ancestor fork point in the chain, then swaps the fork's two child branches between
-  // the chain and the forest.
-  void PromoteBranch(Iterator tip, std::span<const protocol::Hash> old_chain_hashes) {
-    PromoteBranch(tip, old_chain_hashes, DefaultContextPolicy<TData>{});
+  // the chain and the forest. Returns the updated iterator for the now-invalidated tip.
+  Iterator PromoteBranch(Iterator tip, std::span<const protocol::Hash> old_chain_hashes) {
+    const int fork_height = GetHeightOfFirstAncestorInChain(tip);
+    const DefaultContextPolicy<TData> policy{fork_height, old_chain_hashes};
+    return PromoteBranch(tip, policy);
   }
 
   // In this overload, policy defines an interface for how to compute TContext by extending or
   // rewinding through a linear sequence of TData. This makes ChainTree adaptable to different
   // use cases and metadata schemes. The interface can be seen in DefaultContextPolicy.
-  void PromoteBranch(Iterator tip, std::span<const protocol::Hash> old_chain_hashes,
-                          const auto& policy);
+  Iterator PromoteBranch(Iterator tip, const auto& policy);
 
   void PruneForest(int min_height);
 
@@ -99,6 +107,10 @@ class ChainTree {
   int PushToChain(const Context& context);
   ForestNode* AddChild(ForestNode* parent, const Context& context);
   Iterator BeginForest(ForestIterator node) const;
+  int GetHeightOfFirstAncestorInChain(Iterator child) const {
+    if (child.InChain()) return child.ChainHeight();
+    return child.Node()->data.root_height - 1;
+  }
 
   std::vector<TData> chain_;
   Context chain_tip_context_;
@@ -162,17 +174,16 @@ inline ChainTree<TData, TContext>::FindResult ChainTree<TData, TContext>::ChainT
 // to its ancestor fork point in the chain, then swaps the fork's two child branches between
 // the chain and the forest.
 template <typename TData, typename TContext>
-inline void ChainTree<TData, TContext>::PromoteBranch(
+inline ChainTree<TData, TContext>::Iterator ChainTree<TData, TContext>::PromoteBranch(
     Iterator tip,
-    // old_chain_hashes must include exactly one hash per element to be moved into the DAG.
-    std::span<const protocol::Hash> old_chain_hashes,
     // In this overload, policy defines an interface to incrementally compute TContext when 
     // iterating forward or backward through a linear sequence of TData. This makes ChainTree 
     // adaptable to different use cases and metadata schemes. See DefaultContextPolicy.
     const auto& policy) {
-  Assert(tip.InTree());
+  Assert(tip);
+  if (tip.InChain()) return tip;  // Nothing to do
+
   ForestNode* tip_node = tip.Node();
-  Assert(tip_node != nullptr);
   Assert(forest_.IsLeaf(tip_node));
 
   // Locate the branch root in the tree.
@@ -182,17 +193,15 @@ inline void ChainTree<TData, TContext>::PromoteBranch(
 
   // Find the fork point in the chain.
   const Context fork =
-      policy.Rewind(root->data.context, chain_[root->data.Height() - 1], {});
+      policy.Rewind(root->data.context, chain_[root->data.Height() - 1]);
   Assert(fork.height < ChainTipHeight());  // The fork point can't be the old tip, by definition.
-  Assert(std::ssize(old_chain_hashes) == ChainTipHeight() - fork.height);
 
   // Copy the old chain elements into the tree.
   {
     Context context = fork;
     ForestNode* parent = nullptr;
     for (int height = root->data.Height(); height < ChainLength(); ++height) {
-      context = policy.Extend(context, chain_[height],
-                                       old_chain_hashes[height - root->data.Height()]);
+      context = policy.Extend(context, chain_[height]);
       parent = AddChild(parent, context);
     }
   }
@@ -208,6 +217,8 @@ inline void ChainTree<TData, TContext>::PromoteBranch(
   forest_.EraseChain(tip_node);
 
   // TODO: Update min_root_height_;
+
+  return ChainTip().first;
 }
 
 // Prunes historic branches from the tree.
@@ -351,7 +362,7 @@ class ChainTree<TData, TContext>::AncestorIterator {
   friend ChainTree<TData, TContext>;
 
   bool InChain() const {
-    return height_ >= 0;
+    return height_ >= 0 && height_ < chain_tree_->ChainLength();
   }
   bool InTree() const {
     return node_ != nullptr;

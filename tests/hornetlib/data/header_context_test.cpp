@@ -32,7 +32,7 @@ TEST(HeaderContextTest, NullContextHasInvalidHeight) {
   EXPECT_EQ(ctx.hash, protocol::Hash{});
   EXPECT_EQ(ctx.local_work, protocol::Work{});
   EXPECT_EQ(ctx.total_work, protocol::Work{});
-  EXPECT_EQ(ctx.header.GetVersion(), 0);
+  EXPECT_EQ(ctx.data.GetVersion(), 0);
 }
 
 TEST(HeaderContextTest, GenesisCreatesExpectedContext) {
@@ -43,7 +43,7 @@ TEST(HeaderContextTest, GenesisCreatesExpectedContext) {
   EXPECT_EQ(ctx.hash, genesis.ComputeHash());
   EXPECT_EQ(ctx.local_work, genesis.GetWork());
   EXPECT_EQ(ctx.total_work, genesis.GetWork());
-  EXPECT_EQ(ctx.header.ComputeHash(), genesis.ComputeHash());
+  EXPECT_EQ(ctx.data.ComputeHash(), genesis.ComputeHash());
 }
 
 TEST(HeaderContextTest, ExtendComputesHashAndUpdatesWork) {
@@ -57,7 +57,7 @@ TEST(HeaderContextTest, ExtendComputesHashAndUpdatesWork) {
   EXPECT_EQ(ctx1.hash, header1.ComputeHash());
   EXPECT_EQ(ctx1.local_work, header1.GetWork());
   EXPECT_EQ(ctx1.total_work, gctx.total_work + header1.GetWork());
-  EXPECT_EQ(ctx1.header.ComputeHash(), header1.ComputeHash());
+  EXPECT_EQ(ctx1.data.ComputeHash(), header1.ComputeHash());
 
   auto header2 = MakeHeader(ctx1.hash, 1231006507, 2);
   auto h2_hash = header2.ComputeHash();
@@ -81,7 +81,7 @@ TEST(HeaderContextTest, RewindReturnsPreviousContext) {
   EXPECT_EQ(back.hash, genesis.ComputeHash());
   EXPECT_EQ(back.local_work, genesis.GetWork());
   EXPECT_EQ(back.total_work, gctx.total_work);
-  EXPECT_EQ(back.header.ComputeHash(), genesis.ComputeHash());
+  EXPECT_EQ(back.data.ComputeHash(), genesis.ComputeHash());
 }
 
 }  // namespace

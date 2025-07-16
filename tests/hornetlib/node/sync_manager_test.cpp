@@ -44,10 +44,10 @@ TEST(SyncManagerTest, TestMainnetSyncHeaders) {
 
     loop.AddOutboundPeer(net::kLocalhost, node.GetPort());
     loop.RunMessageLoop([&](const ProtocolLoop&) {
-        return timechain.Headers().GetChainLength() >= 9000;
+        return timechain.Headers().ChainLength() >= 9000;
     });
-    LogDebug() << "Header count: " << timechain.Headers().GetChainLength();
-    EXPECT_TRUE(timechain.Headers().GetChainLength() >= 9000);
+    LogDebug() << "Header count: " << timechain.Headers().ChainLength();
+    EXPECT_TRUE(timechain.Headers().ChainLength() >= 9000);
 }
 
 class NoHeadersSyncManager : public SyncManager {
@@ -63,7 +63,7 @@ class NoHeadersSyncManager : public SyncManager {
   }
 
  protected:
-  bool done_ = false;
+  bool done_ = true;
 };
 
 TEST(SyncManagerTest, TestMainnetSyncBlocks) {

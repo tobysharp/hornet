@@ -42,14 +42,14 @@ TEST(HeaderTimechainTest, AddExtendsChain) {
   HeaderTimechain tc{};
   auto genesis = MakeGenesis(1, 1);
   auto genesis_it = tc.Add(genesis);
-  EXPECT_EQ(tc.GetHeaviestTipHeight(), 0);
-  EXPECT_EQ(tc.GetChainLength(), 1);
+  EXPECT_EQ(tc.ChainTipHeight(), 0);
+  EXPECT_EQ(tc.ChainLength(), 1);
 
   auto child = MakeChild(genesis, 2, 1);
-  auto tip = tc.Add(child, genesis_it);
+  auto tip = tc.Add(genesis_it, child).first;
   EXPECT_TRUE(tip.IsValid());
   EXPECT_EQ(tip.GetHeight(), 1);
-  EXPECT_EQ(tc.GetChainLength(), 2);
+  EXPECT_EQ(tc.ChainLength(), 2);
 }
 
 TEST(HeaderTimechainTest, BranchWithoutReorg) {
@@ -57,18 +57,18 @@ TEST(HeaderTimechainTest, BranchWithoutReorg) {
   auto genesis = MakeGenesis(1, 1);
   auto it0 = tc.Add(genesis);
   auto h1 = MakeChild(genesis, 2, 1);
-  auto it1 = tc.Add(h1, it0);
+  auto it1 = tc.Add(it0, h1);
   auto h2 = MakeChild(h1, 3, 1);
-  auto tip = tc.Add(h2, it1);
+  auto tip = tc.Add(it1, h2).first;
   ASSERT_TRUE(tip.IsValid());
   EXPECT_EQ(tip.GetHeight(), 2);
-  EXPECT_EQ(tc.GetChainLength(), 3);
+  EXPECT_EQ(tc.ChainLength(), 3);
 
   auto branch1 = MakeChild(genesis, 10, 1);
-  auto branch_it = tc.Add(branch1, it0);
+  auto branch_it = tc.Add(it0, branch1).first;
   EXPECT_TRUE(branch_it.IsValid());
-  EXPECT_EQ(tc.GetHeaviestTipHeight(), 2);
-  EXPECT_EQ(tc.GetChainLength(), 3);
+  EXPECT_EQ(tc.ChainTipHeight(), 2);
+  EXPECT_EQ(tc.ChainLength(), 3);
 }
 
 TEST(HeaderTimechainTest, BranchTriggersReorgOnMoreWork) {
@@ -76,16 +76,16 @@ TEST(HeaderTimechainTest, BranchTriggersReorgOnMoreWork) {
   auto genesis = MakeGenesis(1, 1);
   auto it0 = tc.Add(genesis);
   auto h1 = MakeChild(genesis, 2, 1);
-  auto it1 = tc.Add(h1, it0);
+  auto it1 = tc.Add(it0, h1);
   auto h2 = MakeChild(h1, 3, 1);
-  tc.Add(h2, it1);
+  tc.Add(it1, h2);
 
   auto heavy_branch = MakeChild(genesis, 20, 5);
-  auto tip = tc.Add(heavy_branch, it0);
+  auto tip = tc.Add(it0, heavy_branch).first;
   EXPECT_TRUE(tip.IsValid());
-  EXPECT_EQ(tc.GetHeaviestTipHeight(), 1);
-  EXPECT_EQ(tc.GetChainLength(), 2);
-  EXPECT_EQ(tc.HeaviestTip().second->total_work, Uint256{6u});
+  EXPECT_EQ(tc.ChainTipHeight(), 1);
+  EXPECT_EQ(tc.ChainLength(), 2);
+  EXPECT_EQ(tc.ChainTip().second->total_work, Uint256{6u});
 
   auto h2_find = tc.Find(h2.hash);
   EXPECT_TRUE(h2_find.first.IsValid());
@@ -98,11 +98,11 @@ TEST(HeaderTimechainTest, ValidationViewProvidesTimestamps) {
   auto genesis = MakeGenesis(1, 1);
   auto it0 = tc.Add(genesis);
   auto h1 = MakeChild(genesis, 2, 1, 1);
-  auto it1 = tc.Add(h1, it0);
+  auto it1 = tc.Add(it0, h1);
   auto h2 = MakeChild(h1, 3, 1, 2);
-  auto tip = tc.Add(h2, it1);
+  auto tip = tc.Add(it1, h2);
 
-  auto view = tc.GetValidationView(tip);
+  auto view = tc.GetValidationView(tip.first);
   EXPECT_EQ(view->TimestampAt(1), 1u);
 
   const auto stamps = view->LastNTimestamps(2);
