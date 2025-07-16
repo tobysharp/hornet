@@ -10,7 +10,6 @@
 
 #include "hornetlib/consensus/header_ancestry_view.h"
 #include "hornetlib/data/hashed_tree.h"
-#include "hornetlib/data/header_chain.h"
 #include "hornetlib/data/header_context.h"
 
 namespace hornet::data {
@@ -49,20 +48,22 @@ class HeaderTimechain {
   FindResult Find(const protocol::Hash& hash);
   FindResult HeaviestTip() const;
   std::unique_ptr<ValidationView> GetValidationView(const ParentIterator& tip) const;
-  const HeaderChain& HeaviestChain() const {
-    return chain_;
-  }
   int GetHeaviestTipHeight() const {
-    return chain_.GetTipHeight();
+    return GetChainTipHeight();
   }
-  int GetHeaviestLength() const {
-    return chain_.Length();
+  int GetChainLength() const {
+    return std::ssize(chain_);
   }
 
  private:
   using HeaderTree = HashedTree<NodeData>;
   using TreeIterator = HeaderTree::Iterator;
   using TreeNode = HeaderTree::Node;
+
+  // Chain helpers
+  int PushToChain(const HeaderContext& context);
+  const protocol::Hash& GetChainHash(int height) const;
+  int GetChainTipHeight() const { return GetChainLength() - 1; }
 
   // Tree helpers
   TreeNode* AddChild(TreeNode* parent, const HeaderContext& context);
@@ -83,7 +84,8 @@ class HeaderTimechain {
   auto AncestorsToHeight(ParentIterator start, int end_height) const;
 
   // As potential forks or re-orgs are resolved, the heaviest chain is kept in a linear array.
-  HeaderChain chain_;
+  std::vector<protocol::BlockHeader> chain_;
+  HeaderContext chain_tip_context_;
 
   // Recent headers are kept in a forest of putative chains, with tracked proof-of-work in
   // HeaderContext.

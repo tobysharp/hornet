@@ -92,15 +92,19 @@ inline BlockSync::RequestState BlockSync::RequestNextBlock(net::WeakPeer weak) {
   // Only send message if we have an empty request slot available.
   if (!request_active_.test_and_set(std::memory_order_acquire)) {
     // Only one thread at a time can get into this scope.
-    const bool finished = request_height_ >= timechain_.Headers().GetHeaviestLength();
+    const bool finished = request_height_ >= timechain_.Headers().GetChainLength();
     if (finished) {
       request_active_.clear();
       return RequestState::End;
     }
-    protocol::message::GetData getdata;
-    const protocol::Hash& hash = timechain_.Headers().HeaviestChain().GetHash(request_height_++);
-    getdata.AddInventory(protocol::Inventory::WitnessBlock(hash));
-    handler_.OnRequest(peer, std::make_unique<protocol::message::GetData>(std::move(getdata)));
+    // protocol::message::GetData getdata;
+    // const protocol::Hash& hash = timechain_.Headers().HeaviestChain().GetHash(request_height_++);
+    // getdata.AddInventory(protocol::Inventory::WitnessBlock(hash));
+    // handler_.OnRequest(peer, std::make_unique<protocol::message::GetData>(std::move(getdata)));
+
+    // TODO: Request the height and hash of the next block to validate from the timechain, which
+    // tracks the validation state of blocks.
+
     return RequestState::Active;
   }
   return RequestState::Deferred;

@@ -43,13 +43,13 @@ TEST(HeaderTimechainTest, AddExtendsChain) {
   auto genesis = MakeGenesis(1, 1);
   auto genesis_it = tc.Add(genesis);
   EXPECT_EQ(tc.GetHeaviestTipHeight(), 0);
-  EXPECT_EQ(tc.GetHeaviestLength(), 1);
+  EXPECT_EQ(tc.GetChainLength(), 1);
 
   auto child = MakeChild(genesis, 2, 1);
   auto tip = tc.Add(child, genesis_it);
   EXPECT_TRUE(tip.IsValid());
   EXPECT_EQ(tip.GetHeight(), 1);
-  EXPECT_EQ(tc.GetHeaviestLength(), 2);
+  EXPECT_EQ(tc.GetChainLength(), 2);
 }
 
 TEST(HeaderTimechainTest, BranchWithoutReorg) {
@@ -62,13 +62,13 @@ TEST(HeaderTimechainTest, BranchWithoutReorg) {
   auto tip = tc.Add(h2, it1);
   ASSERT_TRUE(tip.IsValid());
   EXPECT_EQ(tip.GetHeight(), 2);
-  EXPECT_EQ(tc.GetHeaviestLength(), 3);
+  EXPECT_EQ(tc.GetChainLength(), 3);
 
   auto branch1 = MakeChild(genesis, 10, 1);
   auto branch_it = tc.Add(branch1, it0);
   EXPECT_TRUE(branch_it.IsValid());
   EXPECT_EQ(tc.GetHeaviestTipHeight(), 2);
-  EXPECT_EQ(tc.GetHeaviestLength(), 3);
+  EXPECT_EQ(tc.GetChainLength(), 3);
 }
 
 TEST(HeaderTimechainTest, BranchTriggersReorgOnMoreWork) {
@@ -84,7 +84,7 @@ TEST(HeaderTimechainTest, BranchTriggersReorgOnMoreWork) {
   auto tip = tc.Add(heavy_branch, it0);
   EXPECT_TRUE(tip.IsValid());
   EXPECT_EQ(tc.GetHeaviestTipHeight(), 1);
-  EXPECT_EQ(tc.GetHeaviestLength(), 2);
+  EXPECT_EQ(tc.GetChainLength(), 2);
   EXPECT_EQ(tc.HeaviestTip().second->total_work, Uint256{6u});
 
   auto h2_find = tc.Find(h2.hash);

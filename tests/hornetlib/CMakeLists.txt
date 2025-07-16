@@ -2,8 +2,8 @@
 add_executable(hornetlib_tests
    consensus/difficulty_adjustment_test.cpp
    crypto/hash_test.cpp
+   data/chain_tree_test.cpp
    data/hashed_tree_test.cpp
-   data/header_chain_test.cpp
    data/header_context_test.cpp
    data/header_timechain_test.cpp
    encoding/reader_test.cpp
