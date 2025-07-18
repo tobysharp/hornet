@@ -23,8 +23,8 @@ struct GetNext {
   }
 };
 
-using Iterator = PointerIterator<Node, GetNext, false>;
-using ConstIterator = PointerIterator<Node, GetNext, true>;
+using Iterator = PointerIterator<Node*, GetNext>;
+using ConstIterator = PointerIterator<const Node*, GetNext>;
 
 TEST(PointerIteratorTest, DefaultConstructedIsNull) {
   Iterator it;

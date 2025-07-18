@@ -4,6 +4,8 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
+#include <ostream>
+
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/hash.h"
 #include "hornetlib/protocol/work.h"
@@ -35,11 +37,21 @@ struct HeaderContext {
     return {prev, hash, prev.GetWork(), total_work - local_work, height - 1};
   }
 
-  protocol::BlockHeader data;
-  protocol::Hash hash;
+  friend std::ostream& operator <<(std::ostream& os, const HeaderContext& obj) {
+    os << "{";
+    os << "\"height\":" << obj.height << ", ";
+    os << "\"hash\":" << obj.hash << ", ";
+    os << "\"local_work\": " << obj.local_work << ", ";
+    os << "\"total_work\": " << obj.total_work;
+    os << "}";
+    return os;
+  }
+
+  protocol::BlockHeader data = {};
+  protocol::Hash hash = {};
   protocol::Work local_work;
   protocol::Work total_work;
-  int height;
+  int height = -1;
 };
 
 }  // namespace hornet::data

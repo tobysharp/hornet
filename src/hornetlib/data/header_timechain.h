@@ -15,23 +15,35 @@
 
 namespace hornet::data {
 
-class HeaderTimechain : public ChainTree<protocol::BlockHeader, HeaderContext>{
+class HeaderTimechain : public ChainTree<protocol::BlockHeader, HeaderContext> {
  public:
   // Public types
   class ValidationView;
+  template <bool kIsConst> class ContextIterator;
+  using Iterator = ContextIterator<false>;
+  using ConstIterator = ContextIterator<true>;
 
   // Public methods
-  FindResult Add(const HeaderContext& context);
-  FindResult Add(FindResult parent, const HeaderContext& context);
-  FindResult Find(const protocol::Hash& hash);
+  Iterator Add(const HeaderContext& context);
+  Iterator Add(Iterator parent, const HeaderContext& context);
+  ConstIterator Find(const protocol::Hash& hash) const;
+  Iterator Find(const protocol::Hash& hash);
   const protocol::BlockHeader* Find(int height, const protocol::Hash& hash) const;
-  std::unique_ptr<ValidationView> GetValidationView(const Iterator& tip) const;
+  ConstIterator FindInTipOrForest(const protocol::Hash& hash) const;
+  Iterator FindInTipOrForest(const protocol::Hash& hash);
+  ConstIterator ChainTip() const;
+  Iterator ChainTip();
+  const protocol::Hash& GetChainHash(int height) const;
+  std::unique_ptr<ValidationView> GetValidationView(ConstIterator tip) const;
+  void EraseBranch(Iterator root);
 
  private:
   using Base = ChainTree<protocol::BlockHeader, HeaderContext>;
+  using BaseIterator = Base::Iterator;
+  using BaseConstIterator = Base::ConstIterator;
   struct HeaderContextPolicy {
-    const HeaderTimechain& timechain_;
-    const protocol::Hash& GetChainHash(int height) const { return timechain_.GetChainHash(height); }
+    const HeaderTimechain* timechain_ = nullptr;
+    const protocol::Hash& GetChainHash(int height) const { return timechain_->GetChainHash(height); }
     HeaderContext Extend(const HeaderContext& parent, const protocol::BlockHeader& next) const {
       return parent.Extend(next, GetChainHash(parent.height + 1));
     }    
@@ -39,9 +51,10 @@ class HeaderTimechain : public ChainTree<protocol::BlockHeader, HeaderContext>{
       return child.Rewind(prev);
     }
   };
-
-  const protocol::Hash& GetChainHash(int height) const;
-  Iterator PromoteBranch(Iterator tip);
+  HeaderContextPolicy GetPolicy() const { return HeaderContextPolicy{this}; }
+  Iterator MakeContextIterator(FindResult find);
+  ConstIterator MakeContextIterator(ConstFindResult find) const;
+  Iterator PromoteBranch(BaseIterator tip);
   void PruneForest();
 
   // Behavior tuning variables
@@ -49,12 +62,58 @@ class HeaderTimechain : public ChainTree<protocol::BlockHeader, HeaderContext>{
   int max_keep_depth_ = 288;    // The maximum depth of branches to keep in the tree when pruning.
 };
 
+template <bool kIsConst>
+class HeaderTimechain::ContextIterator {
+ public:
+  // C++20 iterator traits
+  using iterator_concept = std::forward_iterator_tag;
+  using value_type = HeaderContext;
+  using pointer = const HeaderContext*;
+  using reference = const HeaderContext&;
+  using difference_type = std::ptrdiff_t;
+  
+  using ChainTreeIterator = AncestorIterator<kIsConst>;
+
+  ContextIterator() = default;
+  ContextIterator(const ContextIterator&) = default;
+  ContextIterator(ChainTreeIterator base, const HeaderContext& context, const HeaderContextPolicy& policy) 
+    : base_(base), context_(context), policy_(policy) {}
+  
+  template <bool kIsRhsConst>
+  requires (kIsConst && !kIsRhsConst)
+  ContextIterator(const ContextIterator<kIsRhsConst>& rhs) 
+    : base_(rhs.base_), context_(rhs.context_), policy_(rhs.policy_) {}
+
+  const HeaderContext& operator*() const { return context_; }
+  const HeaderContext* operator->() const { return &context_; }
+
+  ContextIterator& operator=(const ContextIterator&) = default;
+  ContextIterator& operator=(ContextIterator&&) = default;
+  bool operator!=(const ContextIterator& rhs) const { return base_ != rhs.base_; }
+  bool operator==(const ContextIterator& rhs) const { return base_ == rhs.base_; }
+
+  ContextIterator& operator++() {
+    ++base_;
+    context_ = policy_.Rewind(context_, base_ ? *base_ : protocol::BlockHeader{});
+    return *this;
+  }
+  operator bool() const { return base_; }
+  operator const ChainTreeIterator&() const { return base_; }
+
+ private:
+  template <bool> friend class ContextIterator;
+
+  ChainTreeIterator base_;
+  HeaderContext context_;
+  HeaderContextPolicy policy_;
+};
+
 class HeaderTimechain::ValidationView : public consensus::HeaderAncestryView {
  public:
-  ValidationView(const HeaderTimechain& timechain, Iterator tip)
+  ValidationView(const HeaderTimechain& timechain, ConstIterator tip)
       : timechain_(timechain), tip_(tip) {}
 
-  void SetTip(Iterator tip) {
+  void SetTip(ConstIterator tip) {
     tip_ = tip;
   }
   virtual int Length() const override;
@@ -63,7 +122,7 @@ class HeaderTimechain::ValidationView : public consensus::HeaderAncestryView {
 
  private:
   const HeaderTimechain& timechain_;
-  Iterator tip_;
+  ConstIterator tip_;
 };
 
 }  // namespace hornet::data

@@ -4,6 +4,8 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
+#include <ostream>
+
 #include "hornetlib/util/big_uint.h"
 
 // Proof-of-work types and relationships:
@@ -62,6 +64,9 @@ class Work {
     return value_ != rhs.value_;
   }
 
+  friend std::ostream& operator <<(std::ostream& os, const Work& work) {
+    return os << "{\"value\": " << work.value_ << "}\n";
+  }
  private:
   Uint256 value_ = Uint256::Zero();
 };

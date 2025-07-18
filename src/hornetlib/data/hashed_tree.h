@@ -5,6 +5,7 @@
 #pragma once
 
 #include <list>
+#include <ostream>
 #include <ranges>
 #include <unordered_map>
 
@@ -30,6 +31,19 @@ class HashedTree {
     Node* parent;
     Hash hash;
     T data;
+
+    friend std::ostream& operator<<(std::ostream& os, const Node& node) {
+      os << "{\n"
+        << "  \"hash\": " << node.hash << ",\n"
+        << "  \"parent\": ";
+      if (node.parent)
+        os << node.parent->hash;
+      else
+        os << "null";
+      os  << ",\n  \"data\": " << node.data << "\n"
+        << "}";
+      return os;
+    }
   };
 
   struct GetParent {
@@ -43,8 +57,8 @@ class HashedTree {
 
   using Iterator = std::list<Node>::iterator;
   using ConstIterator = std::list<Node>::const_iterator;
-  using UpIterator = util::PointerIterator<Node, GetParent, false>;
-  using ConstUpIterator = util::PointerIterator<Node, GetParent, true>;
+  using UpIterator = util::PointerIterator<Node*, GetParent>;
+  using ConstUpIterator = util::PointerIterator<const Node*, GetParent>;
 
   HashedTree(Hasher&& hasher = GetHashFunctor{}) : hasher_(std::forward<Hasher>(hasher)) {}
 
