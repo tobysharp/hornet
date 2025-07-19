@@ -78,7 +78,7 @@ TEST(HeaderTimechainTest, BranchTriggersReorgOnMoreWork) {
   auto h1 = MakeChild(genesis, 2, 1);
   auto it1 = tc.Add(it0, h1);
   auto h2 = MakeChild(h1, 3, 1);
-  auto it2 = tc.Add(it1, h2);
+  [[maybe_unused]] auto it2 = tc.Add(it1, h2);
 
   auto heavy_branch = MakeChild(genesis, 20, 5);
   auto tip = tc.Add(it0, heavy_branch);

@@ -27,7 +27,7 @@ HeaderTimechain::Iterator HeaderTimechain::Add(const HeaderContext& context) {
 
   // Search for the parent among all tips.
   const protocol::Hash parent_hash = context.data.GetPreviousBlockHash();
-  ContextIterator parent = FindInTipOrForest(parent_hash);
+  ContextIterator parent = FindTipOrForks(parent_hash);
   if (!parent) return parent;  // If no parent was found, this is a failure.
   return Add(parent, context);
 }
@@ -56,7 +56,7 @@ HeaderTimechain::Iterator HeaderTimechain::Add(Iterator parent, const HeaderCont
 
 HeaderTimechain::ConstIterator HeaderTimechain::Find(const protocol::Hash& hash) const {
   // Check chain tip and forest.
-  ConstIterator lookup = FindInTipOrForest(hash);
+  ConstIterator lookup = FindTipOrForks(hash);
   if (lookup) return lookup;
 
   // Scan through chain, up to max_search_depth_ elements.
@@ -69,7 +69,7 @@ HeaderTimechain::ConstIterator HeaderTimechain::Find(const protocol::Hash& hash)
 
 HeaderTimechain::Iterator HeaderTimechain::Find(const protocol::Hash& hash) {
   // Check chain tip and forest.
-  Iterator lookup = FindInTipOrForest(hash);
+  Iterator lookup = FindTipOrForks(hash);
   if (lookup) return lookup;
 
   // Scan through chain, up to max_search_depth_ elements.
@@ -80,13 +80,9 @@ HeaderTimechain::Iterator HeaderTimechain::Find(const protocol::Hash& hash) {
   return MakeContextIterator({{*this}, std::nullopt});
 }
 
-const protocol::BlockHeader* HeaderTimechain::Find(int height, const protocol::Hash& hash) const {
-  if (height < ChainLength() && GetChainHash(height) == hash) return &ChainElement(height);
-
-  const Base::Forest::ConstIterator node = forest_.Find(hash);
-  if (forest_.IsValidNode(node) && node->data.Height() == height) return &node->data.context.data;
-
-  return nullptr;
+const protocol::BlockHeader* HeaderTimechain::Find(Locator locator) const {
+  BaseConstIterator it = Base::Find(locator);
+  return it ? &*it : nullptr;
 }
 
 HeaderTimechain::Iterator HeaderTimechain::PromoteBranch(BaseIterator tip) {
@@ -120,14 +116,14 @@ HeaderTimechain::Iterator HeaderTimechain::ChainTip() {
   return MakeContextIterator(Base::ChainTip());
 }
 
-HeaderTimechain::ConstIterator HeaderTimechain::FindInTipOrForest(
+HeaderTimechain::ConstIterator HeaderTimechain::FindTipOrForks(
     const protocol::Hash& hash) const {
-  return MakeContextIterator(Base::FindInTipOrForest(hash));
+  return MakeContextIterator(Base::FindTipOrForks(hash));
 }
 
-HeaderTimechain::Iterator HeaderTimechain::FindInTipOrForest(
+HeaderTimechain::Iterator HeaderTimechain::FindTipOrForks(
     const protocol::Hash& hash) {
-  return MakeContextIterator(Base::FindInTipOrForest(hash));
+  return MakeContextIterator(Base::FindTipOrForks(hash));
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////

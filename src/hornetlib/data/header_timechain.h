@@ -28,9 +28,9 @@ class HeaderTimechain : public ChainTree<protocol::BlockHeader, HeaderContext> {
   Iterator Add(Iterator parent, const HeaderContext& context);
   ConstIterator Find(const protocol::Hash& hash) const;
   Iterator Find(const protocol::Hash& hash);
-  const protocol::BlockHeader* Find(int height, const protocol::Hash& hash) const;
-  ConstIterator FindInTipOrForest(const protocol::Hash& hash) const;
-  Iterator FindInTipOrForest(const protocol::Hash& hash);
+  const protocol::BlockHeader* Find(Locator locator) const;
+  ConstIterator FindTipOrForks(const protocol::Hash& hash) const;
+  Iterator FindTipOrForks(const protocol::Hash& hash);
   ConstIterator ChainTip() const;
   Iterator ChainTip();
   const protocol::Hash& GetChainHash(int height) const;
@@ -99,6 +99,10 @@ class HeaderTimechain::ContextIterator {
   }
   operator bool() const { return base_; }
   operator const ChainTreeIterator&() const { return base_; }
+
+  Locator Locator() const {
+    return base_.InTree() ? context_.hash : context_.height;
+  }
 
  private:
   template <bool> friend class ContextIterator;
