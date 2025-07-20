@@ -93,9 +93,10 @@ class HashedTree {
     map_.clear();
   }
 
-  Iterator AddChild(Node* parent, T data) {
+  Iterator AddChild(const Node* parent, T data) {
     const Hash hash = hasher_(data);
-    list_.emplace_back(Node{parent, hash, std::move(data)});
+    // Note that this const_cast is justified since we are not modifying the parent at all.
+    list_.emplace_back(Node{const_cast<Node*>(parent), hash, std::move(data)});
     const Iterator it = std::prev(list_.end());
     map_[hash] = it;
     if (parent != nullptr) child_map_.insert({parent, it});

@@ -19,7 +19,7 @@ const protocol::Hash& HeaderTimechain::GetChainHash(int height) const {
   return ChainElement(height + 1).GetPreviousBlockHash();
 }
 
-HeaderTimechain::Iterator HeaderTimechain::Add(const HeaderContext& context) {
+HeaderTimechain::AddResult HeaderTimechain::Add(const HeaderContext& context) {
   if (Empty()) {
     // Genesis header
     return Add({}, context);
@@ -28,33 +28,37 @@ HeaderTimechain::Iterator HeaderTimechain::Add(const HeaderContext& context) {
   // Search for the parent among all tips.
   const protocol::Hash parent_hash = context.data.GetPreviousBlockHash();
   ContextIterator parent = FindTipOrForks(parent_hash);
-  if (!parent) return parent;  // If no parent was found, this is a failure.
+  if (!parent) return {parent, {}};  // If no parent was found, this is a failure.
   return Add(parent, context);
 }
 
-HeaderTimechain::Iterator HeaderTimechain::Add(Iterator parent, const HeaderContext& context) {
+HeaderTimechain::AddResult HeaderTimechain::Add(ConstIterator parent, const HeaderContext& context) {
   // Validate the parent we were given
   if ((parent && parent->hash != context.data.GetPreviousBlockHash()) || (!parent && !Empty()))
     util::ThrowInvalidArgument("HeaderTimechain::Add mismatched hash at height ",
                                context.height - 1, ".");
+                               
   // Add the new header context to the ChainTree.
-  BaseIterator result = Base::Add(parent, context);
+  Base::Iterator base_child_it = Base::Add(parent, context);
+  Iterator context_child_it = MakeContextIterator({base_child_it, context});
+  AddResult result = { context_child_it, {} };
 
   // Compare against the PoW at the current tip.
   if (context.total_work > chain_tip_context_.total_work) {
     // Since this PoW is greater, truncate the chain to the common parent,
     // then copy this new branch into the linear chain. This is a reorg.
-    result = PromoteBranch(result);
+    result = PromoteBranch(base_child_it);
   }
 
   // Prune stale tree entries before returning.
   PruneForest();
 
   // TODO: Ensure we didn't just prune out the thing we're about to return!
-  return {result, context, GetPolicy()};
+  
+  return result;
 }
 
-HeaderTimechain::ConstIterator HeaderTimechain::Find(const protocol::Hash& hash) const {
+HeaderTimechain::ConstIterator HeaderTimechain::Search(const protocol::Hash& hash) const {
   // Check chain tip and forest.
   ConstIterator lookup = FindTipOrForks(hash);
   if (lookup) return lookup;
@@ -67,7 +71,7 @@ HeaderTimechain::ConstIterator HeaderTimechain::Find(const protocol::Hash& hash)
   return MakeContextIterator({{*this}, std::nullopt});
 }
 
-HeaderTimechain::Iterator HeaderTimechain::Find(const protocol::Hash& hash) {
+HeaderTimechain::Iterator HeaderTimechain::Search(const protocol::Hash& hash) {
   // Check chain tip and forest.
   Iterator lookup = FindTipOrForks(hash);
   if (lookup) return lookup;
@@ -80,14 +84,20 @@ HeaderTimechain::Iterator HeaderTimechain::Find(const protocol::Hash& hash) {
   return MakeContextIterator({{*this}, std::nullopt});
 }
 
-const protocol::BlockHeader* HeaderTimechain::Find(Locator locator) const {
-  BaseConstIterator it = Base::Find(locator);
-  return it ? &*it : nullptr;
+// Ensure both height and hash match before returning a valid Locator.
+std::optional<Locator> HeaderTimechain::MakeLocator(int height, const protocol::Hash& hash) const {
+  if (height < 0) util::ThrowInvalidArgument("HeaderTimechain::MakeLocator negative height.");
+  if (height < ChainLength() && hash == GetChainHash(height)) 
+    return height;
+  const auto it = forest_.Find(hash);
+  if (forest_.IsValidNode(it) && it->hash == hash)
+    return hash;
+  return std::nullopt;
 }
 
-HeaderTimechain::Iterator HeaderTimechain::PromoteBranch(BaseIterator tip) {
-  BaseIterator it = Base::PromoteBranch(tip, GetPolicy());
-  return MakeContextIterator({it, *ChainTip()});
+HeaderTimechain::AddResult HeaderTimechain::PromoteBranch(BaseIterator tip) {
+  auto [it, moved] = Base::PromoteBranch(tip, GetPolicy());
+  return {MakeContextIterator({it, *ChainTip()}), moved};
 }
 
 // Prunes historic branches from the tree.

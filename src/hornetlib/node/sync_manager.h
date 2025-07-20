@@ -25,7 +25,7 @@ namespace hornet::node {
 class SyncManager : public EventHandler {
  public:
   SyncManager(data::Timechain& timechain)
-      : header_sync_(timechain.Headers(), header_sync_handler_),
+      : header_sync_(timechain, header_sync_handler_),
         block_sync_(timechain, block_sync_handler_) {}
   SyncManager() = delete;
 

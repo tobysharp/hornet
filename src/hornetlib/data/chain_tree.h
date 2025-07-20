@@ -38,6 +38,16 @@ struct DefaultContextPolicy {
   }
 };
 
+// This concept defines the requirements for a type to be a valid context policy.
+// It must provide Extend and Rewind methods with the correct signatures.
+template<typename TPolicy, typename TData, typename TContext>
+concept ContextPolicy = requires(const TPolicy& policy, const TData& data, const TContext& context) {
+    // Check that an expression like this is valid...
+    { policy.Extend(context, data) } -> std::convertible_to<TContext>;
+    // ...and that an expression like this is also valid.
+    { policy.Rewind(context, data) } -> std::convertible_to<TContext>;
+};
+
 // Locator is used to resolve an element *either* by height in the main branch,
 // *or* by hash in the forest of forks. This locator is transferable between
 // ChainTree instances that have the exact same structure and hashes.
@@ -76,13 +86,11 @@ class ChainTree {
       return context.height;
     }
   };
-  using Forest = HashedTree<NodeData>;
-  using ForestIterator = Forest::Iterator;
-  using ForestConstIterator = Forest::ConstIterator;
   using Iterator = AncestorIterator<false>;
   using ConstIterator = AncestorIterator<true>;
   using FindResult = std::pair<Iterator, std::optional<Context>>;
   using ConstFindResult = std::pair<ConstIterator, std::optional<Context>>;
+  using PromoteResult = std::pair<Iterator, std::vector<protocol::Hash>>;
 
   // Public methods
   bool Empty() const {
@@ -98,9 +106,9 @@ class ChainTree {
     Assert(height >= 0 && height < ChainLength());
     return chain_[height];
   }
-  Iterator Add(Iterator parent, const Context& context);
-  Iterator Find(Locator locator);
-  ConstIterator Find(Locator locator) const;
+  Iterator Add(ConstIterator parent, const Context& context);
+  Iterator Find(const Locator& locator);
+  ConstIterator Find(const Locator& locator) const;
   ConstFindResult FindTipOrForks(const protocol::Hash& hash) const;
   FindResult FindTipOrForks(const protocol::Hash& hash);
   ConstFindResult ChainTip() const;
@@ -109,7 +117,7 @@ class ChainTree {
   // This method performs a chain reorg, i.e. it walks from the given tip node in the forest up
   // to its ancestor fork point in the chain, then swaps the fork's two child branches between
   // the chain and the forest. Returns the updated iterator for the now-invalidated tip.
-  Iterator PromoteBranch(Iterator tip, std::span<const protocol::Hash> old_chain_hashes) {
+  PromoteResult PromoteBranch(Iterator tip, std::span<const protocol::Hash> old_chain_hashes) {
     const int fork_height = GetHeightOfFirstAncestorInChain(tip);
     const DefaultContextPolicy<TData> policy{fork_height, old_chain_hashes};
     return PromoteBranch(tip, policy);
@@ -118,7 +126,8 @@ class ChainTree {
   // In this overload, policy defines an interface for how to compute TContext by extending or
   // rewinding through a linear sequence of TData. This makes ChainTree adaptable to different
   // use cases and metadata schemes. The interface can be seen in DefaultContextPolicy.
-  Iterator PromoteBranch(Iterator tip, const auto& policy);
+  template <ContextPolicy<TData, TContext> TPolicy>
+  PromoteResult PromoteBranch(Iterator tip, const TPolicy& policy);
 
   // Erase an entire subtree, whose common ancestor is the node provided.
   void EraseBranch(Iterator root);
@@ -130,9 +139,12 @@ class ChainTree {
   auto AncestorsToHeight(ConstIterator start, int end_height) const;
 
  protected:
+  using Forest = HashedTree<NodeData>;
+  using ForestIterator = Forest::Iterator;
+  using ForestConstIterator = Forest::ConstIterator;
   using ForestNode = Forest::Node;
   int PushToChain(const Context& context);
-  ForestIterator AddChild(ForestNode* parent, const Context& context);
+  ForestIterator AddChild(const ForestNode* parent, const Context& context);
   ConstIterator BeginChain(int height) const;
   Iterator BeginChain(int height);
   ConstIterator BeginForest(ForestConstIterator node) const;
@@ -158,7 +170,7 @@ inline int ChainTree<TData, TContext>::PushToChain(const Context& context) {
 
 template <typename TData, typename TContext>
 inline ChainTree<TData, TContext>::Iterator ChainTree<TData, TContext>::Add(
-    Iterator parent,
+    ConstIterator parent,
     /*const protocol::Hash& parent_hash,*/
     const Context& context) {
   // If the parent is invalid, the chain must be empty.
@@ -206,7 +218,7 @@ inline ChainTree<TData, TContext>::FindResult ChainTree<TData, TContext>::FindTi
 }
 
 template <typename TData, typename TContext>
-inline ChainTree<TData, TContext>::Iterator ChainTree<TData, TContext>::Find(Locator locator) {
+inline ChainTree<TData, TContext>::Iterator ChainTree<TData, TContext>::Find(const Locator& locator) {
   if (std::holds_alternative<int>(locator))
     return BeginChain(std::get<int>(locator));
   else
@@ -215,7 +227,7 @@ inline ChainTree<TData, TContext>::Iterator ChainTree<TData, TContext>::Find(Loc
 
 template <typename TData, typename TContext>
 inline ChainTree<TData, TContext>::ConstIterator ChainTree<TData, TContext>::Find(
-    Locator locator) const {
+    const Locator& locator) const {
   if (std::holds_alternative<int>(locator)) 
     return BeginChain(std::get<int>(locator));
   else
@@ -238,15 +250,17 @@ inline ChainTree<TData, TContext>::FindResult ChainTree<TData, TContext>::ChainT
 // to its ancestor fork point in the chain, then swaps the fork's two child branches between
 // the chain and the forest.
 template <typename TData, typename TContext>
-inline ChainTree<TData, TContext>::Iterator ChainTree<TData, TContext>::PromoteBranch(
+template <ContextPolicy<TData, TContext> TPolicy>
+inline ChainTree<TData, TContext>::PromoteResult ChainTree<TData, TContext>::PromoteBranch(
     Iterator tip,
     // In this overload, policy defines an interface to incrementally compute TContext when
     // iterating forward or backward through a linear sequence of TData. This makes ChainTree
     // adaptable to different use cases and metadata schemes. See DefaultContextPolicy.
-    const auto& policy) {
+    const TPolicy& policy) {
   Assert(tip);
-  if (tip.InChain()) return tip;  // Nothing to do
+  if (tip.InChain()) return {tip, {}};  // Nothing to do
 
+  PromoteResult result;
   ForestNode* tip_node = tip.Node();
   Assert(forest_.IsLeaf(tip_node));
 
@@ -263,8 +277,10 @@ inline ChainTree<TData, TContext>::Iterator ChainTree<TData, TContext>::PromoteB
   {
     Context context = fork;
     ForestNode* parent = nullptr;
+    result.second.resize(ChainLength() - root->data.Height());
     for (int height = root->data.Height(); height < ChainLength(); ++height) {
       context = policy.Extend(context, chain_[height]);
+      result.second[height - root->data.Height()] = context.hash;
       parent = &*AddChild(parent, context);
     }
   }
@@ -274,14 +290,16 @@ inline ChainTree<TData, TContext>::Iterator ChainTree<TData, TContext>::PromoteB
   chain_tip_context_ = fork;
 
   // Now walk forward down the new branch, moving headers into the heaviest chain.
-  for (; !stack.empty(); stack.pop()) PushToChain(stack.top()->data.context);
+  for (; !stack.empty(); stack.pop()) 
+    PushToChain(stack.top()->data.context);
+  result.first = ChainTip().first;
 
   // Finally delete the chain containing the new tip from the DAG.
   forest_.EraseChain(tip_node);
 
   // TODO: Update min_root_height_;
 
-  return ChainTip().first;
+  return result;
 }
 
 // Prunes historic branches from the tree.
@@ -304,7 +322,7 @@ inline void ChainTree<TData, TContext>::PruneForest(int max_keep_depth) {
 
 template <typename TData, typename TContext>
 inline ChainTree<TData, TContext>::ForestIterator ChainTree<TData, TContext>::AddChild(
-    ForestNode* parent, const Context& context) {
+    const ForestNode* parent, const Context& context) {
   const int root_height = parent != nullptr ? parent->data.root_height : context.height;
   min_root_height_ = std::min(min_root_height_, root_height);
   return forest_.AddChild(parent, {context, root_height});
@@ -441,7 +459,7 @@ class ChainTree<TData, TContext>::AncestorIterator {
     return node_;
   }
   Locator MakeLocator(const protocol::Hash& hash) const {
-    return InTree() ? hash : height_;
+    return InTree() ? Locator{hash} : Locator{height_};
   }
  protected:
   // Protected types and methods are internal to the enclosing ChainTree<TData, TMetadata> class.

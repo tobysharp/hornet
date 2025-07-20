@@ -190,7 +190,7 @@ TEST_F(ChainTreeTest, PromoteBranch) {
     // which starts *after* the fork point (height 0).
     std::vector<protocol::Hash> old_chain_hashes = {CreateHash(2), CreateHash(3)};
     std::span<const protocol::Hash> span = old_chain_hashes;
-    auto promoted_tip = tree_.PromoteBranch(new_tip_it, span);
+    auto promoted_tip = tree_.PromoteBranch(new_tip_it, span).first;
 
     EXPECT_TRUE(promoted_tip.IsValid());
     EXPECT_EQ(promoted_tip.GetHeight(), 2);

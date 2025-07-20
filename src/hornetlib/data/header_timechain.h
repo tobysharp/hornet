@@ -22,19 +22,20 @@ class HeaderTimechain : public ChainTree<protocol::BlockHeader, HeaderContext> {
   template <bool kIsConst> class ContextIterator;
   using Iterator = ContextIterator<false>;
   using ConstIterator = ContextIterator<true>;
+  struct AddResult;
 
   // Public methods
-  Iterator Add(const HeaderContext& context);
-  Iterator Add(Iterator parent, const HeaderContext& context);
-  ConstIterator Find(const protocol::Hash& hash) const;
-  Iterator Find(const protocol::Hash& hash);
-  const protocol::BlockHeader* Find(Locator locator) const;
+  AddResult Add(const HeaderContext& context);
+  AddResult Add(ConstIterator parent, const HeaderContext& context);
+  ConstIterator Search(const protocol::Hash& hash) const;
+  Iterator Search(const protocol::Hash& hash);
   ConstIterator FindTipOrForks(const protocol::Hash& hash) const;
   Iterator FindTipOrForks(const protocol::Hash& hash);
   ConstIterator ChainTip() const;
   Iterator ChainTip();
   const protocol::Hash& GetChainHash(int height) const;
   std::unique_ptr<ValidationView> GetValidationView(ConstIterator tip) const;
+  std::optional<Locator> MakeLocator(int height, const protocol::Hash& hash) const;
   void EraseBranch(Iterator root);
 
  private:
@@ -54,7 +55,7 @@ class HeaderTimechain : public ChainTree<protocol::BlockHeader, HeaderContext> {
   HeaderContextPolicy GetPolicy() const { return HeaderContextPolicy{this}; }
   Iterator MakeContextIterator(FindResult find);
   ConstIterator MakeContextIterator(ConstFindResult find) const;
-  Iterator PromoteBranch(BaseIterator tip);
+  AddResult PromoteBranch(BaseIterator tip);
   void PruneForest();
 
   // Behavior tuning variables
@@ -101,7 +102,7 @@ class HeaderTimechain::ContextIterator {
   operator const ChainTreeIterator&() const { return base_; }
 
   Locator Locator() const {
-    return base_.InTree() ? context_.hash : context_.height;
+    return base_.MakeLocator(context_.hash);
   }
 
  private:
@@ -110,6 +111,11 @@ class HeaderTimechain::ContextIterator {
   ChainTreeIterator base_;
   HeaderContext context_;
   HeaderContextPolicy policy_;
+};
+
+struct HeaderTimechain::AddResult {
+  Iterator it;
+  std::vector<protocol::Hash> moved_from_chain;
 };
 
 class HeaderTimechain::ValidationView : public consensus::HeaderAncestryView {

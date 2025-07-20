@@ -6,6 +6,8 @@ add_executable(hornetlib_tests
    data/hashed_tree_test.cpp
    data/header_context_test.cpp
    data/header_timechain_test.cpp
+   data/keyframe_sidecar_test.cpp
+   data/sidecar_test.cpp
    encoding/reader_test.cpp
    encoding/writer_test.cpp
    message/version_test.cpp

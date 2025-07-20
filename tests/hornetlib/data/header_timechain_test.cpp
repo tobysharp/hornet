@@ -41,12 +41,12 @@ HeaderContext MakeChild(const HeaderContext& parent, uint32_t nonce, uint64_t wo
 TEST(HeaderTimechainTest, AddExtendsChain) {
   HeaderTimechain tc{};
   auto genesis = MakeGenesis(1, 1);
-  auto genesis_it = tc.Add(genesis);
+  auto genesis_it = tc.Add(genesis).it;
   EXPECT_EQ(tc.ChainTipHeight(), 0);
   EXPECT_EQ(tc.ChainLength(), 1);
 
   auto child = MakeChild(genesis, 2, 1);
-  auto tip = tc.Add(genesis_it, child);
+  auto tip = tc.Add(genesis_it, child).it;
   EXPECT_TRUE(tip);
   EXPECT_EQ(tip->height, 1);
   EXPECT_EQ(tc.ChainLength(), 2);
@@ -55,17 +55,17 @@ TEST(HeaderTimechainTest, AddExtendsChain) {
 TEST(HeaderTimechainTest, BranchWithoutReorg) {
   HeaderTimechain tc{};
   auto genesis = MakeGenesis(1, 1);
-  auto it0 = tc.Add(genesis);
+  auto it0 = tc.Add(genesis).it;
   auto h1 = MakeChild(genesis, 2, 1);
-  auto it1 = tc.Add(it0, h1);
+  auto it1 = tc.Add(it0, h1).it;
   auto h2 = MakeChild(h1, 3, 1);
-  auto tip = tc.Add(it1, h2);
+  auto tip = tc.Add(it1, h2).it;
   ASSERT_TRUE(tip);
   EXPECT_EQ(tip->height, 2);
   EXPECT_EQ(tc.ChainLength(), 3);
 
   auto branch1 = MakeChild(genesis, 10, 1);
-  auto branch_it = tc.Add(it0, branch1);
+  auto branch_it = tc.Add(it0, branch1).it;
   EXPECT_TRUE(branch_it);
   EXPECT_EQ(tc.ChainTipHeight(), 2);
   EXPECT_EQ(tc.ChainLength(), 3);
@@ -74,20 +74,20 @@ TEST(HeaderTimechainTest, BranchWithoutReorg) {
 TEST(HeaderTimechainTest, BranchTriggersReorgOnMoreWork) {
   HeaderTimechain tc{};
   auto genesis = MakeGenesis(1, 1);
-  auto it0 = tc.Add(genesis);
+  auto it0 = tc.Add(genesis).it;
   auto h1 = MakeChild(genesis, 2, 1);
-  auto it1 = tc.Add(it0, h1);
+  auto it1 = tc.Add(it0, h1).it;
   auto h2 = MakeChild(h1, 3, 1);
-  [[maybe_unused]] auto it2 = tc.Add(it1, h2);
+  [[maybe_unused]] auto it2 = tc.Add(it1, h2).it;
 
   auto heavy_branch = MakeChild(genesis, 20, 5);
-  auto tip = tc.Add(it0, heavy_branch);
+  auto tip = tc.Add(it0, heavy_branch).it;
   EXPECT_TRUE(tip);
   EXPECT_EQ(tc.ChainTipHeight(), 1);
   EXPECT_EQ(tc.ChainLength(), 2);
   EXPECT_EQ(tc.ChainTip()->total_work, Uint256{6u});
 
-  auto h2_find = tc.Find(h2.hash);
+  auto h2_find = tc.FindTipOrForks(h2.hash);
   EXPECT_TRUE(h2_find);
   EXPECT_EQ(h2_find->height, 2);
 }
@@ -95,11 +95,11 @@ TEST(HeaderTimechainTest, BranchTriggersReorgOnMoreWork) {
 TEST(HeaderTimechainTest, ValidationViewProvidesTimestamps) {
   HeaderTimechain tc{};
   auto genesis = MakeGenesis(1, 1);
-  auto it0 = tc.Add(genesis);
+  auto it0 = tc.Add(genesis).it;
   auto h1 = MakeChild(genesis, 2, 1, 1);
-  auto it1 = tc.Add(it0, h1);
+  auto it1 = tc.Add(it0, h1).it;
   auto h2 = MakeChild(h1, 3, 1, 2);
-  auto tip = tc.Add(it1, h2);
+  auto tip = tc.Add(it1, h2).it;
 
   auto view = tc.GetValidationView(tip);
   EXPECT_EQ(view->TimestampAt(1), 1u);
@@ -125,7 +125,7 @@ TEST(HeaderTimechainTest, PreventsHeaderMutation) {
   context.hash = "0000000000000000000000000000000000000000000000000000000000000001"_hash;
 
   // Add header to the timechain
-  HeaderTimechain::Iterator it = timechain.Add(context);
+  HeaderTimechain::Iterator it = timechain.Add(context).it;
 
   // Attempt to mutate the header through the iterator — should fail to compile
   // Uncommenting the next line should result in a compiler error
