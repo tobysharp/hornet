@@ -35,11 +35,13 @@ class KeyframeSidecar : public SidecarBase {
       // Find the first keyframe after the relevant height.
       auto next = FirstKeyframeAfter(height);
       auto current = std::prev(next);  // Adjust to containing keyframe
+      const int current_end = (next == keyframes_.end()) ? length_ : next->start;
+
       if (current->value == value)
         return true;  // Nothing to do.
       if (current->start == height) {
         // If the current keyframe has size 1 anyway, we can just overwrite it.
-        if ((next != keyframes_.end() && current->start == next->start - 1) || current->start == length_ - 1) {
+        if (current->start + 1 == current_end) {
           current->value = value;
           // But before returning, we need to check if the current keyframe now matches its neighbors.
           if (next != keyframes_.end() && current->value == next->value)
@@ -61,7 +63,7 @@ class KeyframeSidecar : public SidecarBase {
         // [0, "old"] --> [0, "old"], [height, "value"], [height + 1, "old"].
 
         // If we're not touching the end of the current keyframe, insert the upper third split.
-        if (height >= length_ - 1 || next == keyframes_.end() || next->start > height + 1)
+        if (height + 1 < current_end)
           next = keyframes_.insert(next, {height + 1, current->value});
         // Insert the central third split.
         keyframes_.insert(next, {height, value});
@@ -150,8 +152,7 @@ class KeyframeSidecar : public SidecarBase {
     }
 
     // Truncate the chain back to the common ancestor fork point.
-    const auto next = FirstKeyframeAfter(fork_height);
-    keyframes_.erase(next, keyframes_.end());
+    keyframes_.erase(FirstKeyframeAfter(fork_height), keyframes_.end());
     length_ = fork_height + 1;
 
     // Now walk forward down the new branch, moving elements into the main chain.
