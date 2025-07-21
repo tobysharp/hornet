@@ -19,7 +19,7 @@ class Connection {
 
   // Writes at least some of the buffer directly to the socket.
   // In order to guarantee non-blocking behavior, ensure this method is
-  // called after poll() sgnals POLLOUT. 
+  // called after poll() signals POLLOUT.
   // The amount of data written may be less than the total buffer, but 
   // should be more than zero unless the socket is being closed.
   size_t Write(std::span<const uint8_t> buffer) {
