@@ -1,17 +1,43 @@
+// Copyright 2025 Toby Sharp
+//
+// This file is part of the Hornet Node project. All rights reserved.
+// For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
 #include "hornetlib/data/sidecar.h"
 
 namespace hornet::data {
 
+// KeyframeSidecar is a specialized sidecar data structure for piecewise-continuous metadata,
+// i.e. a property that takes on the same value for long stretches of the timechain. Internally,
+// these values are optimized for memory use by representing them as run-length encoded spans,
+// similar to keyframes in graphics/animation. This class can be useful for representing linearly
+// progressing state like block validation state during initial block download.
+//
+// Like all sidecars, KeyframeSidecar is able to maintain its structure in lockstep with a driving
+// ChainTree, abstracting the complexity of occasional reorgs between the active chain and its forks.
+// This allows metadata to be stored separately from the header timechain, while remaining in sync.
+// It also permits memory optimizations like this one for KeyframeSidecar.
 template <typename T>
-class KeyframeSidecar : public SidecarBase {
+class KeyframeSidecar : public SidecarBaseT<T> {
  public:
   KeyframeSidecar(const T& default_value = T{})
     : default_(default_value), length_(0) {
     }
   
-  const T* Get(const Locator& locator) const {
+  bool Empty() const {
+    return length_ == 0;
+  }
+
+  int ChainLength() const {
+    return length_;
+  }
+
+  int Size() const {
+    return length_ + forks_.Size();
+  }
+
+  virtual const T* Get(const Locator& locator) const override {
     if (std::holds_alternative<int>(locator)) {
       // O(log N) binary search on keyframes.
       const int height = std::get<int>(locator);
@@ -27,10 +53,12 @@ class KeyframeSidecar : public SidecarBase {
     }
   }
 
-  bool Set(const Locator& locator, const T& value) {
+  virtual void Set(const Locator& locator, const T& value) override {
     if (std::holds_alternative<int>(locator)) {
       const int height = std::get<int>(locator);
-      if (height >= length_) return false;
+      Assert(height < length_);
+      if (height >= length_) 
+        return;
 
       // Find the first keyframe after the relevant height.
       auto next = FirstKeyframeAfter(height);
@@ -38,7 +66,7 @@ class KeyframeSidecar : public SidecarBase {
       const int current_end = (next == keyframes_.end()) ? length_ : next->start;
 
       if (current->value == value)
-        return true;  // Nothing to do.
+        return;  // Nothing to do.
       if (current->start == height) {
         // If the current keyframe has size 1 anyway, we can just overwrite it.
         if (current->start + 1 == current_end) {
@@ -48,16 +76,14 @@ class KeyframeSidecar : public SidecarBase {
             next = keyframes_.erase(next);
           if (current != keyframes_.begin() && current->value == std::prev(current)->value)
             current = keyframes_.erase(current);
-          return true;
+        } else {
+          // Move the current start up by one position to become the second half of the split keyframe.
+          ++(current->start);
+          // If the value extends the previous keyframe, we are done.
+          // Otherwise, insert a new keyframe for the first half of the split.
+          if (current == keyframes_.begin() || std::prev(current)->value != value)
+            keyframes_.insert(current, {height, value});
         }
-        // Move the current start up by one position to become the second half of the split keyframe.
-        ++(current->start);
-        // If the value extends the previous keyframe, we are done.
-        if (current != keyframes_.begin() && std::prev(current)->value == value)
-          return true;
-        // Insert a new keyframe for the first half of the split.
-        keyframes_.insert(current, {height, value});
-        return true;
       } else {
         // In the general case, we may need to split a keyframe into three parts, e.g.
         // [0, "old"] --> [0, "old"], [height, "value"], [height + 1, "old"].
@@ -67,13 +93,12 @@ class KeyframeSidecar : public SidecarBase {
           next = keyframes_.insert(next, {height + 1, current->value});
         // Insert the central third split.
         keyframes_.insert(next, {height, value});
-        return true;
       }
     } else {
       auto it = forks_.Find(std::get<protocol::Hash>(locator));
-      if (!forks_.IsValidNode(it)) return false;
-      it->data.value = value;
-      return true;
+      Assert(forks_.IsValidNode(it));
+      if (forks_.IsValidNode(it)) 
+        it->data.value = value;
     }
   }
 

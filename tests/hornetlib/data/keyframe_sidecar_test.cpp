@@ -1,3 +1,7 @@
+// Copyright 2025 Toby Sharp
+//
+// This file is part of the Hornet Node project. All rights reserved.
+// For licensing or usage inquiries, contact: ask@hornetnode.com.
 #include "hornetlib/data/keyframe_sidecar.h"
 
 #include <stack>
@@ -9,6 +13,12 @@
 #include "hornetlib/protocol/hash.h"
 #include "hornetlib/util/assert.h"
 #include "hornetlib/util/throw.h"
+
+#if defined(NDEBUG)
+#define EXPECT_ASSERT(expr) EXPECT_NO_THROW((expr))
+#else
+#define EXPECT_ASSERT(expr) ASSERT_DEATH((expr), ".*")
+#endif
 
 namespace hornet::data {
 namespace {
@@ -79,16 +89,17 @@ TEST_F(KeyframeSidecarTest, GetNonExistentFork) {
 
 TEST_F(KeyframeSidecarTest, SetNoOp) {
   sidecar_.AddSync({-1, CreateHash(1), {}});
-  EXPECT_TRUE(sidecar_.Set(0, 0)); // Value is already 0
+  sidecar_.Set(0, 0);
+  EXPECT_EQ(*sidecar_.Get(0), 0);
 }
 
 TEST_F(KeyframeSidecarTest, SetOutOfBounds) {
   sidecar_.AddSync({-1, CreateHash(1), {}});
-  EXPECT_FALSE(sidecar_.Set(1, 1)); // length_ is 1, height 1 is out of bounds
+  EXPECT_ASSERT(sidecar_.Set(1, 1)); // length_ is 1, height 1 is out of bounds
 }
 
 TEST_F(KeyframeSidecarTest, SetNonExistentFork) {
-  EXPECT_FALSE(sidecar_.Set(CreateHash(99), 1));
+  sidecar_.Set(CreateHash(99), 1);
 }
 
 TEST_F(KeyframeSidecarTest, SetToSplitKeyframe) {

@@ -1,3 +1,7 @@
+// Copyright 2025 Toby Sharp
+//
+// This file is part of the Hornet Node project. All rights reserved.
+// For licensing or usage inquiries, contact: ask@hornetnode.com.
 #include "hornetlib/data/sidecar.h"
 
 #include <gtest/gtest.h>
@@ -59,7 +63,7 @@ class SidecarTest : public ::testing::Test {
 // Test case for the initial state of a Sidecar.
 TEST_F(SidecarTest, InitialState) {
   EXPECT_EQ(sidecar_.Get(0), nullptr);
-  EXPECT_FALSE(sidecar_.Set(0, "new_value"));
+  sidecar_.Set(0, "new_value");
 }
 
 // Test case for synchronizing a simple chain extension.
@@ -93,7 +97,7 @@ TEST_F(SidecarTest, GetAndSet) {
   sidecar_.AddSync(sync_block1);
 
   // Set a new value for the genesis block
-  EXPECT_TRUE(sidecar_.Set(0, "genesis_updated"));
+  sidecar_.Set(0, "genesis_updated");
 
   // Get and verify the new value
   const std::string* genesis_data = sidecar_.Get(0);
@@ -106,7 +110,7 @@ TEST_F(SidecarTest, GetAndSet) {
   EXPECT_EQ(*block1_data, "default");
 
   // Try to set a value for a non-existent block
-  EXPECT_FALSE(sidecar_.Set(5, "should_fail"));
+  sidecar_.Set(5, "should_fail");
 }
 
 // Test case for synchronizing a fork.
@@ -129,7 +133,7 @@ TEST_F(SidecarTest, AddSyncFork) {
   EXPECT_EQ(*fork_data, "default");
 
   // Set a value on the fork and verify it
-  EXPECT_TRUE(sidecar_.Set(CreateHash(3), "fork_value"));
+  sidecar_.Set(CreateHash(3), "fork_value");
   EXPECT_EQ(*sidecar_.Get(CreateHash(3)), "fork_value");
 
   // Ensure the main chain is still intact
@@ -189,7 +193,7 @@ TEST_F(SidecarTest, AddSyncReorg) {
   EXPECT_NE(sidecar_.Get(CreateHash(3)), nullptr);
   
   // Set a value on the new tip and verify
-  EXPECT_TRUE(sidecar_.Set(2, "new_tip_value"));
+  sidecar_.Set(2, "new_tip_value");
   EXPECT_EQ(*sidecar_.Get(2), "new_tip_value");
 }
 

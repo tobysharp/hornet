@@ -1,3 +1,7 @@
+// Copyright 2025 Toby Sharp
+//
+// This file is part of the Hornet Node project. All rights reserved.
+// For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
 #include <span>
@@ -95,6 +99,9 @@ class ChainTree {
   // Public methods
   bool Empty() const {
     return chain_.empty();
+  }
+  int Size() const {
+    return std::ssize(chain_) + forest_.Size();
   }
   int ChainLength() const {
     return std::ssize(chain_);

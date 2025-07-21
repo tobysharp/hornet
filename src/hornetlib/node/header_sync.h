@@ -104,7 +104,7 @@ inline bool HeaderSync::RequestHeadersFrom(net::WeakPeer weak_peer, const protoc
   // Begins downloading and validating headers from a given peer.
 inline void HeaderSync::StartSync(net::WeakPeer peer) {
   send_blocked_.clear(std::memory_order::release);
-  if (!RequestHeadersFrom(peer, timechain_.Headers().ChainTip()->hash))
+  if (!RequestHeadersFrom(peer, timechain_.ReadHeaders()->ChainTip()->hash))
     handler_.OnComplete(peer);  // No headers will ever reach the queue.
 }
 
@@ -133,8 +133,8 @@ inline void HeaderSync::Process() {
         RequestHeadersFrom(item->weak_peer, last_item.batch.back().ComputeHash());
 
       // Locates the parent of this header in the timechain.
-      const data::HeaderTimechain& header_timechain = timechain_.Headers();
-      auto parent = header_timechain.Search(item->batch[0].GetPreviousBlockHash());
+      auto headers = timechain_.ReadHeaders();
+      auto parent = headers->Search(item->batch[0].GetPreviousBlockHash());
       if (!parent) {
         HandleError(*item, item->batch[0], consensus::HeaderError::ParentNotFound);
         continue;
@@ -142,7 +142,7 @@ inline void HeaderSync::Process() {
 
       // Creates an implementation-independent view onto the timechain history for the validator.
       const std::unique_ptr<data::HeaderTimechain::ValidationView> view =
-          header_timechain.GetValidationView(parent);
+          headers->GetValidationView(parent);
 
       for (const auto& header : item->batch) {
         // Validates the header against consensus rules.

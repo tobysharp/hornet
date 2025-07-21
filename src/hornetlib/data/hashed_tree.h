@@ -62,6 +62,10 @@ class HashedTree {
 
   HashedTree(Hasher&& hasher = GetHashFunctor{}) : hasher_(std::forward<Hasher>(hasher)) {}
 
+  int Size() const {
+    return std::ssize(list_);
+  }
+
   bool Empty() const {
     return list_.empty();
   }

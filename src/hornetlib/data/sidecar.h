@@ -1,3 +1,7 @@
+// Copyright 2025 Toby Sharp
+//
+// This file is part of the Hornet Node project. All rights reserved.
+// For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
 #include <span>
@@ -21,28 +25,47 @@ class SidecarBase {
   virtual void AddSync(const SidecarAddSync& sync) = 0;
 };
 
-// Sidecar is a ChainTree data structure that is specialized to allow metadata elements to be stored
-// in a separate object, while keeping the structure identical to a main ChainTree.
 template <typename T>
-class Sidecar : public SidecarBase {
+class SidecarBaseT : public SidecarBase {
+ public:
+  virtual void Set(const Locator& locator, const T& value) = 0;
+  virtual const T* Get(const Locator&) const = 0;
+};
+
+// Sidecar is a ChainTree data structure that is specialized to allow metadata elements to be stored
+// in a separate object, while keeping the structure identical to a driving ChainTree.
+template <typename T>
+class Sidecar : public SidecarBaseT<T> {
  public:
   Sidecar(const T& default_value = T{}) : default_(default_value) {}
 
-  // Retrieves a value via a locator given by the master ChainTree.
-  const T* Get(Locator locator) const {
+  bool Empty() const {
+    return tree_.Empty();
+  }
+
+  int Size() const {
+    return tree_.Size();
+  }
+
+  int ChainLength() const {
+    return tree_.ChainLength();
+  }
+
+  // Retrieves a value via a locator given by the driving ChainTree.
+  virtual const T* Get(const Locator& locator) const override {
     const auto it = tree_.Find(locator);
     return it ? &*it : nullptr;
   }
 
   // Overwrite an existing element of the sidecar with a given value.
-  bool Set(Locator locator, const T& value) {
+  virtual void Set(const Locator& locator, const T& value) override {
     const auto it = tree_.Find(locator);
-    if (!it) return false;
-    *it = value;
-    return true;
+    Assert(it);
+    if (it)
+      *it = value;
   }
 
-  // Add a new element to the data structure, keeping it in sync with a master ChainTree.
+  // Add a new element to the data structure, keeping it in sync with a driving ChainTree.
   virtual void AddSync(const SidecarAddSync& sync) override {
     const auto parent_it = tree_.Find(sync.parent);  // Zero lookups if in main chain.
     const typename Tree::Context context = { default_, sync.hash, parent_it.GetHeight() + 1 };
