@@ -11,6 +11,12 @@
 #include "hornetlib/util/assert.h"
 #include "hornetlib/util/throw.h"
 
+#if defined(NDEBUG)
+#define EXPECT_ASSERT(expr) EXPECT_NO_THROW((expr))
+#else
+#define EXPECT_ASSERT(expr) ASSERT_DEATH((expr), ".*")
+#endif
+
 namespace hornet::data {
 namespace {
 
@@ -63,7 +69,7 @@ class SidecarTest : public ::testing::Test {
 // Test case for the initial state of a Sidecar.
 TEST_F(SidecarTest, InitialState) {
   EXPECT_EQ(sidecar_.Get(0), nullptr);
-  sidecar_.Set(0, "new_value");
+  EXPECT_ASSERT(sidecar_.Set(0, "new_value"));
 }
 
 // Test case for synchronizing a simple chain extension.
@@ -110,7 +116,7 @@ TEST_F(SidecarTest, GetAndSet) {
   EXPECT_EQ(*block1_data, "default");
 
   // Try to set a value for a non-existent block
-  sidecar_.Set(5, "should_fail");
+  EXPECT_ASSERT(sidecar_.Set(5, "should_fail"));
 }
 
 // Test case for synchronizing a fork.

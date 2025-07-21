@@ -99,7 +99,7 @@ TEST_F(KeyframeSidecarTest, SetOutOfBounds) {
 }
 
 TEST_F(KeyframeSidecarTest, SetNonExistentFork) {
-  sidecar_.Set(CreateHash(99), 1);
+  EXPECT_ASSERT(sidecar_.Set(CreateHash(99), 1));
 }
 
 TEST_F(KeyframeSidecarTest, SetToSplitKeyframe) {
