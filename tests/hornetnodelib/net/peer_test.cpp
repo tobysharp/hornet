@@ -2,7 +2,7 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "hornetlib/net/peer.h"
+#include "hornetnodelib/net/peer.h"
 
 #include <netinet/in.h>
 #include <thread>

@@ -5,12 +5,12 @@
 #include <queue>
 #include <utility>
 
-#include "hornetlib/net/constants.h"
-#include "hornetlib/net/peer.h"
-#include "hornetlib/net/peer_manager.h"
-#include "hornetlib/net/peer_registry.h"
-#include "hornetlib/node/broadcaster.h"
-#include "hornetlib/node/peer_negotiator.h"
+#include "hornetnodelib/net/constants.h"
+#include "hornetnodelib/net/peer.h"
+#include "hornetnodelib/net/peer_manager.h"
+#include "hornetnodelib/net/peer_registry.h"
+#include "hornetnodelib/node/broadcaster.h"
+#include "hornetnodelib/node/peer_negotiator.h"
 #include "hornetlib/protocol/capabilities.h"
 #include "hornetlib/protocol/handshake.h"
 #include "hornetlib/protocol/message_factory.h"

@@ -2,14 +2,14 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "hornetlib/node/protocol_loop.h"
+#include "hornetnodelib/node/protocol_loop.h"
 
 #include "hornetlib/data/timechain.h"
-#include "hornetlib/net/bitcoind.h"
-#include "hornetlib/net/constants.h"
-#include "hornetlib/net/peer.h"
-#include "hornetlib/node/protocol_loop.h"
-#include "hornetlib/node/peer_negotiator.h"
+#include "hornetnodelib/net/bitcoind.h"
+#include "hornetnodelib/net/constants.h"
+#include "hornetnodelib/net/peer.h"
+#include "hornetnodelib/node/protocol_loop.h"
+#include "hornetnodelib/node/peer_negotiator.h"
 #include "hornetlib/protocol/handshake.h"
 #include "hornetlib/util/timeout.h"
 

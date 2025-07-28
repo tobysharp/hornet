@@ -7,7 +7,7 @@
 #include <memory>
 #include <string>
 
-#include "hornetlib/net/peer.h"
+#include "hornetnodelib/net/peer.h"
 #include "hornetlib/protocol/message.h"
 
 namespace hornet::node {

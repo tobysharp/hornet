@@ -2,7 +2,7 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "hornetlib/net/socket.h"
+#include "hornetnodelib/net/socket.h"
 
 #include <netinet/in.h>
 #include <thread>

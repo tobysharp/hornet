@@ -2,11 +2,11 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "hornetlib/net/bitcoind.h"
+#include "hornetnodelib/net/bitcoind.h"
 
-#include "hornetlib/net/constants.h"
-#include "hornetlib/net/receive.h"
-#include "hornetlib/net/socket.h"
+#include "hornetnodelib/net/constants.h"
+#include "hornetnodelib/net/receive.h"
+#include "hornetnodelib/net/socket.h"
 #include "hornetlib/protocol/dispatch.h"
 #include "hornetlib/protocol/framer.h"
 #include "hornetlib/protocol/message.h"

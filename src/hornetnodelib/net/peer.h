@@ -8,8 +8,8 @@
 #include <ostream>
 #include <string>
 
-#include "hornetlib/net/connection.h"
-#include "hornetlib/net/constants.h"
+#include "hornetnodelib/net/connection.h"
+#include "hornetnodelib/net/constants.h"
 #include "hornetlib/protocol/capabilities.h"
 #include "hornetlib/protocol/handshake.h"
 

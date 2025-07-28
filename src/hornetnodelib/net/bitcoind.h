@@ -9,7 +9,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "hornetlib/net/constants.h"
+#include "hornetnodelib/net/constants.h"
 #include "hornetlib/protocol/constants.h"
 
 namespace hornet::net {

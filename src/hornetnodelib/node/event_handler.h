@@ -4,8 +4,8 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
-#include "hornetlib/net/peer_registry.h"
-#include "hornetlib/node/broadcaster.h"
+#include "hornetnodelib/net/peer_registry.h"
+#include "hornetnodelib/node/broadcaster.h"
 #include "hornetlib/protocol/message.h"
 #include "hornetlib/protocol/message_handler.h"
 

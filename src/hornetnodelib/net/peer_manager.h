@@ -11,8 +11,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "hornetlib/net/peer.h"
-#include "hornetlib/net/peer_registry.h"
+#include "hornetnodelib/net/peer.h"
+#include "hornetnodelib/net/peer_registry.h"
 #include "hornetlib/util/weak_ptr_collection.h"
 
 namespace hornet::net {

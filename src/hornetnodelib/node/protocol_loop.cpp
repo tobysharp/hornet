@@ -10,11 +10,11 @@
 #include <vector>
 
 #include "hornetlib/data/timechain.h"
-#include "hornetlib/net/peer.h"
-#include "hornetlib/net/peer_manager.h"
-#include "hornetlib/node/broadcaster.h"
-#include "hornetlib/node/event_handler.h"
-#include "hornetlib/node/protocol_loop.h"
+#include "hornetnodelib/net/peer.h"
+#include "hornetnodelib/net/peer_manager.h"
+#include "hornetnodelib/node/broadcaster.h"
+#include "hornetnodelib/node/event_handler.h"
+#include "hornetnodelib/node/protocol_loop.h"
 #include "hornetlib/protocol/constants.h"
 #include "hornetlib/protocol/framer.h"
 #include "hornetlib/protocol/message_factory.h"

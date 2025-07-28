@@ -9,7 +9,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "hornetlib/net/peer.h"
+#include "hornetnodelib/net/peer.h"
 
 namespace hornet::net {
 

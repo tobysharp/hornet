@@ -8,10 +8,10 @@
 #include <queue>
 #include <utility>
 
-#include "hornetlib/net/peer.h"
-#include "hornetlib/net/peer_registry.h"
-#include "hornetlib/node/broadcaster.h"
-#include "hornetlib/node/event_handler.h"
+#include "hornetnodelib/net/peer.h"
+#include "hornetnodelib/net/peer_registry.h"
+#include "hornetnodelib/node/broadcaster.h"
+#include "hornetnodelib/node/event_handler.h"
 #include "hornetlib/protocol/capabilities.h"
 #include "hornetlib/protocol/message.h"
 

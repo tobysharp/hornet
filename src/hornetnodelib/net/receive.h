@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <stdexcept>
 
-#include "hornetlib/net/socket.h"
+#include "hornetnodelib/net/socket.h"
 #include "hornetlib/protocol/constants.h"
 #include "hornetlib/protocol/dispatch.h"
 #include "hornetlib/protocol/message_factory.h"

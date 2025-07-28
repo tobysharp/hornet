@@ -8,12 +8,12 @@
 #include <string_view>
 
 #include "hornetlib/data/timechain.h"
-#include "hornetlib/net/peer_registry.h"
-#include "hornetlib/node/block_sync.h"
-#include "hornetlib/node/broadcaster.h"
-#include "hornetlib/node/event_handler.h"
-#include "hornetlib/node/header_sync.h"
-#include "hornetlib/node/sync_handler.h"
+#include "hornetnodelib/net/peer_registry.h"
+#include "hornetnodelib/node/block_sync.h"
+#include "hornetnodelib/node/broadcaster.h"
+#include "hornetnodelib/node/event_handler.h"
+#include "hornetnodelib/node/header_sync.h"
+#include "hornetnodelib/node/sync_handler.h"
 #include "hornetlib/protocol/constants.h"
 #include "hornetlib/protocol/message/getheaders.h"
 #include "hornetlib/protocol/message/headers.h"

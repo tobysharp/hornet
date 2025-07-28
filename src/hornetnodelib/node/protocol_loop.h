@@ -12,12 +12,12 @@
 #include <vector>
 
 #include "hornetlib/data/timechain.h"
-#include "hornetlib/net/peer.h"
-#include "hornetlib/net/peer_registry.h"
-#include "hornetlib/net/peer_manager.h"
-#include "hornetlib/node/broadcaster.h"
-#include "hornetlib/node/event_handler.h"
-#include "hornetlib/node/serialization_memo.h"
+#include "hornetnodelib/net/peer.h"
+#include "hornetnodelib/net/peer_registry.h"
+#include "hornetnodelib/net/peer_manager.h"
+#include "hornetnodelib/node/broadcaster.h"
+#include "hornetnodelib/node/event_handler.h"
+#include "hornetnodelib/node/serialization_memo.h"
 #include "hornetlib/protocol/constants.h"
 #include "hornetlib/util/timeout.h"
 

@@ -10,13 +10,20 @@
 #include <thread>
 
 #include "hornetlib/data/timechain.h"
-#include "hornetlib/net/peer.h"
-#include "hornetlib/node/sync_handler.h"
+#include "hornetnodelib/net/peer.h"
+#include "hornetnodelib/node/sync_handler.h"
 #include "hornetlib/protocol/message/block.h"
 #include "hornetlib/protocol/message/getdata.h"
 #include "hornetlib/util/thread_safe_queue.h"
 
 namespace hornet::node {
+
+enum class BlockValidationStatus {
+    Unvalidated,    // The block has not yet been validated.
+    AssumedValid,   // The block is buried under enough work to be assumed valid.
+    StructureValid, // The block's transaction structure is valid, but scripts have not been validated.
+    Validated       // The block has been fully validated.
+};
 
 class BlockSync {
  public:

@@ -4,7 +4,7 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
-#include "hornetlib/net/socket.h"
+#include "hornetnodelib/net/socket.h"
 #include "hornetlib/util/shared_span.h"
 
 #include <deque>
