@@ -5,13 +5,13 @@
 #include "hornetnodelib/node/sync_manager.h"
 
 #include "hornetlib/data/timechain.h"
-#include "hornetnodelib/net/bitcoind.h"
 #include "hornetnodelib/node/protocol_loop.h"
 #include "hornetnodelib/node/peer_negotiator.h"
 #include "hornetnodelib/node/sync_manager.h"
 #include "hornetlib/protocol/handshake.h"
 #include "hornetlib/util/log.h"
 #include "hornetlib/util/timeout.h"
+#include "testutil/net/bitcoind_peer.h"
 
 #include <gtest/gtest.h>
 
@@ -19,7 +19,7 @@ namespace hornet::node {
 namespace {
 
 TEST(SyncManagerTest, TestGetHeaders) {
-    net::Bitcoind node = net::Bitcoind::ConnectOrLaunch();
+    auto node = test::BitcoindPeer::ConnectOrLaunch();
     net::PeerManager peers;
     ProtocolLoop loop(peers);
     PeerNegotiator negotiator;
@@ -33,7 +33,7 @@ TEST(SyncManagerTest, TestGetHeaders) {
 }
 
 TEST(SyncManagerTest, TestMainnetSyncHeaders) {
-    net::Bitcoind node = net::Bitcoind::Connect();
+    auto node = test::BitcoindPeer::Connect();
     net::PeerManager peers;
     ProtocolLoop loop(peers);
     PeerNegotiator negotiator;
@@ -67,7 +67,7 @@ class NoHeadersSyncManager : public SyncManager {
 };
 
 TEST(SyncManagerTest, TestMainnetSyncBlocks) {
-    net::Bitcoind node = net::Bitcoind::Connect();
+    auto node = test::BitcoindPeer::Connect();
     net::PeerManager peers;
     ProtocolLoop loop(peers);
     PeerNegotiator negotiator;

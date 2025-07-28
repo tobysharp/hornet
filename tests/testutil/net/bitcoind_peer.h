@@ -12,15 +12,15 @@
 #include "hornetnodelib/net/constants.h"
 #include "hornetlib/protocol/constants.h"
 
-namespace hornet::net {
+namespace hornet::test {
 
-class Bitcoind {
+class BitcoindPeer {
  public:
-  ~Bitcoind();
+  ~BitcoindPeer();
 
-  static Bitcoind Connect(Network network = Network::Mainnet);
-  static Bitcoind Launch(Network network = Network::Regtest);
-  static Bitcoind ConnectOrLaunch(Network network = Network::Mainnet);
+  static BitcoindPeer Connect(net::Network network = net::Network::Mainnet);
+  static BitcoindPeer Launch(net::Network network = net::Network::Regtest);
+  static BitcoindPeer ConnectOrLaunch(net::Network network = net::Network::Mainnet);
 
   std::string GetCookiePath() const;
 
@@ -42,7 +42,7 @@ class Bitcoind {
   protocol::Magic magic;
   uint16_t port;
   std::string datadir;
-  Network network;
+  net::Network network;
 };
 
-}  // namespace hornet::net
+}  // namespace hornet::test

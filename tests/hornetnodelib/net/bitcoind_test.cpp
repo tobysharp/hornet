@@ -2,7 +2,6 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "hornetnodelib/net/bitcoind.h"
 
 #include "hornetnodelib/net/constants.h"
 #include "hornetnodelib/net/receive.h"
@@ -12,6 +11,7 @@
 #include "hornetlib/protocol/message.h"
 #include "hornetlib/protocol/message_factory.h"
 #include "hornetlib/protocol/message/version.h"
+#include "testutil/net/bitcoind_peer.h"
 
 #include <gtest/gtest.h>
 
@@ -20,7 +20,7 @@ namespace {
 
 void SwapVersionMessages(Network network) {
   // Launch bitcoind on regtest
-  Bitcoind node = Bitcoind::ConnectOrLaunch(network);
+  auto node = test::BitcoindPeer::ConnectOrLaunch(network);
 
   // Try connecting to it
   Socket sock = Socket::Connect(kLocalhost, node.GetPort());

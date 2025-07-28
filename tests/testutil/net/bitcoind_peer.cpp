@@ -4,8 +4,6 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 // bitcoind.cpp
 
-#include "hornetnodelib/net/bitcoind.h"
-
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -19,14 +17,15 @@
 #include "hornetnodelib/net/constants.h"
 #include "hornetnodelib/net/socket.h"
 #include "hornetlib/util/throw.h"
+#include "testutil/net/bitcoind_peer.h"
 
-namespace hornet::net {
+namespace hornet::test {
 
-Bitcoind::~Bitcoind() {
+BitcoindPeer::~BitcoindPeer() {
   Terminate();
 }
 
-Bitcoind Bitcoind::ConnectOrLaunch(Network network /* = Network::Mainnet */) {
+BitcoindPeer BitcoindPeer::ConnectOrLaunch(net::Network network /* = net::Network::Mainnet */) {
   try {
     return Connect(network);
   }
@@ -35,21 +34,21 @@ Bitcoind Bitcoind::ConnectOrLaunch(Network network /* = Network::Mainnet */) {
   }
 }
 
-Bitcoind Bitcoind::Connect(Network network /* = Network::Mainnet */) {
-  Bitcoind instance;
+BitcoindPeer BitcoindPeer::Connect(net::Network network /* = net::Network::Mainnet */) {
+  BitcoindPeer instance;
   instance.network = network;
   instance.magic = GetNetworkMagic(network);
   instance.port = GetNetworkPort(network);
   instance.pid = -1;  // Not managing a process
 
   // Throws if not reachable
-  Socket socket = Socket::Connect(kLocalhost, instance.port);
+  net::Socket socket = net::Socket::Connect(net::kLocalhost, instance.port);
 
   return instance;
 }
 
-Bitcoind Bitcoind::Launch(Network network /* = Network::Regtest */) {
-  Bitcoind instance;
+BitcoindPeer BitcoindPeer::Launch(net::Network network /* = net::Network::Regtest */) {
+  BitcoindPeer instance;
 
   // Determine network parameters
   instance.network = network;
@@ -77,8 +76,8 @@ Bitcoind Bitcoind::Launch(Network network /* = Network::Regtest */) {
     std::vector<std::string> args = {"bitcoind", "-listen=1", "-datadir=" + instance.datadir,
                                      "-debug=net", "-server=1"/*, "-printtoconsole=0"*/};
                              
-    if (network == Network::Testnet) args.push_back("-testnet");
-    if (network == Network::Regtest) args.push_back("-regtest");
+    if (network == net::Network::Testnet) args.push_back("-testnet");
+    if (network == net::Network::Regtest) args.push_back("-regtest");
 
     // Convert to const char* argv[]
     std::vector<const char *> argv;
@@ -105,22 +104,22 @@ Bitcoind Bitcoind::Launch(Network network /* = Network::Regtest */) {
   return instance;
 }
 
-std::string Bitcoind::GetCookiePath() const {
+std::string BitcoindPeer::GetCookiePath() const {
   switch (network) {
-    case Network::Mainnet:
+    case net::Network::Mainnet:
       return datadir + "/.cookie";
-    case Network::Regtest:
+    case net::Network::Regtest:
       return datadir + "/regtest/.cookie";
-    case Network::Testnet:
+    case net::Network::Testnet:
       return datadir + "/testnet3/.cookie";
-    case Network::Signet:
+    case net::Network::Signet:
       return datadir + "/signet/.cookie";
     default:
       throw std::runtime_error("Unknown network");
   }
 }
 
-std::string Bitcoind::Cli(const std::string &command) {
+std::string BitcoindPeer::Cli(const std::string &command) {
   std::ostringstream full_cmd;
   full_cmd << "bitcoin-cli -regtest -datadir=" << datadir << " " << command;
 
@@ -136,7 +135,7 @@ std::string Bitcoind::Cli(const std::string &command) {
   return result;
 }
 
-void Bitcoind::MineBlocks(int n) {
+void BitcoindPeer::MineBlocks(int n) {
   Cli("createwallet default");
   std::string address = Cli("getnewaddress");
   address.erase(address.find_last_not_of(" \n\r\t") + 1);
@@ -146,7 +145,7 @@ void Bitcoind::MineBlocks(int n) {
   Cli(cmd.str());
 }
 
-void Bitcoind::Terminate() {
+void BitcoindPeer::Terminate() {
   if (pid > 0) {
     kill(pid, SIGTERM);
     waitpid(pid, nullptr, 0);
@@ -157,4 +156,4 @@ void Bitcoind::Terminate() {
   }
 }
 
-}  // namespace hornet::net
+}  // namespace hornet::test

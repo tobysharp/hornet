@@ -10,8 +10,8 @@ add_executable(hornetnodelib_tests
 )
 
 target_compile_features(hornetnodelib_tests PRIVATE cxx_std_20)
-target_link_libraries(hornetnodelib_tests PRIVATE hornetlib hornetnodelib gtest_main)
-target_include_directories(hornetnodelib_tests PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(hornetnodelib_tests PRIVATE hornetlib hornetnodelib testutil gtest_main)
+target_include_directories(hornetnodelib_tests PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/tests)
 
 include(GoogleTest)
 gtest_discover_tests(hornetnodelib_tests)

@@ -5,13 +5,13 @@
 #include "hornetnodelib/node/protocol_loop.h"
 
 #include "hornetlib/data/timechain.h"
-#include "hornetnodelib/net/bitcoind.h"
 #include "hornetnodelib/net/constants.h"
 #include "hornetnodelib/net/peer.h"
 #include "hornetnodelib/node/protocol_loop.h"
 #include "hornetnodelib/node/peer_negotiator.h"
 #include "hornetlib/protocol/handshake.h"
 #include "hornetlib/util/timeout.h"
+#include "testutil/net/bitcoind_peer.h"
 
 #include <gtest/gtest.h>
 
@@ -19,7 +19,7 @@ namespace hornet::node {
 namespace {
 
 TEST(ProtocolLoopTest, TestHandshake) {
-    net::Bitcoind node = net::Bitcoind::ConnectOrLaunch();
+    auto node = test::BitcoindPeer::ConnectOrLaunch();
     net::PeerManager peers;
     ProtocolLoop loop(peers);
     PeerNegotiator negotiator;

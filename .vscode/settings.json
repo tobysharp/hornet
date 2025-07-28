@@ -97,7 +97,7 @@
         "shared_mutex": "cpp"
     },
     "C_Cpp.default.compilerPath": "/usr/bin/clang++-20",
-    "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/build/clang20-debug/compile_commands.json",
     "C_Cpp.intelliSenseEngine": "default",
     "C_Cpp.default.configurationProvider": "ms-vcscode.cmake-tools",
 

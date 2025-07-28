@@ -1,2 +1,3 @@
 add_subdirectory(hornetlib)
 add_subdirectory(hornetnodelib)
+add_subdirectory(testutil)

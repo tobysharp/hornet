@@ -1,5 +1,4 @@
 add_library(hornetnodelib STATIC
-   net/bitcoind.cpp
    net/socket.cpp
    node/protocol_loop.cpp
    node/peer_negotiator.cpp
