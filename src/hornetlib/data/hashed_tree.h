@@ -5,6 +5,7 @@
 #pragma once
 
 #include <list>
+#include <ostream>
 #include <ranges>
 #include <unordered_map>
 
@@ -30,6 +31,19 @@ class HashedTree {
     Node* parent;
     Hash hash;
     T data;
+
+    friend std::ostream& operator<<(std::ostream& os, const Node& node) {
+      os << "{\n"
+        << "  \"hash\": " << node.hash << ",\n"
+        << "  \"parent\": ";
+      if (node.parent)
+        os << node.parent->hash;
+      else
+        os << "null";
+      os  << ",\n  \"data\": " << node.data << "\n"
+        << "}";
+      return os;
+    }
   };
 
   struct GetParent {
@@ -43,10 +57,14 @@ class HashedTree {
 
   using Iterator = std::list<Node>::iterator;
   using ConstIterator = std::list<Node>::const_iterator;
-  using UpIterator = util::PointerIterator<Node, GetParent, false>;
-  using ConstUpIterator = util::PointerIterator<Node, GetParent, true>;
+  using UpIterator = util::PointerIterator<Node*, GetParent>;
+  using ConstUpIterator = util::PointerIterator<const Node*, GetParent>;
 
   HashedTree(Hasher&& hasher = GetHashFunctor{}) : hasher_(std::forward<Hasher>(hasher)) {}
+
+  int Size() const {
+    return std::ssize(list_);
+  }
 
   bool Empty() const {
     return list_.empty();
@@ -79,9 +97,10 @@ class HashedTree {
     map_.clear();
   }
 
-  Iterator AddChild(Node* parent, T data) {
+  Iterator AddChild(const Node* parent, T data) {
     const Hash hash = hasher_(data);
-    list_.emplace_back(Node{parent, hash, std::move(data)});
+    // Note that this const_cast is justified since we are not modifying the parent at all.
+    list_.emplace_back(Node{const_cast<Node*>(parent), hash, std::move(data)});
     const Iterator it = std::prev(list_.end());
     map_[hash] = it;
     if (parent != nullptr) child_map_.insert({parent, it});

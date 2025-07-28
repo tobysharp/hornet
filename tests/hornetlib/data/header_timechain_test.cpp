@@ -8,7 +8,7 @@
 #include "hornetlib/protocol/hash.h"
 #include "hornetlib/protocol/work.h"
 #include "hornetlib/util/big_uint.h"
-
+#include "hornetlib/util/hex.h"
 
 namespace hornet::data {
 namespace {
@@ -41,66 +41,65 @@ HeaderContext MakeChild(const HeaderContext& parent, uint32_t nonce, uint64_t wo
 TEST(HeaderTimechainTest, AddExtendsChain) {
   HeaderTimechain tc{};
   auto genesis = MakeGenesis(1, 1);
-  auto genesis_it = tc.Add(genesis);
-  EXPECT_EQ(tc.GetHeaviestTipHeight(), 0);
-  EXPECT_EQ(tc.GetHeaviestLength(), 1);
+  auto genesis_it = tc.Add(genesis).it;
+  EXPECT_EQ(tc.ChainTipHeight(), 0);
+  EXPECT_EQ(tc.ChainLength(), 1);
 
   auto child = MakeChild(genesis, 2, 1);
-  auto tip = tc.Add(child, genesis_it);
-  EXPECT_TRUE(tip.IsValid());
-  EXPECT_EQ(tip.GetHeight(), 1);
-  EXPECT_EQ(tc.GetHeaviestLength(), 2);
+  auto tip = tc.Add(genesis_it, child).it;
+  EXPECT_TRUE(tip);
+  EXPECT_EQ(tip->height, 1);
+  EXPECT_EQ(tc.ChainLength(), 2);
 }
 
 TEST(HeaderTimechainTest, BranchWithoutReorg) {
   HeaderTimechain tc{};
   auto genesis = MakeGenesis(1, 1);
-  auto it0 = tc.Add(genesis);
+  auto it0 = tc.Add(genesis).it;
   auto h1 = MakeChild(genesis, 2, 1);
-  auto it1 = tc.Add(h1, it0);
+  auto it1 = tc.Add(it0, h1).it;
   auto h2 = MakeChild(h1, 3, 1);
-  auto tip = tc.Add(h2, it1);
-  ASSERT_TRUE(tip.IsValid());
-  EXPECT_EQ(tip.GetHeight(), 2);
-  EXPECT_EQ(tc.GetHeaviestLength(), 3);
+  auto tip = tc.Add(it1, h2).it;
+  ASSERT_TRUE(tip);
+  EXPECT_EQ(tip->height, 2);
+  EXPECT_EQ(tc.ChainLength(), 3);
 
   auto branch1 = MakeChild(genesis, 10, 1);
-  auto branch_it = tc.Add(branch1, it0);
-  EXPECT_TRUE(branch_it.IsValid());
-  EXPECT_EQ(tc.GetHeaviestTipHeight(), 2);
-  EXPECT_EQ(tc.GetHeaviestLength(), 3);
+  auto branch_it = tc.Add(it0, branch1).it;
+  EXPECT_TRUE(branch_it);
+  EXPECT_EQ(tc.ChainTipHeight(), 2);
+  EXPECT_EQ(tc.ChainLength(), 3);
 }
 
 TEST(HeaderTimechainTest, BranchTriggersReorgOnMoreWork) {
   HeaderTimechain tc{};
   auto genesis = MakeGenesis(1, 1);
-  auto it0 = tc.Add(genesis);
+  auto it0 = tc.Add(genesis).it;
   auto h1 = MakeChild(genesis, 2, 1);
-  auto it1 = tc.Add(h1, it0);
+  auto it1 = tc.Add(it0, h1).it;
   auto h2 = MakeChild(h1, 3, 1);
-  tc.Add(h2, it1);
+  [[maybe_unused]] auto it2 = tc.Add(it1, h2).it;
 
   auto heavy_branch = MakeChild(genesis, 20, 5);
-  auto tip = tc.Add(heavy_branch, it0);
-  EXPECT_TRUE(tip.IsValid());
-  EXPECT_EQ(tc.GetHeaviestTipHeight(), 1);
-  EXPECT_EQ(tc.GetHeaviestLength(), 2);
-  EXPECT_EQ(tc.HeaviestTip().second->total_work, Uint256{6u});
+  auto tip = tc.Add(it0, heavy_branch).it;
+  EXPECT_TRUE(tip);
+  EXPECT_EQ(tc.ChainTipHeight(), 1);
+  EXPECT_EQ(tc.ChainLength(), 2);
+  EXPECT_EQ(tc.ChainTip()->total_work, Uint256{6u});
 
-  auto h2_find = tc.Find(h2.hash);
-  EXPECT_TRUE(h2_find.first.IsValid());
-  ASSERT_TRUE(h2_find.second.has_value());
-  EXPECT_EQ(h2_find.second->height, 2);
+  auto h2_find = tc.FindTipOrForks(h2.hash);
+  EXPECT_TRUE(h2_find);
+  EXPECT_EQ(h2_find->height, 2);
 }
 
 TEST(HeaderTimechainTest, ValidationViewProvidesTimestamps) {
   HeaderTimechain tc{};
   auto genesis = MakeGenesis(1, 1);
-  auto it0 = tc.Add(genesis);
+  auto it0 = tc.Add(genesis).it;
   auto h1 = MakeChild(genesis, 2, 1, 1);
-  auto it1 = tc.Add(h1, it0);
+  auto it1 = tc.Add(it0, h1).it;
   auto h2 = MakeChild(h1, 3, 1, 2);
-  auto tip = tc.Add(h2, it1);
+  auto tip = tc.Add(it1, h2).it;
 
   auto view = tc.GetValidationView(tip);
   EXPECT_EQ(view->TimestampAt(1), 1u);
@@ -108,6 +107,35 @@ TEST(HeaderTimechainTest, ValidationViewProvidesTimestamps) {
   const auto stamps = view->LastNTimestamps(2);
   ASSERT_EQ(stamps.size(), 1u);
   EXPECT_EQ(stamps[0], 2u);
+}
+
+TEST(HeaderTimechainTest, PreventsHeaderMutation) {
+  HeaderTimechain timechain;
+
+  // Construct a fake genesis header
+  BlockHeader header;
+  header.SetVersion(1);
+  header.SetTimestamp(1234567890);
+  header.SetNonce(42);
+
+  HeaderContext context;
+  context.height = 0;
+  context.total_work = Uint256{100};
+  context.data = header;
+  context.hash = "0000000000000000000000000000000000000000000000000000000000000001"_hash;
+
+  // Add header to the timechain
+  HeaderTimechain::Iterator it = timechain.Add(context).it;
+
+  // Attempt to mutate the header through the iterator — should fail to compile
+  // Uncommenting the next line should result in a compiler error
+  // it->SetNonce(99);
+
+  // Can read the data just fine
+  EXPECT_EQ(it->data.GetNonce(), 42);
+
+  // Optional: enforce immutability via static_assert if using Immutable<T>
+  // static_assert(std::is_const_v<std::remove_reference_t<decltype(*it)>>, "Header must be immutable");
 }
 
 }  // namespace

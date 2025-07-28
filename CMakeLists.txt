@@ -1,4 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
+
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+  message(FATAL_ERROR "In-source builds are not allowed. Use a separate build directory.")
+endif()
+
 project(hornet LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)

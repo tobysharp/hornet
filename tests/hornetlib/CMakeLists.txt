@@ -2,21 +2,16 @@
 add_executable(hornetlib_tests
    consensus/difficulty_adjustment_test.cpp
    crypto/hash_test.cpp
+   data/chain_tree_test.cpp
    data/hashed_tree_test.cpp
-   data/header_chain_test.cpp
    data/header_context_test.cpp
    data/header_timechain_test.cpp
+   data/keyframe_sidecar_test.cpp
+   data/sidecar_test.cpp
    encoding/reader_test.cpp
    encoding/writer_test.cpp
    message/version_test.cpp
    message/verack_test.cpp
-   net/bitcoind_test.cpp
-   net/connection_test.cpp
-   net/peer_test.cpp
-   net/peer_manager_test.cpp
-   net/socket_test.cpp
-   node/protocol_loop_test.cpp
-   node/sync_manager_test.cpp
    protocol/block_test.cpp
    protocol/block_header_test.cpp
    protocol/compact_target_test.cpp

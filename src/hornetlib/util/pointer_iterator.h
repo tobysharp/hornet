@@ -12,15 +12,15 @@
 
 namespace hornet::util {
 
-template <typename Node, typename GetNext, bool kIsConst>
+template <typename NodePtr, typename GetNext>
 class PointerIterator {
  public:
   // C++20 iterator traits
   using iterator_concept = std::forward_iterator_tag;
   using difference_type = std::ptrdiff_t;
-  using value_type = Node;
-  using pointer = std::conditional_t<kIsConst, const Node, Node>*;
-  using reference = std::conditional_t<kIsConst, const Node, Node>&;
+  using value_type = std::remove_pointer_t<NodePtr>;
+  using pointer = NodePtr;
+  using reference = value_type&;
 
   PointerIterator() : node_(nullptr) {}
   explicit PointerIterator(pointer node, GetNext&& fn = GetNext{}) : node_(node), get_next_(std::forward<GetNext>(fn)) {}
@@ -29,12 +29,6 @@ class PointerIterator {
   PointerIterator& operator =(const PointerIterator&) = default;
   PointerIterator(PointerIterator&&) = default;
   PointerIterator& operator =(PointerIterator&&) = default;
-
-  // Allow conversion from a non-const to a const iterator
-  template <bool kIsRhsConst>
-    requires(kIsConst && !kIsRhsConst)
-  PointerIterator(const PointerIterator<Node, GetNext, kIsRhsConst>& rhs)
-      : node_(rhs.node_) {}
 
   reference operator*() const {
     return *node_;

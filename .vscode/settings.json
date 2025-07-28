@@ -92,7 +92,9 @@
         "regex": "cpp",
         "__node_handle": "cpp",
         "queue": "cpp",
-        "stack": "cpp"
+        "stack": "cpp",
+        "version": "cpp",
+        "shared_mutex": "cpp"
     },
     "C_Cpp.default.compilerPath": "/usr/bin/clang++-20",
     "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",

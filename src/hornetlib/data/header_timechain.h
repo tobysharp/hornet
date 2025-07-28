@@ -5,198 +5,125 @@
 #pragma once
 
 #include <memory>
-#include <ranges>
-#include <tuple>
+#include <vector>
 
 #include "hornetlib/consensus/header_ancestry_view.h"
-#include "hornetlib/data/hashed_tree.h"
-#include "hornetlib/data/header_chain.h"
+#include "hornetlib/data/chain_tree.h"
 #include "hornetlib/data/header_context.h"
+#include "hornetlib/protocol/block_header.h"
+#include "hornetlib/protocol/hash.h"
 
 namespace hornet::data {
 
-class HeaderTimechain {
+class HeaderTimechain : public ChainTree<protocol::BlockHeader, HeaderContext> {
  public:
   // Public types
   class ValidationView;
-  template <bool kIsConst>
-  class AncestorIterator;
-  using ParentIterator = AncestorIterator<true>;
-  using FindResult = std::pair<ParentIterator, std::optional<HeaderContext>>;
-
-  struct NodeData {
-    HeaderContext context;
-    int root_height;
-
-    int Height() const {
-      return context.height;
-    }
-    const protocol::BlockHeader& Header() const {
-      return context.header;
-    }
-    const protocol::Work& TotalWork() const {
-      return context.total_work;
-    }
-    const protocol::Hash& GetHash() const {
-      return context.hash;
-    }
-  };
+  template <bool kIsConst> class ContextIterator;
+  using Iterator = ContextIterator<false>;
+  using ConstIterator = ContextIterator<true>;
+  struct AddResult;
 
   // Public methods
-  ParentIterator Add(const HeaderContext& context);
-  ParentIterator Add(const HeaderContext& context, ParentIterator parent);
-  const protocol::BlockHeader* Find(int height, const protocol::Hash& hash) const;
-  FindResult Find(const protocol::Hash& hash);
-  FindResult HeaviestTip() const;
-  std::unique_ptr<ValidationView> GetValidationView(const ParentIterator& tip) const;
-  const HeaderChain& HeaviestChain() const {
-    return chain_;
-  }
-  int GetHeaviestTipHeight() const {
-    return chain_.GetTipHeight();
-  }
-  int GetHeaviestLength() const {
-    return chain_.Length();
-  }
+  AddResult Add(const HeaderContext& context);
+  AddResult Add(ConstIterator parent, const HeaderContext& context);
+  ConstIterator Search(const protocol::Hash& hash) const;
+  Iterator Search(const protocol::Hash& hash);
+  ConstIterator FindTipOrForks(const protocol::Hash& hash) const;
+  Iterator FindTipOrForks(const protocol::Hash& hash);
+  ConstIterator ChainTip() const;
+  Iterator ChainTip();
+  const protocol::Hash& GetChainHash(int height) const;
+  std::unique_ptr<ValidationView> GetValidationView(ConstIterator tip) const;
+  std::optional<Locator> MakeLocator(int height, const protocol::Hash& hash) const;
+  void EraseBranch(Iterator root);
 
  private:
-  using HeaderTree = HashedTree<NodeData>;
-  using TreeIterator = HeaderTree::Iterator;
-  using TreeNode = HeaderTree::Node;
-
-  // Tree helpers
-  TreeNode* AddChild(TreeNode* parent, const HeaderContext& context);
-  void PruneReorgTree();
-  bool IsValidNode(TreeIterator it) const {
-    return tree_.IsValidNode(it);
-  }
-
-  // Reorg between tree and chain
-  void ReorgBranchToChain(TreeNode* tip);
-
-  // Navigation
-  ParentIterator NullIterator() const;
-  ParentIterator BeginChain(int height) const;
-  ParentIterator BeginTree(TreeIterator node) const;
-  ParentIterator BeginTree(TreeNode* node) const;
-  const protocol::BlockHeader& GetAncestorAtHeight(ParentIterator tip, int height) const;
-  auto AncestorsToHeight(ParentIterator start, int end_height) const;
-
-  // As potential forks or re-orgs are resolved, the heaviest chain is kept in a linear array.
-  HeaderChain chain_;
-
-  // Recent headers are kept in a forest of putative chains, with tracked proof-of-work in
-  // HeaderContext.
-  HeaderTree tree_;
-  int min_root_height_;  // The current minimum height among all roots in the tree.
+  using Base = ChainTree<protocol::BlockHeader, HeaderContext>;
+  using BaseIterator = Base::Iterator;
+  using BaseConstIterator = Base::ConstIterator;
+  struct HeaderContextPolicy {
+    const HeaderTimechain* timechain_ = nullptr;
+    const protocol::Hash& GetChainHash(int height) const { return timechain_->GetChainHash(height); }
+    HeaderContext Extend(const HeaderContext& parent, const protocol::BlockHeader& next) const {
+      return parent.Extend(next, GetChainHash(parent.height + 1));
+    }    
+    HeaderContext Rewind(const HeaderContext& child, const protocol::BlockHeader& prev) const {
+      return child.Rewind(prev);
+    }
+  };
+  HeaderContextPolicy GetPolicy() const { return HeaderContextPolicy{this}; }
+  Iterator MakeContextIterator(FindResult find);
+  ConstIterator MakeContextIterator(ConstFindResult find) const;
+  AddResult PromoteBranch(BaseIterator tip);
+  void PruneForest();
 
   // Behavior tuning variables
-  int max_search_depth_;  // The maximum number of elements to search when looking for a fork point.
-  int max_keep_depth_;    // The maximum depth of branches to keep in the tree when pruning.
+  int max_search_depth_ = 144;  // The maximum number of elements to search when looking for a fork point.
+  int max_keep_depth_ = 288;    // The maximum depth of branches to keep in the tree when pruning.
 };
 
-// Ancestor iterator for walking up from a tip to an exclusive height
 template <bool kIsConst>
-class HeaderTimechain::AncestorIterator {
+class HeaderTimechain::ContextIterator {
  public:
   // C++20 iterator traits
   using iterator_concept = std::forward_iterator_tag;
-  using value_type = protocol::BlockHeader;
-  using pointer = std::conditional_t<kIsConst, const protocol::BlockHeader, protocol::BlockHeader>*;
-  using reference =
-      std::conditional_t<kIsConst, const protocol::BlockHeader, protocol::BlockHeader>&;
+  using value_type = HeaderContext;
+  using pointer = const HeaderContext*;
+  using reference = const HeaderContext&;
   using difference_type = std::ptrdiff_t;
+  
+  using ChainTreeIterator = AncestorIterator<kIsConst>;
 
-  // Constructors
-  AncestorIterator() : timechain_(nullptr), node_(), height_(-1) {}
-  AncestorIterator(const HeaderTimechain& timechain, TreeNode* tip = nullptr, int height = -1)
-      : timechain_(&timechain), node_(&*tip), height_(height) {}
-  AncestorIterator(const HeaderTimechain& timechain, int height)
-      : AncestorIterator(timechain, nullptr, height) {}
-  AncestorIterator(const AncestorIterator& rhs) = default;
-  AncestorIterator(AncestorIterator&&) = default;
+  ContextIterator() = default;
+  ContextIterator(const ContextIterator&) = default;
+  ContextIterator(ChainTreeIterator base, const HeaderContext& context, const HeaderContextPolicy& policy) 
+    : base_(base), context_(context), policy_(policy) {}
+  
+  template <bool kIsRhsConst>
+  requires (kIsConst && !kIsRhsConst)
+  ContextIterator(const ContextIterator<kIsRhsConst>& rhs) 
+    : base_(rhs.base_), context_(rhs.context_), policy_(rhs.policy_) {}
 
-  // Default operators
-  AncestorIterator& operator=(const AncestorIterator&) = default;
-  AncestorIterator& operator=(AncestorIterator&&) = default;
-  bool operator!=(const AncestorIterator& rhs) const = default;
-  bool operator==(const AncestorIterator& rhs) const = default;
+  const HeaderContext& operator*() const { return context_; }
+  const HeaderContext* operator->() const { return &context_; }
 
-  // Custom operators
-  operator bool() const {
-    return IsValid();
-  }
-  reference operator*() const {
-    if (InChain())
-      return timechain_->chain_[height_];
-    else if (InTree())
-      return node_->data.Header();
-    else
-      util::ThrowRuntimeError("Tried to access a non-existent element.");
-  }
-  pointer operator->() const {
-    return &operator*();
-  }
-  AncestorIterator& operator++() {
-    if (InTree()) {
-      if (node_->parent != nullptr) height_ = node_->data.Height();
-      node_ = node_->parent;
-    } else if (InChain())
-      --height_;
+  ContextIterator& operator=(const ContextIterator&) = default;
+  ContextIterator& operator=(ContextIterator&&) = default;
+  bool operator!=(const ContextIterator& rhs) const { return base_ != rhs.base_; }
+  bool operator==(const ContextIterator& rhs) const { return base_ == rhs.base_; }
+
+  ContextIterator& operator++() {
+    ++base_;
+    context_ = policy_.Rewind(context_, base_ ? *base_ : protocol::BlockHeader{});
     return *this;
   }
-  AncestorIterator operator++(int) {
-    AncestorIterator tmp = *this;
-    ++(*this);
-    return tmp;
-  }
+  operator bool() const { return base_; }
+  operator const ChainTreeIterator&() const { return base_; }
 
-  // Public methods
-  std::optional<value_type> TryGet() const {
-    if (InChain())
-      return timechain_->chain_[height_];
-    else if (InTree())
-      return node_->data.Header();
-    else
-      return {};
-  }
-  bool IsValid() const {
-    return InChain() || InTree();
-  }
-  int GetHeight() const {
-    return InTree() ? node_->data.Height() : height_;
-  }
-
- protected:
-  // Protected types and methods are internal to the enclosing HeaderTimechain class.
-  friend HeaderTimechain;
-
-  bool InChain() const {
-    return height_ >= 0;
-  }
-  bool InTree() const {
-    return node_ != nullptr;
-  }
-  int ChainHeight() const {
-    return height_;
-  }
-  TreeNode* Node() const {
-    return node_;
+  Locator Locator() const {
+    return base_.MakeLocator(context_.hash);
   }
 
  private:
-  // Private data is internal to this class.
-  const HeaderTimechain* timechain_;
-  TreeNode* node_;
-  int height_;
+  template <bool> friend class ContextIterator;
+
+  ChainTreeIterator base_;
+  HeaderContext context_;
+  HeaderContextPolicy policy_;
+};
+
+struct HeaderTimechain::AddResult {
+  Iterator it;
+  std::vector<protocol::Hash> moved_from_chain;
 };
 
 class HeaderTimechain::ValidationView : public consensus::HeaderAncestryView {
  public:
-  ValidationView(const HeaderTimechain& timechain, ParentIterator tip)
+  ValidationView(const HeaderTimechain& timechain, ConstIterator tip)
       : timechain_(timechain), tip_(tip) {}
 
-  void SetTip(ParentIterator tip) {
+  void SetTip(ConstIterator tip) {
     tip_ = tip;
   }
   virtual int Length() const override;
@@ -205,7 +132,7 @@ class HeaderTimechain::ValidationView : public consensus::HeaderAncestryView {
 
  private:
   const HeaderTimechain& timechain_;
-  ParentIterator tip_;
+  ConstIterator tip_;
 };
 
 }  // namespace hornet::data

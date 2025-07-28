@@ -288,9 +288,11 @@ class BigUint {
   }
 
   friend std::ostream& operator <<(std::ostream& os, const BigUint& obj) {
+    os << "\"";
     for (int i = kWords - 1; i >= 0; --i) {
       os << std::hex << std::setfill('0') << std::setw(kBitsPerWord >> 2) << obj.words_[i];
     }
+    os << "\"";
     return os;
   }
 
