@@ -1,4 +1,5 @@
 add_library(hornetnodelib STATIC
+   controller.cpp
    dispatch/protocol_loop.cpp
    dispatch/peer_negotiator.cpp
    net/socket.cpp

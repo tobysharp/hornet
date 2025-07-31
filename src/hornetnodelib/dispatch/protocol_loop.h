@@ -27,10 +27,10 @@ class ProtocolLoop : public Broadcaster {
  public:
   struct BreakOnTimeout {
     BreakOnTimeout(int timeout_ms = 0) : timeout_(timeout_ms) {}
-    bool operator()(const ProtocolLoop&) const { return timeout_.IsExpired(); }
+    bool operator()() const { return timeout_.IsExpired(); }
     util::Timeout timeout_;
   };
-  using BreakCondition = std::function<bool(const ProtocolLoop&)>;
+  using BreakCondition = std::function<bool()>;
  
   ProtocolLoop(net::PeerManager& peers) : peers_(peers) {}
 

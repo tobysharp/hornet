@@ -56,7 +56,7 @@ void ProtocolLoop::RunMessageLoop(BreakCondition condition /* = BreakOnTimeout{}
   // can also be parallelized and split up among a pool of worker threads for efficiency.
 
   NotifyLoop();
-  while (!abort_ && !condition(*this)) {
+  while (!abort_ && !condition()) {
     // Poll.
     auto polled = PollReadWrite();
     // Read and parse.
