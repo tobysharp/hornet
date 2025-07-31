@@ -8,9 +8,10 @@
 #include <thread>
 
 #include "hornetlib/data/timechain.h"
-#include "hornetnodelib/net/peer_manager.h"
 #include "hornetnodelib/dispatch/protocol_loop.h"
 #include "hornetnodelib/dispatch/peer_negotiator.h"
+#include "hornetnodelib/net/peer_address.h"
+#include "hornetnodelib/net/peer_manager.h"
 #include "hornetnodelib/sync/sync_manager.h"
 
 namespace hornet::node {
@@ -21,6 +22,10 @@ class Controller {
   
   Controller();
   ~Controller();
+
+  void SetConnectAddress(const net::PeerAddress& address) {
+    connect_address_ = address;
+  }
 
   // Initialize the controller, setting up necessary components.
   void Initialize();
@@ -43,6 +48,7 @@ class Controller {
   dispatch::ProtocolLoop message_loop_;       // Handles protocol messages.
   std::atomic<bool> running_{false};
 
+  net::PeerAddress connect_address_;          // Address to connect to if specified.
   dispatch::PeerNegotiator peer_negotiator_;  // Negotiates peer connections.
 
   sync::SyncManager sync_manager_;            // Handles initial synchronization of the timechain with peers.

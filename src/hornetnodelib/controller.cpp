@@ -18,6 +18,8 @@ Controller::~Controller() {
 }
 
 void Controller::Initialize() {
+  if (!connect_address_.host.empty())
+    message_loop_.AddOutboundPeer(connect_address_.host, connect_address_.port);
 }
 
 void Controller::Start() {

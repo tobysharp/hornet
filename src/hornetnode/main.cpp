@@ -6,6 +6,8 @@
 #include <csignal>
 
 #include "hornetnodelib/controller.h"
+#include "hornetnodelib/util/command_line_parser.h"
+#include "options.h"
 
 std::atomic<bool> is_abort{false};
 
@@ -14,16 +16,24 @@ void HandleSignal(int) {
   std::cout << "Aborting" << std::endl;
 }
 
-int main() {
-  std::cout << "Hornet Node" << std::endl;
+int main(int argc, char** argv) {
+  using namespace hornet::node;
+
+  Options options;
+  util::CommandLineParser parser("Hornet Node", "0.0.1");
+  parser.AddOption("connect", &options.connect, "Connect to a specific peer");
+
+  if (!parser.Parse(argc, argv))
+    return 1;
+
+  Controller controller;
+  if (!options.connect.host.empty())
+    controller.SetConnectAddress(options.connect);
+  controller.Initialize();
 
   std::signal(SIGINT, HandleSignal);
   std::signal(SIGTERM, HandleSignal);
-
-  hornet::node::Controller controller;
-  controller.Initialize();
   controller.Run([&]() { return is_abort.load(); });
 
-  std::cout << "Exit" << std::endl;
   return 0;
 }

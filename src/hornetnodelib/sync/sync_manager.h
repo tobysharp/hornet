@@ -26,7 +26,8 @@ class SyncManager : public dispatch::EventHandler {
  public:
   SyncManager(data::Timechain& timechain)
       : header_sync_(timechain, header_sync_handler_),
-        block_sync_(timechain, block_sync_handler_) {}
+        block_sync_(timechain, block_sync_handler_),
+        timechain_(timechain) {}
   SyncManager() = delete;
 
   virtual void OnHandshakeComplete(net::SharedPeer peer) override  {
@@ -90,6 +91,8 @@ class SyncManager : public dispatch::EventHandler {
     //
     // Since we are deferring the implementation of multiple peers, we will return here
     // later to implement the above logic. For now, we just move on to block sync.
+    LogInfo() << "Header sync complete for peer " << weak.lock()->GetId() 
+              << ", tip height " << timechain_.ReadHeaders()->ChainTip()->height;
     block_sync_.StartSync(weak);
   }
 
@@ -149,6 +152,7 @@ class SyncManager : public dispatch::EventHandler {
   net::WeakPeer sync_;  // The peer used for timechain synchronization requests.
   HeaderSync header_sync_;
   BlockSync block_sync_;
+  data::Timechain& timechain_;
 };
 
 }  // namespace hornet::node::sync
