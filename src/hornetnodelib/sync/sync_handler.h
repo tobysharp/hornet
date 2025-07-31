@@ -7,10 +7,10 @@
 #include <memory>
 #include <string>
 
-#include "hornetnodelib/net/peer.h"
 #include "hornetlib/protocol/message.h"
+#include "hornetnodelib/net/peer.h"
 
-namespace hornet::node {
+namespace hornet::node::sync {
 
 class SyncHandler {
  public:
@@ -20,4 +20,4 @@ class SyncHandler {
   virtual void OnComplete(net::WeakPeer peer) = 0;
 };
 
-}  // namespace hornet::node
+}  // namespace hornet::node::sync

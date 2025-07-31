@@ -2,20 +2,20 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "hornetnodelib/node/protocol_loop.h"
+#include "hornetnodelib/dispatch/protocol_loop.h"
 
 #include "hornetlib/data/timechain.h"
-#include "hornetnodelib/net/constants.h"
-#include "hornetnodelib/net/peer.h"
-#include "hornetnodelib/node/protocol_loop.h"
-#include "hornetnodelib/node/peer_negotiator.h"
 #include "hornetlib/protocol/handshake.h"
 #include "hornetlib/util/timeout.h"
+#include "hornetnodelib/dispatch/protocol_loop.h"
+#include "hornetnodelib/dispatch/peer_negotiator.h"
+#include "hornetnodelib/net/constants.h"
+#include "hornetnodelib/net/peer.h"
 #include "testutil/net/bitcoind_peer.h"
 
 #include <gtest/gtest.h>
 
-namespace hornet::node {
+namespace hornet::node::dispatch {
 namespace {
 
 TEST(ProtocolLoopTest, TestHandshake) {
@@ -33,4 +33,4 @@ TEST(ProtocolLoopTest, TestHandshake) {
 }
 
 }  // namespace
-}  // namespace hornet::node
+}  // namespace hornet::node::dispatch

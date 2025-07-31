@@ -11,7 +11,7 @@
 #include <span>
 #include <string>
 
-namespace hornet::net {
+namespace hornet::node::net {
 
 class Socket {
  public:
@@ -61,4 +61,4 @@ class Socket {
   bool is_blocking_ = true;
 };
 
-}  // namespace hornet::net
+}  // namespace hornet::node::net

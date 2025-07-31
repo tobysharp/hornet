@@ -13,7 +13,7 @@
 
 #include <gtest/gtest.h>
 
-namespace hornet::net {
+namespace hornet::node::net {
 namespace {
 
 constexpr uint16_t kTestPort = 54322;
@@ -139,4 +139,4 @@ TEST(ConnectionTest, EnqueueTwoBuffersAndFlushInSteps) {
 }
 
 }  // namespace
-}  // namespace hornet::net
+}  // namespace hornet::node::net

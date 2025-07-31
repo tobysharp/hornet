@@ -8,12 +8,12 @@
 #include <queue>
 #include <utility>
 
-#include "hornetnodelib/net/peer.h"
-#include "hornetnodelib/net/peer_registry.h"
-#include "hornetnodelib/node/broadcaster.h"
-#include "hornetnodelib/node/event_handler.h"
 #include "hornetlib/protocol/capabilities.h"
 #include "hornetlib/protocol/message.h"
+#include "hornetnodelib/net/peer.h"
+#include "hornetnodelib/net/peer_registry.h"
+#include "hornetnodelib/dispatch/broadcaster.h"
+#include "hornetnodelib/dispatch/event_handler.h"
 
 namespace hornet::protocol::message {
   class Ping;
@@ -21,12 +21,12 @@ namespace hornet::protocol::message {
   class Verack;
   class Version;
 }  // namespace hornet::protocol::message
-namespace hornet::net {
+namespace hornet::node::net {
   class PeerManager;
-}  // namespace hornet::net
+}  // namespace hornet::node::net
 
 
-namespace hornet::node {
+namespace hornet::node::dispatch {
 
 class PeerNegotiator : public EventHandler {
  public:
@@ -46,4 +46,4 @@ class PeerNegotiator : public EventHandler {
   void SendPeerPreferences(std::shared_ptr<net::Peer> peer);
 };
 
-}  // namespace hornet::node
+}  // namespace hornet::node::dispatch

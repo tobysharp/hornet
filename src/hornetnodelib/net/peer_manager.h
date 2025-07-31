@@ -15,7 +15,7 @@
 #include "hornetnodelib/net/peer_registry.h"
 #include "hornetlib/util/weak_ptr_collection.h"
 
-namespace hornet::net {
+namespace hornet::node::net {
 
 class PeerManager {
  public:
@@ -89,4 +89,4 @@ class PeerManager {
   PeerRegistry registry_;
 };
 
-}  // namespace hornet::net
+}  // namespace hornet::node::net

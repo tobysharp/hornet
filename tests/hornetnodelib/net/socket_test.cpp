@@ -11,7 +11,7 @@
 
 #include <gtest/gtest.h>
 
-namespace hornet::net {
+namespace hornet::node::net {
 namespace {
 
 constexpr uint16_t kTestPort = 54321;
@@ -74,4 +74,4 @@ TEST(SocketTest, ConnectReadWrite) {
 }
 
 }  // namespace
-}  // namespace hornet::net
+}  // namespace hornet::node::net

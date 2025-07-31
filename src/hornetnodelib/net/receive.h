@@ -8,12 +8,12 @@
 #include <cstdint>
 #include <stdexcept>
 
-#include "hornetnodelib/net/socket.h"
 #include "hornetlib/protocol/constants.h"
 #include "hornetlib/protocol/dispatch.h"
 #include "hornetlib/protocol/message_factory.h"
+#include "hornetnodelib/net/socket.h"
 
-namespace hornet::net {
+namespace hornet::node::net {
 
 constexpr uint32_t kDefaultBufferSize = 2048;  // bytes
 
@@ -32,4 +32,4 @@ std::unique_ptr<T> ReceiveMessage(const Socket& sock, protocol::Magic magic) {
   return protocol::ParseMessage<T>(factory, magic, {buf.data(), static_cast<size_t>(*length)});
 }
 
-}  // namespace hornet::net
+}  // namespace hornet::node::net

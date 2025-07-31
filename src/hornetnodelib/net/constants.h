@@ -8,7 +8,7 @@
 
 #include "hornetlib/protocol/constants.h"
 
-namespace hornet::net {
+namespace hornet::node::net {
 
 constexpr const char* kLocalhost = "127.0.0.1";
 
@@ -56,4 +56,4 @@ enum class HandshakeState {
   Failed  
 };
 
-}  // namespace hornet::net
+}  // namespace hornet::node::net

@@ -17,7 +17,7 @@
 
 #include "hornetnodelib/net/socket.h"
 
-namespace hornet::net {
+namespace hornet::node::net {
 
 Socket::Socket(int fd, bool blocking /* = true */) : fd_(fd), is_blocking_(blocking) {
   if (fd_ < 0) {
@@ -141,4 +141,4 @@ std::optional<int> Socket::Read(std::span<uint8_t> buffer) const {
   return n;
 }
 
-}  // namespace hornet::net
+}  // namespace hornet::node::net

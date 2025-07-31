@@ -14,9 +14,9 @@
 #include <unistd.h>
 #include <vector>
 
+#include "hornetlib/util/throw.h"
 #include "hornetnodelib/net/constants.h"
 #include "hornetnodelib/net/socket.h"
-#include "hornetlib/util/throw.h"
 #include "testutil/net/bitcoind_peer.h"
 
 namespace hornet::test {
@@ -25,7 +25,7 @@ BitcoindPeer::~BitcoindPeer() {
   Terminate();
 }
 
-BitcoindPeer BitcoindPeer::ConnectOrLaunch(net::Network network /* = net::Network::Mainnet */) {
+BitcoindPeer BitcoindPeer::ConnectOrLaunch(Network network /* = Network::Mainnet */) {
   try {
     return Connect(network);
   }
@@ -34,7 +34,7 @@ BitcoindPeer BitcoindPeer::ConnectOrLaunch(net::Network network /* = net::Networ
   }
 }
 
-BitcoindPeer BitcoindPeer::Connect(net::Network network /* = net::Network::Mainnet */) {
+BitcoindPeer BitcoindPeer::Connect(Network network /* = Network::Mainnet */) {
   BitcoindPeer instance;
   instance.network = network;
   instance.magic = GetNetworkMagic(network);
@@ -42,12 +42,12 @@ BitcoindPeer BitcoindPeer::Connect(net::Network network /* = net::Network::Mainn
   instance.pid = -1;  // Not managing a process
 
   // Throws if not reachable
-  net::Socket socket = net::Socket::Connect(net::kLocalhost, instance.port);
+  node::net::Socket socket = node::net::Socket::Connect(node::net::kLocalhost, instance.port);
 
   return instance;
 }
 
-BitcoindPeer BitcoindPeer::Launch(net::Network network /* = net::Network::Regtest */) {
+BitcoindPeer BitcoindPeer::Launch(Network network /* = Network::Regtest */) {
   BitcoindPeer instance;
 
   // Determine network parameters
@@ -76,8 +76,8 @@ BitcoindPeer BitcoindPeer::Launch(net::Network network /* = net::Network::Regtes
     std::vector<std::string> args = {"bitcoind", "-listen=1", "-datadir=" + instance.datadir,
                                      "-debug=net", "-server=1"/*, "-printtoconsole=0"*/};
                              
-    if (network == net::Network::Testnet) args.push_back("-testnet");
-    if (network == net::Network::Regtest) args.push_back("-regtest");
+    if (network == Network::Testnet) args.push_back("-testnet");
+    if (network == Network::Regtest) args.push_back("-regtest");
 
     // Convert to const char* argv[]
     std::vector<const char *> argv;
@@ -106,13 +106,13 @@ BitcoindPeer BitcoindPeer::Launch(net::Network network /* = net::Network::Regtes
 
 std::string BitcoindPeer::GetCookiePath() const {
   switch (network) {
-    case net::Network::Mainnet:
+    case Network::Mainnet:
       return datadir + "/.cookie";
-    case net::Network::Regtest:
+    case Network::Regtest:
       return datadir + "/regtest/.cookie";
-    case net::Network::Testnet:
+    case Network::Testnet:
       return datadir + "/testnet3/.cookie";
-    case net::Network::Signet:
+    case Network::Signet:
       return datadir + "/signet/.cookie";
     default:
       throw std::runtime_error("Unknown network");

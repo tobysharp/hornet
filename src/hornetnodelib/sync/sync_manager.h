@@ -8,21 +8,21 @@
 #include <string_view>
 
 #include "hornetlib/data/timechain.h"
-#include "hornetnodelib/net/peer_registry.h"
-#include "hornetnodelib/node/block_sync.h"
-#include "hornetnodelib/node/broadcaster.h"
-#include "hornetnodelib/node/event_handler.h"
-#include "hornetnodelib/node/header_sync.h"
-#include "hornetnodelib/node/sync_handler.h"
 #include "hornetlib/protocol/constants.h"
 #include "hornetlib/protocol/message/getheaders.h"
 #include "hornetlib/protocol/message/headers.h"
 #include "hornetlib/protocol/message/verack.h"
+#include "hornetnodelib/net/peer_registry.h"
+#include "hornetnodelib/dispatch/broadcaster.h"
+#include "hornetnodelib/dispatch/event_handler.h"
+#include "hornetnodelib/sync/block_sync.h"
+#include "hornetnodelib/sync/header_sync.h"
+#include "hornetnodelib/sync/sync_handler.h"
 
-namespace hornet::node {
+namespace hornet::node::sync {
 
 // Class for managing initial block download
-class SyncManager : public EventHandler {
+class SyncManager : public dispatch::EventHandler {
  public:
   SyncManager(data::Timechain& timechain)
       : header_sync_(timechain, header_sync_handler_),
@@ -93,7 +93,7 @@ class SyncManager : public EventHandler {
     block_sync_.StartSync(weak);
   }
 
-  class HeaderSyncHandler final : public node::SyncHandler {
+  class HeaderSyncHandler final : public SyncHandler {
    public:
     HeaderSyncHandler(SyncManager& manager) : manager_(manager) {}
     virtual void OnComplete(net::WeakPeer peer) override {
@@ -111,7 +111,7 @@ class SyncManager : public EventHandler {
     SyncManager& manager_;
   } header_sync_handler_ = *this;
 
-  class BlockSyncHandler final : public node::SyncHandler {
+  class BlockSyncHandler final : public SyncHandler {
    public:
     BlockSyncHandler(SyncManager& manager) : manager_(manager) {}
     virtual void OnComplete(net::WeakPeer) override {}
@@ -151,4 +151,4 @@ class SyncManager : public EventHandler {
   BlockSync block_sync_;
 };
 
-}  // namespace hornet::node
+}  // namespace hornet::node::sync

@@ -122,7 +122,6 @@
     "cmake.configureSettings": {
         "CMAKE_TOOLCHAIN_FILE": "${workspaceFolder}/clang20.toolchain.cmake"
     },
- 
-    // --- C++ TestMate Configuration ---
-    "testMate.cpp.test.executables": "${command:cmake.buildDirectory}/hornetlib_tests",
+    "cmake.showCTestOutput": false,
+    "cmake.showTestExplorer": false
 }

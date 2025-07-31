@@ -5,12 +5,6 @@
 #include <queue>
 #include <utility>
 
-#include "hornetnodelib/net/constants.h"
-#include "hornetnodelib/net/peer.h"
-#include "hornetnodelib/net/peer_manager.h"
-#include "hornetnodelib/net/peer_registry.h"
-#include "hornetnodelib/node/broadcaster.h"
-#include "hornetnodelib/node/peer_negotiator.h"
 #include "hornetlib/protocol/capabilities.h"
 #include "hornetlib/protocol/handshake.h"
 #include "hornetlib/protocol/message_factory.h"
@@ -20,8 +14,14 @@
 #include "hornetlib/protocol/message/verack.h"
 #include "hornetlib/protocol/message/version.h"
 #include "hornetlib/util/throw.h"
+#include "hornetnodelib/dispatch/broadcaster.h"
+#include "hornetnodelib/dispatch/peer_negotiator.h"
+#include "hornetnodelib/net/constants.h"
+#include "hornetnodelib/net/peer.h"
+#include "hornetnodelib/net/peer_manager.h"
+#include "hornetnodelib/net/peer_registry.h"
 
-namespace hornet::node {
+namespace hornet::node::dispatch {
 
 void PeerNegotiator::OnMessage(const protocol::message::Ping& ping) {
   Reply<protocol::message::Pong>(ping, ping.GetNonce());
@@ -86,4 +86,4 @@ void PeerNegotiator::SendPeerPreferences(std::shared_ptr<net::Peer> peer) {
     Reply<protocol::message::SendCompact>(peer);
 }
 
-}  // namespace hornet::node
+}  // namespace hornet::node::dispatch

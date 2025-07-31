@@ -2,20 +2,20 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "hornetnodelib/node/sync_manager.h"
+#include "hornetnodelib/sync/sync_manager.h"
 
 #include "hornetlib/data/timechain.h"
-#include "hornetnodelib/node/protocol_loop.h"
-#include "hornetnodelib/node/peer_negotiator.h"
-#include "hornetnodelib/node/sync_manager.h"
 #include "hornetlib/protocol/handshake.h"
 #include "hornetlib/util/log.h"
 #include "hornetlib/util/timeout.h"
+#include "hornetnodelib/dispatch/protocol_loop.h"
+#include "hornetnodelib/dispatch/peer_negotiator.h"
+#include "hornetnodelib/sync/sync_manager.h"
 #include "testutil/net/bitcoind_peer.h"
 
 #include <gtest/gtest.h>
 
-namespace hornet::node {
+namespace hornet::node::dispatch {
 namespace {
 
 TEST(SyncManagerTest, TestGetHeaders) {
@@ -39,7 +39,7 @@ TEST(SyncManagerTest, TestMainnetSyncHeaders) {
     PeerNegotiator negotiator;
     loop.AddEventHandler(&negotiator);
     data::Timechain timechain;
-    SyncManager sync(timechain);
+    sync::SyncManager sync(timechain);
     loop.AddEventHandler(&sync);
 
     loop.AddOutboundPeer(net::kLocalhost, node.GetPort());
@@ -50,7 +50,7 @@ TEST(SyncManagerTest, TestMainnetSyncHeaders) {
     EXPECT_TRUE(timechain.ReadHeaders()->ChainLength() >= 9000);
 }
 
-class NoHeadersSyncManager : public SyncManager {
+class NoHeadersSyncManager : public sync::SyncManager {
  public:
   NoHeadersSyncManager(data::Timechain& timechain) : SyncManager(timechain) {}
   bool IsDone() const { return done_; }
@@ -82,4 +82,4 @@ TEST(SyncManagerTest, TestMainnetSyncBlocks) {
 }
 
 }  // namespace
-}  // namespace hornet::node
+}  // namespace hornet::node::dispatch

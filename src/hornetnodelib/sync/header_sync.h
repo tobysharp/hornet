@@ -11,15 +11,15 @@
 #include "hornetlib/consensus/validator.h"
 #include "hornetlib/data/header_context.h"
 #include "hornetlib/data/timechain.h"
-#include "hornetnodelib/net/peer.h"
-#include "hornetnodelib/node/sync_handler.h"
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/hash.h"
 #include "hornetlib/protocol/message/getheaders.h"
 #include "hornetlib/protocol/message/headers.h"
 #include "hornetlib/util/thread_safe_queue.h"
+#include "hornetnodelib/net/peer.h"
+#include "hornetnodelib/sync/sync_handler.h"
 
-namespace hornet::node {
+namespace hornet::node::sync {
 
 // HeaderSync performs header synchronization. It receives headers messages from peers, validates
 // them against consensus rules in a background thread, and adds them to the header timechain.
@@ -177,4 +177,4 @@ inline void HeaderSync::HandleError(const Item& item, const protocol::BlockHeade
   queue_.EraseIf([&](const Item& queued) { return item.weak_peer == queued.weak_peer; });
 }
 
-}  // namespace hornet::node
+}  // namespace hornet::node::sync

@@ -4,16 +4,16 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
-#include "hornetnodelib/net/peer_registry.h"
-#include "hornetnodelib/node/broadcaster.h"
 #include "hornetlib/protocol/message.h"
 #include "hornetlib/protocol/message_handler.h"
+#include "hornetnodelib/net/peer_registry.h"
+#include "hornetnodelib/dispatch/broadcaster.h"
 
-namespace hornet::net {
+namespace hornet::node::net {
   class PeerManager;
-}  // namespace hornet::net
+}  // namespace hornet::node::net
 
-namespace hornet::node {
+namespace hornet::node::dispatch {
 
 class EventHandler : public protocol::MessageHandler {
  public:
@@ -66,4 +66,4 @@ class EventHandler : public protocol::MessageHandler {
   const net::PeerRegistry* registry_ = nullptr;
 };
 
-}  // namespace hornet::node
+}  // namespace hornet::node::dispatch

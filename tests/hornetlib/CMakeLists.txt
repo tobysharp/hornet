@@ -33,7 +33,3 @@ target_include_directories(hornetlib_tests PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
 include(GoogleTest)
 gtest_discover_tests(hornetlib_tests)
-
-# Enable CTest
-include(CTest)
-enable_testing()

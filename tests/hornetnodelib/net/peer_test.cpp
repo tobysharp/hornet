@@ -10,7 +10,7 @@
 
 #include <gtest/gtest.h>
 
-namespace hornet::net {
+namespace hornet::node::net {
 namespace {
 
 constexpr uint16_t kTestPort = 54324;
@@ -67,4 +67,4 @@ TEST(PeerTest, SocketEchoThroughPeerConnection) {
 }
 
 }  // namespace
-}  // namespace hornet::net
+}  // namespace hornet::node::net

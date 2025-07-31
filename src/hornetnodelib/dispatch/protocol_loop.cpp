@@ -10,19 +10,19 @@
 #include <vector>
 
 #include "hornetlib/data/timechain.h"
-#include "hornetnodelib/net/peer.h"
-#include "hornetnodelib/net/peer_manager.h"
-#include "hornetnodelib/node/broadcaster.h"
-#include "hornetnodelib/node/event_handler.h"
-#include "hornetnodelib/node/protocol_loop.h"
 #include "hornetlib/protocol/constants.h"
 #include "hornetlib/protocol/framer.h"
 #include "hornetlib/protocol/message_factory.h"
 #include "hornetlib/protocol/parser.h"
 #include "hornetlib/util/log.h"
 #include "hornetlib/util/timeout.h"
+#include "hornetnodelib/dispatch/broadcaster.h"
+#include "hornetnodelib/dispatch/event_handler.h"
+#include "hornetnodelib/dispatch/protocol_loop.h"
+#include "hornetnodelib/net/peer.h"
+#include "hornetnodelib/net/peer_manager.h"
 
-namespace hornet::node {
+namespace hornet::node::dispatch {
 
 void ProtocolLoop::SendToOne(net::SharedPeer peer, std::unique_ptr<protocol::Message> message) {
   if (peer && !peer->IsDropped()) {
@@ -309,4 +309,4 @@ void ProtocolLoop::Cleanup() {
   // TODO: Other bookkeeping and network tasks.
 }
 
-}  // namespace hornet::node
+}  // namespace hornet::node::dispatch

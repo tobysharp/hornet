@@ -8,12 +8,12 @@
 #include <ostream>
 #include <string>
 
-#include "hornetnodelib/net/connection.h"
-#include "hornetnodelib/net/constants.h"
 #include "hornetlib/protocol/capabilities.h"
 #include "hornetlib/protocol/handshake.h"
+#include "hornetnodelib/net/connection.h"
+#include "hornetnodelib/net/constants.h"
 
-namespace hornet::net {
+namespace hornet::node::net {
 
 class Peer;
 using SharedPeer = std::shared_ptr<Peer>;
@@ -98,4 +98,4 @@ inline bool operator==(WeakPeer a, WeakPeer b) {
   return (sa || sb) && (sa == sb);
 }
 
-}  // namespace hornet::net
+}  // namespace hornet::node::net

@@ -12,16 +12,16 @@
 #include <vector>
 
 #include "hornetlib/data/timechain.h"
+#include "hornetlib/protocol/constants.h"
+#include "hornetlib/util/timeout.h"
+#include "hornetnodelib/dispatch/broadcaster.h"
+#include "hornetnodelib/dispatch/event_handler.h"
+#include "hornetnodelib/dispatch/serialization_memo.h"
 #include "hornetnodelib/net/peer.h"
 #include "hornetnodelib/net/peer_registry.h"
 #include "hornetnodelib/net/peer_manager.h"
-#include "hornetnodelib/node/broadcaster.h"
-#include "hornetnodelib/node/event_handler.h"
-#include "hornetnodelib/node/serialization_memo.h"
-#include "hornetlib/protocol/constants.h"
-#include "hornetlib/util/timeout.h"
 
-namespace hornet::node {
+namespace hornet::node::dispatch {
 
 class ProtocolLoop : public Broadcaster {
  public:
@@ -104,4 +104,4 @@ class ProtocolLoop : public Broadcaster {
   static constexpr int kMaxPollTimeoutMs = 100;
 };
 
-}  // namespace hornet::node
+}  // namespace hornet::node::dispatch

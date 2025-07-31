@@ -10,13 +10,13 @@
 #include <thread>
 
 #include "hornetlib/data/timechain.h"
-#include "hornetnodelib/net/peer.h"
-#include "hornetnodelib/node/sync_handler.h"
 #include "hornetlib/protocol/message/block.h"
 #include "hornetlib/protocol/message/getdata.h"
 #include "hornetlib/util/thread_safe_queue.h"
+#include "hornetnodelib/net/peer.h"
+#include "hornetnodelib/sync/sync_handler.h"
 
-namespace hornet::node {
+namespace hornet::node::sync {
 
 enum class BlockValidationStatus {
     Unvalidated,    // The block has not yet been validated.
@@ -179,4 +179,4 @@ inline void BlockSync::Process() {
   }
 }
 
-}  // namespace hornet::node
+}  // namespace hornet::node::sync

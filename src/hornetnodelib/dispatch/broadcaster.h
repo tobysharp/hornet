@@ -8,10 +8,10 @@
 #include <map>
 #include <memory>
 
-#include "hornetnodelib/net/peer.h"
 #include "hornetlib/protocol/message.h"
+#include "hornetnodelib/net/peer.h"
 
-namespace hornet::node {
+namespace hornet::node::dispatch {
 
 class Broadcaster {
  public:
@@ -32,4 +32,4 @@ class Broadcaster {
   }
 };
 
-}  // namespace hornet::node
+}  // namespace hornet::node::dispatch

@@ -11,7 +11,7 @@
 
 #include "hornetnodelib/net/peer.h"
 
-namespace hornet::net {
+namespace hornet::node::net {
 
 class PeerManager;
 
@@ -52,4 +52,4 @@ class PeerRegistry final {
   mutable std::mutex mutex_;
 };
 
-}  // namespace hornet::net
+}  // namespace hornet::node::net

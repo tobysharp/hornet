@@ -10,7 +10,7 @@
 #include <deque>
 #include <vector>
 
-namespace hornet::net {
+namespace hornet::node::net {
 
 class Connection {
  public:
@@ -160,4 +160,4 @@ class Connection {
   std::deque<util::SharedSpan<const uint8_t>> write_queue_;
 };
 
-}  // namespace hornet::net
+}  // namespace hornet::node::net

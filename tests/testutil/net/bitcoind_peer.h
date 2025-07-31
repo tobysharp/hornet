@@ -16,11 +16,13 @@ namespace hornet::test {
 
 class BitcoindPeer {
  public:
+  using Network = node::net::Network;
+
   ~BitcoindPeer();
 
-  static BitcoindPeer Connect(net::Network network = net::Network::Mainnet);
-  static BitcoindPeer Launch(net::Network network = net::Network::Regtest);
-  static BitcoindPeer ConnectOrLaunch(net::Network network = net::Network::Mainnet);
+  static BitcoindPeer Connect(Network network = Network::Mainnet);
+  static BitcoindPeer Launch(Network network = Network::Regtest);
+  static BitcoindPeer ConnectOrLaunch(Network network = Network::Mainnet);
 
   std::string GetCookiePath() const;
 
@@ -42,7 +44,7 @@ class BitcoindPeer {
   protocol::Magic magic;
   uint16_t port;
   std::string datadir;
-  net::Network network;
+  Network network;
 };
 
 }  // namespace hornet::test

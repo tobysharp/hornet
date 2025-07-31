@@ -13,7 +13,7 @@
 
 #include <gtest/gtest.h>
 
-namespace hornet::net {
+namespace hornet::node::net {
 namespace {
 
 constexpr uint16_t kTestPort = 54323;
@@ -60,4 +60,4 @@ TEST(PeerManagerTest, AddAndRemovePeer) {
 }
 
 }  // namespace
-}  // namespace hornet::net
+}  // namespace hornet::node::net
