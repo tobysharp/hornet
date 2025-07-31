@@ -150,8 +150,8 @@ std::vector<uint32_t> HeaderTimechain::ValidationView::LastNTimestamps(int count
   std::vector<uint32_t> result;
   result.reserve(count);
 
-  const int final_height = std::max(Length() - count, -1);
-  for (const auto& header : timechain_.AncestorsToHeight(tip_, final_height))
+  const int stop_height = std::max(tip_->height - count, -1);
+  for (const auto& header : timechain_.AncestorsToHeight(tip_, stop_height))
     result.push_back(header.GetTimestamp());
 
   std::sort(result.begin(), result.end());
