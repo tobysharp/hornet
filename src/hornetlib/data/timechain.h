@@ -46,7 +46,9 @@ class Timechain {
   SidecarHandle<T> AddSidecar(std::unique_ptr<SidecarBaseT<T>> sidecar) {
     auto lock = LockWrite();  // Lock the sidecar array for writing.
     sidecars_.emplace_back(std::move(sidecar));
-    return std::prev(sidecars_.end());
+    SidecarHandle<T> handle;
+    handle.it = std::prev(sidecars_.end());
+    return handle;
   }
 
   // Gets metadata from a sidecar in a thread-safe manner.
