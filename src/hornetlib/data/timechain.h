@@ -36,7 +36,7 @@ class Timechain {
   HeaderTimechain::Iterator AddHeader(HeaderTimechain::ConstIterator parent, const HeaderContext& header_context) {
     auto lock = LockWrite();  // Lock both structure and values of headers and sidecars, and the sidecar array.
     const auto [child_it, moved] = headers_.Add(parent, header_context);
-    SidecarAddSync sync = {parent.Locator(), child_it->hash, moved};
+    SidecarAddSync sync = {parent.GetLocator(), child_it->hash, moved};
     for (const auto& sidecar : sidecars_)
       sidecar->AddSync(sync);
     return child_it;

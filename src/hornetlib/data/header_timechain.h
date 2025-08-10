@@ -36,7 +36,6 @@ class HeaderTimechain : public ChainTree<protocol::BlockHeader, HeaderContext> {
   const protocol::Hash& GetChainHash(int height) const;
   std::unique_ptr<ValidationView> GetValidationView(ConstIterator tip) const;
   std::optional<Locator> MakeLocator(int height, const protocol::Hash& hash) const;
-  void EraseBranch(Iterator root);
 
  private:
   using Base = ChainTree<protocol::BlockHeader, HeaderContext>;
@@ -101,7 +100,7 @@ class HeaderTimechain::ContextIterator {
   operator bool() const { return base_; }
   operator const ChainTreeIterator&() const { return base_; }
 
-  Locator Locator() const {
+  Locator GetLocator() const {
     return base_.MakeLocator(context_.hash);
   }
 

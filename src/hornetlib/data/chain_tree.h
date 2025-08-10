@@ -7,6 +7,7 @@
 #include <span>
 #include <variant>
 #include <vector>
+#include <stack>
 
 #include "hornetlib/data/hashed_tree.h"
 #include "hornetlib/protocol/hash.h"
@@ -125,7 +126,8 @@ class ChainTree {
   // to its ancestor fork point in the chain, then swaps the fork's two child branches between
   // the chain and the forest. Returns the updated iterator for the now-invalidated tip.
   PromoteResult PromoteBranch(Iterator tip, std::span<const protocol::Hash> old_chain_hashes) {
-    const int fork_height = GetHeightOfFirstAncestorInChain(tip);
+    const int fork_height = tip.InChain() ? tip.ChainHeight()
+                                          : tip.Node()->data.root_height - 1;
     const DefaultContextPolicy<TData> policy{fork_height, old_chain_hashes};
     return PromoteBranch(tip, policy);
   }
@@ -136,16 +138,14 @@ class ChainTree {
   template <ContextPolicy<TData, TContext> TPolicy>
   PromoteResult PromoteBranch(Iterator tip, const TPolicy& policy);
 
-  // Erase an entire subtree, whose common ancestor is the node provided.
-  void EraseBranch(Iterator root);
-
-  void PruneForest(int min_height);
+  // Remove historic forks older than the given depth.
+  void PruneForest(int max_keep_depth);
 
   // Navigation
   const TData& GetAncestorAtHeight(ConstIterator tip, int height) const;
   auto AncestorsToHeight(ConstIterator start, int end_height) const;
 
- protected:
+protected:
   using Forest = HashedTree<NodeData>;
   using ForestIterator = Forest::Iterator;
   using ForestConstIterator = Forest::ConstIterator;
@@ -156,10 +156,6 @@ class ChainTree {
   Iterator BeginChain(int height);
   ConstIterator BeginForest(ForestConstIterator node) const;
   Iterator BeginForest(ForestIterator node);
-  int GetHeightOfFirstAncestorInChain(Iterator child) const {
-    if (child.InChain()) return child.ChainHeight();
-    return child.Node()->data.root_height - 1;
-  }
 
   std::vector<TData> chain_;
   Context chain_tip_context_;
@@ -178,16 +174,15 @@ inline int ChainTree<TData, TContext>::PushToChain(const Context& context) {
 template <typename TData, typename TContext>
 inline ChainTree<TData, TContext>::Iterator ChainTree<TData, TContext>::Add(
     ConstIterator parent,
-    /*const protocol::Hash& parent_hash,*/
     const Context& context) {
   // If the parent is invalid, the chain must be empty.
   bool fail = !parent.IsValid() && !chain_.empty();
   // We can only add to one parent location.
   fail |= parent.InChain() && parent.InTree();
   // If parent chain height given it must match context and chain hash.
-  fail |= parent.InChain() && ((parent.ChainHeight() != context.height - 1) ||
-                               (parent.ChainHeight() >= ChainLength()) /*||
-                               (parent_hash != GetChainHash(parent.ChainHeight()))*/);
+  fail |= parent.InChain() &&
+          ((parent.ChainHeight() != context.height - 1) ||
+           (parent.ChainHeight() >= ChainLength()));
   // Validate parent in tree.
   if (fail) util::ThrowInvalidArgument("The parent wasn't found or didn't match the requirements.");
 
