@@ -13,6 +13,7 @@
 #include "hornetlib/consensus/difficulty_adjustment.h"
 #include "hornetlib/consensus/header_ancestry_view.h"
 #include "hornetlib/consensus/parameters.h"
+#include "hornetlib/consensus/types.h"
 #include "hornetlib/data/header_context.h"
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/compact_target.h"
@@ -21,15 +22,6 @@
 #include "hornetlib/util/throw.h"
 
 namespace hornet::consensus {
-
-enum class HeaderError {
-  None = 0,
-  ParentNotFound,
-  InvalidProofOfWork,
-  BadTimestamp,
-  BadDifficultyTransition,
-  BadVersion
-};
 
 class Validator {
  public:

@@ -172,8 +172,8 @@ class HashedTree {
     return std::ranges::subrange{list_.begin(), list_.end()};
   }
 
-  auto BackFromLatest() {
-    return FromNode(list_.empty() ? nullptr : &list_.back());
+  auto ForwardFromOldest() const {
+    return std::ranges::subrange{list_.begin(), list_.end()};
   }
 
   auto UpFromNode(Node* node) {

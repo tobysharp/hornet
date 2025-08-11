@@ -7,9 +7,9 @@
 namespace hornet::node {
 
 Controller::Controller()
-    : message_loop_(peer_manager_),
-      sync_manager_(timechain_) {
-  block_validation_status_ = timechain_.AddSidecar<sync::BlockValidationStatus>(std::make_unique<data::KeyframeSidecar<sync::BlockValidationStatus>>());
+    : block_validation_status_(decltype(block_validation_status_)::Create(timechain_)),
+      message_loop_(peer_manager_),
+      sync_manager_(timechain_, block_validation_status_) {
   message_loop_.AddEventHandler(&peer_negotiator_);
   message_loop_.AddEventHandler(&sync_manager_);
 }

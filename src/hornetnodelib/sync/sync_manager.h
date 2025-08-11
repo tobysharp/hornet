@@ -7,6 +7,7 @@
 #include <chrono>
 #include <string_view>
 
+#include "hornetlib/data/sidecar_binding.h"
 #include "hornetlib/data/timechain.h"
 #include "hornetlib/protocol/constants.h"
 #include "hornetlib/protocol/message/getheaders.h"
@@ -18,15 +19,16 @@
 #include "hornetnodelib/sync/block_sync.h"
 #include "hornetnodelib/sync/header_sync.h"
 #include "hornetnodelib/sync/sync_handler.h"
+#include "hornetnodelib/sync/types.h"
 
 namespace hornet::node::sync {
 
 // Class for managing initial block download
 class SyncManager : public dispatch::EventHandler {
  public:
-  SyncManager(data::Timechain& timechain)
+  SyncManager(data::Timechain& timechain, BlockValidationBinding validation)
       : header_sync_(timechain, header_sync_handler_),
-        block_sync_(timechain, block_sync_handler_),
+        block_sync_(timechain, validation, block_sync_handler_),
         timechain_(timechain) {}
   SyncManager() = delete;
 

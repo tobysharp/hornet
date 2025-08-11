@@ -8,6 +8,7 @@
 #include <thread>
 
 #include "hornetlib/data/keyframe_sidecar.h"
+#include "hornetlib/data/sidecar_binding.h"
 #include "hornetlib/data/timechain.h"
 #include "hornetnodelib/dispatch/peer_negotiator.h"
 #include "hornetnodelib/dispatch/protocol_loop.h"
@@ -15,6 +16,7 @@
 #include "hornetnodelib/net/peer_manager.h"
 #include "hornetnodelib/sync/block_sync.h"
 #include "hornetnodelib/sync/sync_manager.h"
+#include "hornetnodelib/sync/types.h"
 
 namespace hornet::node {
 
@@ -42,10 +44,8 @@ class Controller {
   void Run(BreakCondition condition);
 
  private:
-  template <typename T> using SidecarHandle = data::Timechain::SidecarHandle<T>;
-
   data::Timechain timechain_;  // The timechain managed by this controller.
-  SidecarHandle<sync::BlockValidationStatus> block_validation_status_;  // Tracks block validation status.
+  sync::BlockValidationBinding block_validation_status_;  // Tracks block validation status.
 
   std::thread message_loop_thread_;      // Thread for processing protocol messages.
   dispatch::ProtocolLoop message_loop_;  // Handles protocol messages.

@@ -38,6 +38,11 @@ class HeaderTimechain : public ChainTree<protocol::BlockHeader, HeaderContext> {
   std::optional<Locator> MakeLocator(int height, const protocol::Hash& hash) const;
   void EraseBranch(Iterator root);
 
+  // Iterate over all known headers from the genesis onward, calling the predicate for each, with arguments
+  //  (const Locator& parent, const Key& child, const protocol::BlockHeader& header).  
+  template <typename Predicate>
+  void ForEach(Predicate predicate) const;
+
  private:
   using Base = ChainTree<protocol::BlockHeader, HeaderContext>;
   using BaseIterator = Base::Iterator;
@@ -62,6 +67,22 @@ class HeaderTimechain : public ChainTree<protocol::BlockHeader, HeaderContext> {
   int max_search_depth_ = 144;  // The maximum number of elements to search when looking for a fork point.
   int max_keep_depth_ = 288;    // The maximum depth of branches to keep in the tree when pruning.
 };
+
+// Iterate over all known headers from the genesis onward, calling the predicate for each, with arguments
+//    (const Locator& parent, const Key& child, const protocol::BlockHeader& header).  
+template <typename Predicate>
+inline void HeaderTimechain::ForEach(Predicate predicate) const {
+  // Iterates over main chain headers.
+  for (int height = 0; height < std::ssize(chain_); ++height)
+    predicate(Locator{height - 1}, {height, GetChainHash(height)}, chain_[height]);
+
+  // Iterates over forest headers.
+  for (const auto& node : forest_.ForwardFromOldest()) {
+    const bool is_root = node.parent == nullptr;
+    const Locator parent = is_root ? Locator{node.data.Height() - 1} : Locator{node.parent->hash};
+    predicate(parent, {node.data.Height(), node.hash}, node.data.Data());
+  }
+}
 
 template <bool kIsConst>
 class HeaderTimechain::ContextIterator {

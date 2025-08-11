@@ -9,25 +9,21 @@
 #include <memory>
 #include <thread>
 
+#include "hornetlib/consensus/types.h"
+#include "hornetlib/data/sidecar_binding.h"
 #include "hornetlib/data/timechain.h"
 #include "hornetlib/protocol/message/block.h"
 #include "hornetlib/protocol/message/getdata.h"
 #include "hornetlib/util/thread_safe_queue.h"
 #include "hornetnodelib/net/peer.h"
 #include "hornetnodelib/sync/sync_handler.h"
+#include "hornetnodelib/sync/types.h"
 
 namespace hornet::node::sync {
 
-enum class BlockValidationStatus {
-    Unvalidated,    // The block has not yet been validated.
-    AssumedValid,   // The block is buried under enough work to be assumed valid.
-    StructureValid, // The block's transaction structure is valid, but scripts have not been validated.
-    Validated       // The block has been fully validated.
-};
-
 class BlockSync {
  public:
-  BlockSync(data::Timechain& timechain, SyncHandler& handler);
+  BlockSync(data::Timechain& timechain, BlockValidationBinding validation, SyncHandler& handler);
   ~BlockSync();
 
   // Sets the maximum number of bytes allowed in the queue
@@ -43,7 +39,7 @@ class BlockSync {
  protected:
   struct Item {
     net::WeakPeer peer;
-    int height;
+    data::Key id;
     std::shared_ptr<const protocol::Block> block;
   };
 
@@ -59,7 +55,11 @@ class BlockSync {
   // Requests more headers via the callback supplied in RegisterPeer.
   RequestState RequestNextBlock(net::WeakPeer weak);
 
+  // Gets the next block ID to request from a peer.
+  std::optional<data::Key> GetNextBlockId() const;
+
   data::Timechain& timechain_;
+  BlockValidationBinding validation_;
   SyncHandler& handler_;
   util::ThreadSafeQueue<Item> queue_;
   std::thread worker_thread_;         // Background worker thread for processing.
@@ -78,17 +78,48 @@ class BlockSync {
   // with the simplest possible logic for block sync, and incrementally add features like multiple
   // simultaneous in-flight requests.
 
-  int request_height_ = 1;  // The chain height of the next block to request.
-  // TODO: Not sure if request_height_ needs to be std::atomic. It's currently only modified inside
-  // a scope that can be only accessed by one thread at a time. But other threads could be reading.
+  data::Key request_;
 };
 
-inline BlockSync::BlockSync(data::Timechain& timechain, SyncHandler& handler)
-    : timechain_(timechain), handler_(handler), worker_thread_([this] { this->Process(); }) {}
+inline BlockSync::BlockSync(data::Timechain& timechain, BlockValidationBinding validation,
+                            SyncHandler& handler)
+    : timechain_(timechain),
+      validation_(validation),
+      handler_(handler),
+      worker_thread_([this] { this->Process(); }) {}
 
 inline BlockSync::~BlockSync() {
   queue_.Stop();
   worker_thread_.join();
+}
+
+// Returns the next block key to request from a peer.
+inline std::optional<data::Key> BlockSync::GetNextBlockId() const {
+  // Takes a read lock on the timechain while we determine the next block to request.
+  const auto headers = timechain_.ReadHeaders();
+
+  // Checks whether the last requested block is still in the main chain.
+  if (request_.height > 0 && request_.height < headers->ChainLength() &&
+      headers->GetChainHash(request_.height) == request_.hash) {
+    // The last requested block is still in the main chain, so we can simply
+    // request the next block in the chain.
+    if (headers->ChainLength() > request_.height + 1)
+      return data::Key{request_.height + 1, headers->GetChainHash(request_.height + 1)};
+    else
+      return std::nullopt;
+  }
+
+  // Either there was no previous request, or the previously requested block got re-orged
+  // out of the main chain. In either case, now we defer to the validation status sidecar
+  // to ask it for the first unvalidated block in the chain.
+  const auto unvalidated =
+      validation_.Sidecar().FindInChainIf(1, [](consensus::BlockValidationStatus status) {
+        return status == consensus::BlockValidationStatus::Unvalidated;
+      });
+  if (unvalidated)
+    return data::Key{*unvalidated, headers->GetChainHash(*unvalidated)};
+  else
+    return std::nullopt;
 }
 
 inline BlockSync::RequestState BlockSync::RequestNextBlock(net::WeakPeer weak) {
@@ -96,64 +127,62 @@ inline BlockSync::RequestState BlockSync::RequestNextBlock(net::WeakPeer weak) {
   if (queue_bytes_ >= max_queue_bytes_) return RequestState::Deferred;
   const auto peer = weak.lock();
   if (!peer) return RequestState::Disconnected;
-  // Only send message if we have an empty request slot available.
+  // Proceeds only if we have an empty request slot available.
   if (!request_active_.test_and_set(std::memory_order_acquire)) {
     // Only one thread at a time can get into this scope.
-    const bool finished = request_height_ >= timechain_.ReadHeaders()->ChainLength();
-    if (finished) {
-      request_active_.clear();
-      return RequestState::End;
+
+    // Queries the block-validation sidecar to see which block we should request next.
+    std::optional<data::Key> next = GetNextBlockId();
+    if (!next.has_value()) {
+      request_active_.clear(std::memory_order::release);
+      return RequestState::End;  // No more blocks to request.
     }
-    // protocol::message::GetData getdata;
-    // const protocol::Hash& hash = timechain_.Headers().HeaviestChain().GetHash(request_height_++);
-    // getdata.AddInventory(protocol::Inventory::WitnessBlock(hash));
-    // handler_.OnRequest(peer, std::make_unique<protocol::message::GetData>(std::move(getdata)));
 
-    // TODO: Request the height and hash of the next block to validate from the timechain, which
-    // tracks the validation state of blocks.
-
+    // Saves the block key into request_ and queues the GetData message for the peer.
+    request_ = *next;
+    // LogDebug() << "Block height " << request_.height << " requested.";
+    protocol::message::GetData getdata;
+    getdata.AddInventory(protocol::Inventory::WitnessBlock(request_.hash));
+    handler_.OnRequest(peer, std::make_unique<protocol::message::GetData>(std::move(getdata)));
     return RequestState::Active;
   }
   return RequestState::Deferred;
 }
 
 inline void BlockSync::StartSync(net::WeakPeer peer) {
-  // TODO: Here we want to inspect our timechain state to determine what validation has
-  // already taken place, to update request_height_. request_height_=1 is fine for starting
-  // from scratch, but we may be starting from an interrupted sync where some validation has
-  // already been done. So once we figure out where we are storing that state of current block
-  // validation progress against the active header timechain, we should look that up here to
-  // initialize request_height_ appropriately, to continue from previous state.
-  request_height_ = 1;
-
-  request_active_.clear(std::memory_order::release);
-  RequestNextBlock(peer);
+  Assert(!request_active_.test());
+  if (RequestNextBlock(peer) == RequestState::End) {
+    handler_.OnComplete(peer);  // No blocks will ever reach the queue.
+  }
 }
 
 inline void BlockSync::OnBlock(net::SharedPeer peer, const protocol::message::Block& message) {
   Assert(request_active_.test());
+  const data::Key expected = request_;
+  // LogDebug() << "Block height " << expected.height << " arrived.";
+
+  // Start by freeing up one request slot
+  request_active_.clear(std::memory_order::release);
 
   // Note the block is shared rather than copied, for performance.
   const std::shared_ptr<const protocol::Block> block = message.GetBlock();
-  const int received_height = request_height_ - 1;
 
-  // Before pushing the block onto the validation queue, check the received block header against 
-  // the header we requested from. If the headers don't exactly match, we already know we need 
+  // Before pushing the block onto the validation queue, check the received block header against
+  // the header we requested from. If the headers don't have the same hash, we already know we need
   // to fail validation and disconnect the peer.
-
-  // TODO: To do this safely, we have to request the header by both chain height and hash.
-  // We should store the hash we requested and its height in our request tracker state. Then
-  // when we receive the block, we should compute its hash, check that against our request first.
-  // That allows us to match the block to the request. Then we no longer need to compare the
-  // header to the one in the chain.
+  if (block->Header().ComputeHash() != expected.hash) {
+    // If the block's hash does not match the requested hash, we have a protocol violation.
+    handler_.OnError(peer, "Received block hash does not match requested hash.");
+    return;
+  }
 
   // Pushes work onto the thread-safe async work queue.
-  Item item{peer, received_height, block};
+  Item item{peer, expected, block};
   queue_bytes_ += SizeInBytes(item);
   queue_.Push(std::move(item));
+  // LogDebug() << "Queue length " << queue_.Size() << ", size " << queue_bytes_ << " bytes.";
 
-  // Now free up the spare request slot and consider requesting the next block.
-  request_active_.clear(std::memory_order::release);
+  // Consider requesting the next block immediately, if we have space in the queue.
   RequestNextBlock(peer);
 }
 
@@ -170,10 +199,12 @@ inline void BlockSync::Process() {
     // delete the header subtree, add the header hash to a blacklist,
     // delete this block and any downstream blocks, and cancel any downstream block requests.
 
-    // TODO: "Connect" the block, i.e. update the current UTXO set with its transactions.
+    // Sets the validation status flag into the metadata sidecar.
+    LogDebug() << "Block height " << item->id.height << " validated, " << item->block->SizeBytes()
+               << " bytes.";
+    validation_.Set(item->id, consensus::BlockValidationStatus::StructureValid);
 
-    // TODO: Maybe update some field in the header timechain to indicate
-    // where we are up to with block validation?
+    // We will update the current UTXO set in a separate thread, for more parallelism.
 
     if (request_state == RequestState::End) handler_.OnComplete(item->peer);
   }

@@ -4,6 +4,7 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #include "hornetnodelib/sync/sync_manager.h"
 
+#include "hornetlib/data/sidecar_binding.h"
 #include "hornetlib/data/timechain.h"
 #include "hornetlib/protocol/handshake.h"
 #include "hornetlib/util/log.h"
@@ -11,6 +12,7 @@
 #include "hornetnodelib/dispatch/protocol_loop.h"
 #include "hornetnodelib/dispatch/peer_negotiator.h"
 #include "hornetnodelib/sync/sync_manager.h"
+#include "hornetnodelib/sync/types.h"
 #include "testutil/net/bitcoind_peer.h"
 
 #include <gtest/gtest.h>
@@ -39,7 +41,8 @@ TEST(SyncManagerTest, TestMainnetSyncHeaders) {
     PeerNegotiator negotiator;
     loop.AddEventHandler(&negotiator);
     data::Timechain timechain;
-    sync::SyncManager sync(timechain);
+    auto validation = sync::BlockValidationBinding::Create(timechain);
+    sync::SyncManager sync(timechain, validation);
     loop.AddEventHandler(&sync);
 
     loop.AddOutboundPeer(net::kLocalhost, node.GetPort());
@@ -48,37 +51,6 @@ TEST(SyncManagerTest, TestMainnetSyncHeaders) {
     });
     LogDebug() << "Header count: " << timechain.ReadHeaders()->ChainLength();
     EXPECT_TRUE(timechain.ReadHeaders()->ChainLength() >= 9000);
-}
-
-class NoHeadersSyncManager : public sync::SyncManager {
- public:
-  NoHeadersSyncManager(data::Timechain& timechain) : SyncManager(timechain) {}
-  bool IsDone() const { return done_; }
-
-  virtual void OnMessage(const protocol::message::Headers& headers) override {
-    protocol::message::Headers v2;
-    v2.SetEnvelope(*headers.GetEnvelope());
-    v2.AddBlockHeader(headers.GetBlockHeaders()[0]);
-    SyncManager::OnMessage(v2);
-  }
-
- protected:
-  bool done_ = true;
-};
-
-TEST(SyncManagerTest, TestMainnetSyncBlocks) {
-    auto node = test::BitcoindPeer::Connect();
-    net::PeerManager peers;
-    ProtocolLoop loop(peers);
-    PeerNegotiator negotiator;
-    loop.AddEventHandler(&negotiator);
-    data::Timechain timechain;
-    NoHeadersSyncManager sync(timechain);
-    loop.AddEventHandler(&sync);
-    loop.AddOutboundPeer(net::kLocalhost, node.GetPort());
-    loop.RunMessageLoop([&]() {
-        return sync.IsDone();
-    });
 }
 
 }  // namespace

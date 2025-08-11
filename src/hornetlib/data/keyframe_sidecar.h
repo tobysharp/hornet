@@ -37,6 +37,26 @@ class KeyframeSidecar : public SidecarBaseT<T> {
     return length_ + forks_.Size();
   }
 
+  // Finds the first height matching a supplied predicate, from a given starting height.
+  template <typename Pred>
+  std::optional<int> FindInChainIf(int first_height, Pred predicate) const {
+    if (first_height < 0 || first_height >= length_) return std::nullopt;
+
+    // Non-existent keyframes at the start implicitly have the default_ value.
+    if (keyframes_.empty() || first_height < keyframes_[0].start)
+      if (predicate(default_))
+        return first_height;
+    
+    // Note we currently implement this using linear scan over keyframes, which should be very fast
+    // when we expect to have very few keyframes. If we were able to assume a monotonic predicate,
+    // then we could instead use std::upper_bound to find in O(log n) steps.
+    for (auto it = std::prev(FirstKeyframeAfter(first_height)); it != keyframes_.end(); ++it) {
+      if (predicate(it->value))
+        return std::max(first_height, it->start);
+    }
+    return std::nullopt;
+  }
+
   virtual const T* Get(const Locator& locator) const override {
     if (std::holds_alternative<int>(locator)) {
       // O(log N) binary search on keyframes.
