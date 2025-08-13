@@ -60,6 +60,20 @@ inline bytes32_t DoubleSha256(const T &value) {
   return Sha256(Sha256(value));
 }
 
+// Computes a batch of same-sized double-SHA256 hashes using vectorization.
+inline void DoubleSha256Batch(const uint8_t* input,
+                              int buffer_length_bytes,
+                              int input_stride_bytes,
+                              const int buffer_count,
+                              uint8_t* output,
+                              int output_stride_bytes = 32) {
+  // TODO: Replace this scalar implementation with a vectorized one.
+  for (int i = 0; i < buffer_count; ++i) {
+    const uint8_t* buffer = input + i * input_stride_bytes;
+    *reinterpret_cast<bytes32_t*>(output + i * output_stride_bytes) = DoubleSha256(buffer, buffer + buffer_length_bytes);
+  }
+}
+
 // Writes the uint256_t as a 64-character hex string to an output stream,
 // using big-endian byte order (as typically displayed in Bitcoin).
 // Note: this is a textual representation, not binary output.

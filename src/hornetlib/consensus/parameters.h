@@ -1,3 +1,7 @@
+// Copyright 2025 Toby Sharp
+//
+// This file is part of the Hornet Node project. All rights reserved.
+// For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
 #include "hornetlib/protocol/hash.h"
@@ -16,6 +20,7 @@ struct Parameters {
   static constexpr int kTimestampTolerance = 2 * 60 * 60;
   static constexpr uint32_t kTargetDuration = 14 * 24 * 60 * 60;  // Two weeks in seconds
   static constexpr protocol::Target kTargetLimit = "00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"_h256;
+  static constexpr int kMaximumWeightUnits = 4'000'000;
 };
 
 }  // namespace hornet::consensus

@@ -24,6 +24,10 @@ namespace hornet::protocol {
 // Represents a 256-bit hash, as a 32-byte array in little-endian order.
 using Hash = crypto::bytes32_t;
 
+inline bool IsNull(const Hash& hash) {
+  return hash == Hash{};
+}
+
 }  // namespace hornet::protocol
 
 namespace hornet {

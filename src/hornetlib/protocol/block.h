@@ -1,3 +1,7 @@
+// Copyright 2025 Toby Sharp
+//
+// This file is part of the Hornet Node project. All rights reserved.
+// For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
 #include <vector>
@@ -41,23 +45,32 @@ class Block {
     TransactionView{data_, detail}.CopyFrom(view);
     transactions_.push_back(detail);
   }
+
+  // Returns the number of weight units (WU) for the block.
+  int GetWeightUnits() const {
+    return 4 * serialized_bytes_ - 3 * data_.GetWitnessBytes();
+  }
+
+  // Returns the size of the block in memory, in bytes.
   int SizeBytes() const {
     int size = sizeof(*this) - sizeof(data_);
     size += transactions_.capacity() * sizeof(TransactionDetail);
     size += data_.SizeBytes();
     return size;
   }
-  void Serialize(encoding::Writer& writer) const {
+
+  void Serialize(encoding::Writer& writer, bool include_witness = true) const {
     header_.Serialize(writer);
     writer.WriteVarInt(transactions_.size());
     for (const auto& tx : transactions_)
-      tx.Serialize(writer, data_);
+      tx.Serialize(writer, data_, include_witness);
   }
 
   void Deserialize(encoding::Reader& reader) {
     // There's no way for 100K transactions to fit in a 4MB block.
     constexpr size_t kUpperBoundTxInBlock = 100'000;
 
+    const auto start = reader.GetPos();
     header_.Deserialize(reader);
     const size_t txn_count = reader.ReadVarInt();
     if (txn_count > kUpperBoundTxInBlock)
@@ -65,12 +78,16 @@ class Block {
     transactions_.resize(txn_count);
     for (auto& tx : transactions_)
       tx.Deserialize(reader, data_);
+    const auto end = reader.GetPos();
+
+    serialized_bytes_ = end - start;
   }
 
  private:
   BlockHeader header_;
   std::vector<TransactionDetail> transactions_;
   TransactionData data_;
+  int serialized_bytes_ = 0;
 };
 
 }  // namespace hornet::protocol

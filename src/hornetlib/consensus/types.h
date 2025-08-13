@@ -25,4 +25,12 @@ enum class BlockValidationStatus {
   Validated        // The block has been fully validated.
 };
 
+enum class BlockError {
+  None = 0,
+  BadSize,
+  BadTransactionCount,
+  BadCoinBase,
+  BadMerkleRoot
+};
+
 }  // namespace hornet::consensus

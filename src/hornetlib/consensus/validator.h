@@ -12,9 +12,11 @@
 
 #include "hornetlib/consensus/difficulty_adjustment.h"
 #include "hornetlib/consensus/header_ancestry_view.h"
+#include "hornetlib/consensus/merkle.h"
 #include "hornetlib/consensus/parameters.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/data/header_context.h"
+#include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/compact_target.h"
 #include "hornetlib/protocol/hash.h"
@@ -77,6 +79,28 @@ class Validator {
     return parent.Extend(header, hash);
   }
 
+  BlockError ValidateBlockStructure(const protocol::Block& block) const {
+    // Verify the Merkle root is correct.
+    if (ComputeMerkleRoot(block) != block.Header().GetMerkleRoot())
+      return BlockError::BadMerkleRoot;
+
+    // Verify that the block respects size limits.
+    if (block.GetWeightUnits() > parameters_.kMaximumWeightUnits)
+      return BlockError::BadSize;
+
+    // Verify that there is at least one transaction.
+    if (block.GetTransactionCount() < 1)
+      return BlockError::BadTransactionCount;
+
+    // Verify that the only coin base transaction is the first one.
+    for (int i = 0; i < block.GetTransactionCount(); ++i)
+      if (block.Transaction(i).IsCoinBase() != (i == 0))
+        return BlockError::BadCoinBase;
+  
+    return BlockError::None;
+  }
+
+ private:
   bool IsVersionRetiredAtHeight(int version, int height) const {
     const std::array<int, 4> kVersionExpiryHeights = {
         0,                         // v0: Invalid from genesis.
@@ -88,7 +112,6 @@ class Validator {
                            height >= kVersionExpiryHeights[version]);
   }
 
- private:
   Parameters parameters_;
   DifficultyAdjustment difficulty_adjustment_;
 };
