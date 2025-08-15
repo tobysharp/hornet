@@ -4,6 +4,8 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
+#include <cstdint>
+
 #include "hornetlib/protocol/hash.h"
 #include "hornetlib/protocol/target.h"
 #include "hornetlib/util/hex.h"
@@ -21,6 +23,9 @@ struct Parameters {
   static constexpr uint32_t kTargetDuration = 14 * 24 * 60 * 60;  // Two weeks in seconds
   static constexpr protocol::Target kTargetLimit = "00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"_h256;
   static constexpr int kMaximumWeightUnits = 4'000'000;
+  static constexpr int kMaximumTransactionBytesNoWitness = 1'000'000;
+  static constexpr int64_t kSatoshisPerBitcoin = 100'000'000;
+  static constexpr int64_t kMoneySupplyLimit = 21'000'000 * kSatoshisPerBitcoin;
 };
 
 }  // namespace hornet::consensus

@@ -10,14 +10,14 @@
 #include "hornetlib/crypto/hash.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/hash.h"
+#include "hornetlib/protocol/transaction.h"
+#include "hornetlib/protocol/txid.h"
 #include "hornetlib/util/throw.h"
 
 namespace hornet::consensus {
 
 inline protocol::Hash ComputeMerkleRoot(const protocol::Block& block) {
   const int count = block.GetTransactionCount();
-  if (count == 0)
-    util::ThrowInvalidArgument("Block has no transactions.");
   int padded = (count + 1) & ~1;  // rounds up to an even integer.
   std::vector<protocol::Hash> layer(padded);
 
@@ -31,6 +31,7 @@ inline protocol::Hash ComputeMerkleRoot(const protocol::Block& block) {
       layer[n] = layer[n - 1];
     crypto::DoubleSha256Batch(layer[0].begin(), 64, 64, (n + 1) >> 1, layer[0].begin(), 32);
   }
+  if (layer.empty()) return {};
   return layer[0];
 }
 

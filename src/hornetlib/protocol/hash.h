@@ -4,6 +4,7 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
+#include <compare>
 #include <cstring>
 #include <ostream>
 
@@ -26,6 +27,17 @@ using Hash = crypto::bytes32_t;
 
 inline bool IsNull(const Hash& hash) {
   return hash == Hash{};
+}
+
+inline std::strong_ordering operator<=>(const Hash& a, const Hash& b) {
+  const int cmp = std::memcmp(a.data(), b.data(), sizeof(Hash));
+  return cmp < 0 ? std::strong_ordering::less
+       : cmp > 0 ? std::strong_ordering::greater
+                 : std::strong_ordering::equal;
+}
+
+inline bool operator ==(const Hash& a, const Hash& b) {
+  return (a <=> b) == std::strong_ordering::equal;
 }
 
 }  // namespace hornet::protocol

@@ -31,7 +31,7 @@ class Validator {
 
   Validator(const Parameters& params = {}) : parameters_(params), difficulty_adjustment_(params) {}
 
-  HeaderResult ValidateDownloadedHeader(const data::HeaderContext& parent,
+  [[nodiscard]] HeaderResult ValidateDownloadedHeader(const data::HeaderContext& parent,
                                         const protocol::BlockHeader& header,
                                         const HeaderAncestryView& view) const {
     const int height = parent.height + 1;
@@ -79,7 +79,7 @@ class Validator {
     return parent.Extend(header, hash);
   }
 
-  BlockError ValidateBlockStructure(const protocol::Block& block) const {
+  [[nodiscard]] BlockError ValidateBlockStructure(const protocol::Block& block) const {
     // Verify the Merkle root is correct.
     if (ComputeMerkleRoot(block) != block.Header().GetMerkleRoot())
       return BlockError::BadMerkleRoot;
@@ -97,7 +97,63 @@ class Validator {
       if (block.Transaction(i).IsCoinBase() != (i == 0))
         return BlockError::BadCoinBase;
   
+    // Verify the transactions are all valid with no duplicates.
+    for (const auto& tx : block.Transactions()) {
+      if (const auto tx_error = ValidateTransaction(tx); tx_error != TransactionError::None) {
+        LogWarn() << "Transaction validation failed, txid " << tx.GetHash() << ", error " << static_cast<int>(tx_error) << ".";
+        return BlockError::BadTransaction;
+      }
+    }
+
+    // TODO: Verify the number of sig ops.
+  
     return BlockError::None;
+  }
+
+  [[nodiscard]] TransactionError ValidateTransaction(const protocol::TransactionConstView transaction) const {
+    // Verify the transaction sizes are allowed.
+    if (transaction.InputCount() < 1)
+      return TransactionError::EmptyInputs;
+    if (transaction.OutputCount() < 1)
+      return TransactionError::EmptyOutputs;
+    if (transaction.SerializedBytesNoWitness() > parameters_.kMaximumTransactionBytesNoWitness)
+      return TransactionError::OversizedByteCount;
+
+    // Verify transaction output values.
+    int64_t total_output_value = 0;
+    for (const auto& output : transaction.Outputs()) {
+      if (output.value < 0)
+        return TransactionError::NegativeOutputValue;
+      if (output.value > parameters_.kMoneySupplyLimit)
+        return TransactionError::OversizedOutputValue;
+      total_output_value += output.value;
+      if (total_output_value > parameters_.kMoneySupplyLimit)
+        return TransactionError::OversizedTotalOutputValues;
+    }
+
+    // Verify no duplicate inputs.
+    // Uses full sort rather than set insert for better performance on average.
+    std::vector<protocol::OutPoint> out_points(transaction.InputCount());
+    for (int i = 0; i < transaction.InputCount(); ++i) {
+      const auto& out_point = transaction.Input(i).previous_output;
+      // Verify the out point is non-null (except if coin base).
+      if (!transaction.IsCoinBase() && out_point.IsNull())
+          return TransactionError::NullPreviousOutput;
+      out_points[i] = out_point;
+    }
+    std::sort(out_points.begin(), out_points.end());
+    if (std::adjacent_find(out_points.begin(), out_points.end()) != out_points.end())
+      return TransactionError::DuplicatedInput;
+
+    // Verify the coin base signature script size.
+    if (transaction.IsCoinBase()) {
+      int sig_script_size = std::ssize(transaction.SignatureScript(0));
+      // Coin base script must be between 2 and 100 bytes.
+      if (sig_script_size < 2 || sig_script_size > 100)
+        return TransactionError::BadCoinBaseSignatureScriptSize;
+    }
+
+    return TransactionError::None;
   }
 
  private:

@@ -4,12 +4,14 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
+#include <ranges>
 #include <vector>
 
 #include "hornetlib/encoding/reader.h"
 #include "hornetlib/encoding/writer.h"
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/transaction.h"
+#include "hornetlib/util/iterator_range.h"
 
 namespace hornet::protocol {
 
@@ -39,6 +41,7 @@ class Block {
   TransactionConstView Transaction(int index) const {
     return {data_, transactions_[index]};
   }
+
   template <TransactionViewType View>
   void AddTransaction(const View& view) {
     TransactionDetail detail;
@@ -83,11 +86,18 @@ class Block {
     serialized_bytes_ = end - start;
   }
 
+  using ConstIterator = TransactionConstIterator;
+
+  [[nodiscard]] auto Transactions() const {
+    return util::MakeRange<ConstIterator>({data_, transactions_.begin()}, {data_, transactions_.end()});
+  }
+
  private:
   BlockHeader header_;
   std::vector<TransactionDetail> transactions_;
   TransactionData data_;
   int serialized_bytes_ = 0;
 };
+
 
 }  // namespace hornet::protocol

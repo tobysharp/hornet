@@ -8,6 +8,7 @@
 #include <numeric>
 #include <ranges>
 #include <span>
+#include <tuple>
 #include <vector>
 
 #include "hornetlib/encoding/reader.h"
@@ -15,6 +16,7 @@
 #include "hornetlib/protocol/hash.h"
 #include "hornetlib/util/log.h"
 #include "hornetlib/util/subarray.h"
+#include "hornetlib/util/big_uint.h"
 
 namespace hornet::protocol {
 
@@ -22,6 +24,10 @@ struct OutPoint {
   Hash hash = {};
   uint32_t index = 0;
   static constexpr uint32_t kNullIndex = std::numeric_limits<uint32_t>::max();
+
+  std::strong_ordering operator <=>(const OutPoint& rhs) const = default;
+
+  static OutPoint Null() { return {{}, kNullIndex}; }
 
   bool IsNull() const {
     return protocol::IsNull(hash) && index == kNullIndex;
@@ -113,7 +119,7 @@ struct TransactionData {
 
 struct Input {
   OutPoint previous_output;
-  ScriptArray signature_script;
+  ScriptArray signature_script = {};
   uint32_t sequence = 0;
 
   void Serialize(encoding::Writer& writer, const TransactionData& data) const {
@@ -170,6 +176,7 @@ struct TransactionDetail {
   util::SubArray<Output> outputs;
   util::SubArray<Witness> witnesses;
   uint32_t lock_time = 0;
+  int no_witness_size_bytes = 0;
   mutable std::optional<protocol::Hash> txid;
 
   bool IsWitness() const {
@@ -186,6 +193,9 @@ struct TransactionDetail {
   }
 
   void Serialize(encoding::Writer& writer, const TransactionData& data, bool include_witness = true) const {
+    if (inputs.Size() == 0)
+      util::ThrowOutOfRange("Transaction has zero inputs and can't be serialized.");
+
     // Version
     writer.WriteLE4(version);
 
@@ -216,6 +226,8 @@ struct TransactionDetail {
   }
 
   void Deserialize(encoding::Reader& reader, TransactionData& data) {
+    no_witness_size_bytes = 0;
+    const auto start = reader.GetPos();
     // Version
     reader.ReadLE4(version);
 
@@ -251,11 +263,16 @@ struct TransactionDetail {
           reader.ReadBytes(component.Span(data.scripts));
         }
       }
-      data.AddWitnessBytes(reader.GetPos() - witness_start);
+      const int witness_bytes = reader.GetPos() - witness_start;
+      data.AddWitnessBytes(witness_bytes);
+      no_witness_size_bytes -= witness_bytes;
     }
 
     // Lock time
     reader.ReadLE4(lock_time);
+    
+    // Set number of serialized bytes, used during transaction validation.
+    no_witness_size_bytes += reader.GetPos() - start;
   }
 };
 
@@ -282,6 +299,9 @@ class TransactionViewT {
   }
   bool IsCoinBase() const {
     return InputCount() == 1 && Input(0).previous_output.IsNull();
+  }
+  int SerializedBytesNoWitness() const {
+    return detail_.no_witness_size_bytes;
   }
   const protocol::Hash& GetHash() const {
     return detail_.GetHash(data_);
@@ -317,6 +337,9 @@ class TransactionViewT {
   uint32_t LockTime() const {
     return detail_.lock_time;
   }
+  std::span<const struct Output> Outputs() const {
+    return detail_.outputs.Span(data_.outputs);
+  }
 
   // The following non-const member methods are chosen by the compiler in the case where
   // the TransactionViewT object is non-const. In this case, the constness of the return value
@@ -347,6 +370,9 @@ class TransactionViewT {
   }
   auto& LockTime() {
     return detail_.lock_time;
+  }
+  auto Outputs() {
+    return detail_.outputs.Span(data_.outputs);
   }
 
   // The following methods are only valid on mutable views, and will cause compile errors if
@@ -404,6 +430,8 @@ class TransactionViewT {
 
  protected:
   void SetScript(ScriptArray& script_array, std::span<const uint8_t> script) {
+    if (script.size() > std::numeric_limits<uint16_t>::max())
+      util::ThrowOutOfRange("Script size ", script.size(), " too large.");
     data_.ResizeScriptBytes(script_array, static_cast<uint16_t>(script.size()));
     std::copy(script.begin(), script.end(), script_array.Span(data_.scripts).begin());
   }
@@ -450,5 +478,52 @@ class Transaction : public TransactionView {
   TransactionData data_;
   TransactionDetail detail_;
 };
+
+template <typename TransactionDataT>
+class TransactionIteratorT {
+ public:
+  static constexpr bool kIsConst = std::is_const_v<TransactionDataT>;
+  using DetailCollection = std::vector<TransactionDetail>;
+  using DetailIterator = std::conditional_t<kIsConst, DetailCollection::const_iterator, DetailCollection::iterator>;
+  using DetailT = std::conditional_t<kIsConst, std::add_const_t<typename DetailIterator::value_type>, typename DetailIterator::value_type>;
+  using View = TransactionViewT<TransactionDataT, DetailT>;
+
+  TransactionIteratorT(TransactionDataT& data, DetailIterator begin) : data_(data), it_(begin) {}
+  TransactionIteratorT(const TransactionIteratorT&) = default;
+  TransactionIteratorT(TransactionIteratorT&&) = default;
+  
+  bool operator !=(const TransactionIteratorT& rhs) const {
+    return it_ != rhs.it_;
+  }
+  bool operator ==(const TransactionIteratorT& rhs) const {
+    return it_ == rhs.it_;
+  }
+  View* operator ->() const {
+    return &(operator *());
+  }
+  View& operator *() const {
+    if (!view_.has_value())
+      view_.emplace(data_, *it_);
+    return *view_;
+  }
+  TransactionIteratorT& operator++() {
+    ++it_;
+    view_.reset();
+    return *this;
+  }
+  TransactionIteratorT operator++(int) {
+    TransactionIteratorT tmp = *this;
+    ++(*this);
+    return tmp;
+  }
+  
+ private:
+  TransactionDataT& data_;
+  DetailIterator it_;
+  mutable std::optional<View> view_;
+};
+
+using TransactionIterator = TransactionIteratorT<TransactionData>;
+using TransactionConstIterator = TransactionIteratorT<const TransactionData>;
 
 }  // namespace hornet::protocol

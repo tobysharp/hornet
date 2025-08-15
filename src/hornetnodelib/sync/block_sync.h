@@ -7,9 +7,11 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <sstream>
 #include <thread>
 
 #include "hornetlib/consensus/types.h"
+#include "hornetlib/consensus/validator.h"
 #include "hornetlib/data/sidecar_binding.h"
 #include "hornetlib/data/timechain.h"
 #include "hornetlib/protocol/message/block.h"
@@ -57,6 +59,8 @@ class BlockSync {
 
   // Gets the next block ID to request from a peer.
   std::optional<data::Key> GetNextBlockId() const;
+
+  void HandleError(const Item& item, consensus::BlockError error);
 
   data::Timechain& timechain_;
   BlockValidationBinding validation_;
@@ -187,27 +191,55 @@ inline void BlockSync::OnBlock(net::SharedPeer peer, const protocol::message::Bl
 }
 
 inline void BlockSync::Process() {
+  consensus::Validator validator;
   for (std::optional<Item> item; (item = queue_.WaitPop());) {
     queue_bytes_ -= SizeInBytes(*item);
 
     // As soon as we pop from the queue, we can consider filling the empty queue slot.
     const auto request_state = RequestNextBlock(item->peer);
 
-    // TODO: Validate the block.
+    // Validates the block.
+    const consensus::BlockError error = validator.ValidateBlockStructure(*item->block);
 
-    // TODO: If validation fails, disconnect/ban the peer that provided it,
-    // delete the header subtree, add the header hash to a blacklist,
+    // If validation fails, disconnect/ban the peer that provided it,
     // delete this block and any downstream blocks, and cancel any downstream block requests.
+    if (error != consensus::BlockError::None) {
+      HandleError(*item, error);
+      continue;
+    }
 
     // Sets the validation status flag into the metadata sidecar.
     LogDebug() << "Block height " << item->id.height << " validated, " << item->block->SizeBytes()
                << " bytes.";
     validation_.Set(item->id, consensus::BlockValidationStatus::StructureValid);
 
-    // We will update the current UTXO set in a separate thread, for more parallelism.
+    // TODO: Update the current UTXO set and the active chain tip, once all necessary validation is
+    // complete. We might choose to do this in a separate thread for increased parallelism.
+
+    // TODO: According to the active policy, store this block to disk, or move it to the block
+    // cache, or just let it vanish after we're done with validation.
 
     if (request_state == RequestState::End) handler_.OnComplete(item->peer);
   }
+}
+
+inline void BlockSync::HandleError(const Item& item, consensus::BlockError error) {
+  std::ostringstream oss;
+  oss << "Block validation error code " << static_cast<int>(error) << ".";
+
+  // Drops peer immediately, and potentially applies misbehavior penalties.
+  handler_.OnError(item.peer, oss.str());
+
+  // Removes any queued blocks from the same peer.
+  queue_.EraseIf([&](const Item& queued) { return item.peer == queued.peer; });
+
+  // Deletes any in-flight block download requests pertaining to this peer.
+  request_active_.clear();
+  request_ = {};
+
+  // In a design where blocks are downloaded ahead of validation, we would need to
+  // track which blocks came from which peer, and delete downstream blocks from
+  // misbehaving peers. Since download and validation are currently coupled, this is not needed.
 }
 
 }  // namespace hornet::node::sync

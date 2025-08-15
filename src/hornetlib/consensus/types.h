@@ -30,7 +30,21 @@ enum class BlockError {
   BadSize,
   BadTransactionCount,
   BadCoinBase,
-  BadMerkleRoot
+  BadMerkleRoot,
+  BadTransaction
+};
+
+enum class TransactionError {
+  None = 0,
+  EmptyInputs,
+  EmptyOutputs,
+  OversizedByteCount,
+  NegativeOutputValue,
+  OversizedOutputValue,
+  OversizedTotalOutputValues,
+  DuplicatedInput,
+  NullPreviousOutput,
+  BadCoinBaseSignatureScriptSize
 };
 
 }  // namespace hornet::consensus
