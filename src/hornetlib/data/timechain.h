@@ -8,6 +8,7 @@
 #include <mutex>
 
 #include "hornetlib/data/header_timechain.h"
+#include "hornetlib/data/key.h"
 #include "hornetlib/data/lock.h"
 #include "hornetlib/data/sidecar.h"
 #include "hornetlib/protocol/block_header.h"
@@ -45,7 +46,15 @@ class Timechain {
   template <typename T>
   SidecarHandle<T> AddSidecar(std::unique_ptr<SidecarBaseT<T>> sidecar) {
     auto lock = LockWrite();  // Lock the sidecar array for writing.
+    
     sidecars_.emplace_back(std::move(sidecar));
+    SidecarBase* base = sidecars_.back().get();
+
+    // Replay the current headers structure into the empty sidecar
+    headers_.ForEach([&](const Locator& parent, const Key& child, const protocol::BlockHeader&) {
+      base->AddSync({parent, child.hash, {}});
+    });
+
     SidecarHandle<T> handle;
     handle.it = std::prev(sidecars_.end());
     return handle;
@@ -81,7 +90,7 @@ class Timechain {
 
   template <typename T>
   SidecarBaseT<T>* Downcast(SidecarHandle<T> sidecar) const {
-    SidecarBase* base = *sidecar.it;
+    SidecarBase* base = sidecar.it->get();
     SidecarBaseT<T>* typed = static_cast<SidecarBaseT<T>*>(base);
     return typed;
   }
