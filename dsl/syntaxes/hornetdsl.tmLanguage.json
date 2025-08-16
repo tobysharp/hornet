@@ -1,0 +1,59 @@
+{
+  "name": "HornetDSL",
+  "scopeName": "source.hornetdsl",
+  "fileTypes": ["hornet"],
+  "patterns": [
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#functions" },
+    { "include": "#numbers" },
+    { "include": "#comments" }
+  ],
+  "repository": {
+    "keywords": {
+      "patterns": [
+        {
+          "match": "\\b(builtin|array|map|throw|assert|return)\\b",
+          "name": "keyword.control.hornetdsl"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "match": "\\b(void|int|uint32|uint256|bool|struct|enum)\\b",
+          "name": "storage.type.hornetdsl"
+        },
+        {
+          "match": "\\b(const)\\b",
+          "name": "storage.modifier.hornetdsl"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "match": "\\b[A-Z][A-Za-z0-9_]*\\b(?=\\s*\\()",
+          "name": "entity.name.function.hornetdsl"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "match": "\\b[0-9]+\\b",
+          "name": "constant.numeric.hornetdsl"
+        }
+      ]
+    },
+    "comments": {
+      "patterns": [
+        {
+          "match": "//.*$",
+          "name": "comment.line.double-slash.hornetdsl"
+        }
+      ]
+    }
+  },
+  "scope": "source.hornetdsl"
+}
