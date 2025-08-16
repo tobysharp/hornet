@@ -56,7 +56,7 @@ class HeaderSync {
   void Process();
 
   // Requests more headers via the callback supplied in RegisterPeer.
-  bool RequestHeadersFrom(net::WeakPeer id, const protocol::Hash& previous);
+  bool RequestHeadersFrom(net::WeakPeer id);
 
   // Calls error handler and deletes peer's other queued items.
   void HandleError(const Item& item, const protocol::BlockHeader& header,
@@ -74,6 +74,7 @@ class HeaderSync {
   std::thread worker_thread_;          // Background worker thread for processing.
   int max_queue_items_ = 16;           // Default queue capacity to hide download latency.
   std::atomic_flag send_blocked_;      // Whether getheaders messages are currently blocked.
+  protocol::Hash next_request_ = {};   // Hash of last header to arrive for next request.
 };
 
 inline HeaderSync::HeaderSync(data::Timechain& timechain, SyncHandler& handler)
@@ -85,14 +86,17 @@ inline HeaderSync::~HeaderSync() {
 }
 
 // Requests more headers via the callback supplied in RegisterPeer.
-inline bool HeaderSync::RequestHeadersFrom(net::WeakPeer weak_peer, const protocol::Hash& previous) {
+inline bool HeaderSync::RequestHeadersFrom(net::WeakPeer weak_peer) {
   if (queue_.Size() < max_queue_items_) {
     if (!send_blocked_.test_and_set(std::memory_order_acquire)) {
-      const auto peer = weak_peer.lock();
-      const int version = peer ? peer->GetCapabilities().GetVersion() : protocol::kCurrentVersion;
-      protocol::message::GetHeaders getheaders{version};
-      getheaders.AddLocatorHash(previous);
-      bool ok = handler_.OnRequest(peer, std::make_unique<protocol::message::GetHeaders>(std::move(getheaders)));
+      bool ok = false;
+      if (!protocol::IsNull(next_request_)) {
+        const auto peer = weak_peer.lock();
+        const int version = peer ? peer->GetCapabilities().GetVersion() : protocol::kCurrentVersion;
+        protocol::message::GetHeaders getheaders{version};
+        getheaders.AddLocatorHash(next_request_);
+        ok = handler_.OnRequest(peer, std::make_unique<protocol::message::GetHeaders>(std::move(getheaders)));
+      }
       if (!ok)
         send_blocked_.clear();
       return ok;
@@ -103,8 +107,9 @@ inline bool HeaderSync::RequestHeadersFrom(net::WeakPeer weak_peer, const protoc
 
   // Begins downloading and validating headers from a given peer.
 inline void HeaderSync::StartSync(net::WeakPeer peer) {
+  next_request_ = timechain_.ReadHeaders()->ChainTip()->hash;
   send_blocked_.clear(std::memory_order::release);
-  if (!RequestHeadersFrom(peer, timechain_.ReadHeaders()->ChainTip()->hash))
+  if (!RequestHeadersFrom(peer))
     handler_.OnComplete(peer);  // No headers will ever reach the queue.
 }
 
@@ -117,9 +122,12 @@ inline void HeaderSync::OnHeaders(net::WeakPeer peer, const protocol::message::H
   queue_.Push({peer, Batch{headers.begin(), headers.end()}});
 
   if (IsFullBatch(headers)) {
+    next_request_ = headers.back().ComputeHash();
     send_blocked_.clear(std::memory_order::release);
-    RequestHeadersFrom(peer, headers.back().ComputeHash());
+    RequestHeadersFrom(peer);
   }
+  else
+    next_request_ = {};  // No more headers to be requested.
 }
 
 // Validates queued headers, and adds them to the headers timechain.
@@ -128,9 +136,7 @@ inline void HeaderSync::Process() {
 
     if (!item->batch.empty()) {
       // As soon as we pop from the queue, request new headers if appropriate.
-      const auto& last_item = queue_.Empty() ? *item : queue_.Back();
-      if (IsFullBatch(last_item.batch))
-        RequestHeadersFrom(item->weak_peer, last_item.batch.back().ComputeHash());
+      RequestHeadersFrom(item->weak_peer);
 
       // Locates the parent of this header in the timechain.
       auto headers = timechain_.ReadHeaders();
