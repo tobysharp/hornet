@@ -20,25 +20,14 @@ class Parser {
   Parser(std::span<const uint8_t> bytes) : cursor_(bytes.begin()), end_(bytes.end()) {}
   Parser(const Parser&) = default;
 
-  bool IsEof() const {
-    return cursor_ >= end_;
-  }
-  Iterator GetPos() const {
-    return cursor_;
-  }
-
-  void GotoEof() {
-    cursor_ = end_;
-  }
-
   std::optional<Instruction> Next() {
-    if (IsEof()) return std::nullopt;
+    if (cursor_ >= end_) return std::nullopt;
 
     auto start = cursor_;
     const Op opcode = static_cast<Op>(*start++);
     const auto size = ReadPushSize(opcode, start);
     if (!size || start + size->variable_size + size->length_bytes > end_) {
-      GotoEof();
+      cursor_ = end_;
       return std::nullopt;
     }
     start += size->variable_size;
@@ -47,7 +36,7 @@ class Parser {
   }
 
   std::optional<Op> Peek() const {
-    if (IsEof()) return std::nullopt;
+    if (cursor_ >= end_) return std::nullopt;
     return static_cast<Op>(*cursor_);
   }
 

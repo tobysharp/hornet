@@ -1,0 +1,61 @@
+// Copyright 2025 Toby Sharp
+//
+// This file is part of the Hornet Node project. All rights reserved.
+// For licensing or usage inquiries, contact: ask@hornetnode.com.
+#pragma once
+
+#include <cstdint>
+#include <optional>
+#include <span>
+
+#include "hornetlib/protocol/script/instruction.h"
+#include "hornetlib/protocol/script/parser.h"
+#include "hornetlib/util/iterator_range.h"
+
+namespace hornet::protocol::script {
+
+class ScriptView {
+ public:
+  class EofTag {};
+  class Iterator {
+   public:
+    Iterator(std::span<const uint8_t> data) : parser_(data), op_(parser_.Next()) {
+    }
+    bool operator==(EofTag) const {
+      return !op_.has_value();
+    }
+    bool operator!=(EofTag rhs) const {
+      return !operator==(rhs);
+    }
+    Iterator& operator++() {
+      op_ = parser_.Next();
+      return *this;
+    }
+    Iterator operator++(int) {
+      Iterator tmp = *this;
+      ++(*this);
+      return tmp;
+    }
+    const Instruction& operator*() const {
+      return *op_;
+    }
+    const Instruction* operator->() const {
+      return &*op_;
+    }
+   private:
+    Parser parser_;
+    std::optional<Instruction> op_;
+  };
+
+  ScriptView(std::span<const uint8_t> bytes) : bytes_(bytes) {}
+
+  // Returns an iterable sequence of Instruction objects.
+  auto Instructions() const {
+    return util::MakeRange<Iterator, EofTag>(bytes_, {});
+  }
+  
+ private:
+  std::span<const uint8_t> bytes_;
+};
+
+}  // namespace hornet::protocol::script

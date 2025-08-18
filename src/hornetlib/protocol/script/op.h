@@ -14,7 +14,12 @@ enum class Op : uint8_t {
   False = Push0,
   PushData1 = 0x4c,
   PushData2 = 0x4d,
-  PushData4 = 0x4e
+  PushData4 = 0x4e,
+
+  CheckSig = 0xac,
+  CheckSigVerify = 0xad,
+  CheckMultiSig = 0xae,
+  CheckMultiSigVerify = 0xaf
 };
 
 inline constexpr uint8_t ToByte(Op op) { 

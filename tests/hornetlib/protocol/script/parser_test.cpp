@@ -64,14 +64,12 @@ TEST(ScriptParserTest, ParsesMixedSequence) {
   ExpectNext(p, Op::PushData2, {0xFF});
 
   // EOF
-  EXPECT_TRUE(p.IsEof());
   EXPECT_FALSE(p.Next().has_value());
 }
 
 TEST(ScriptParserTest, EmptyScriptYieldsEofImmediately) {
   std::vector<uint8_t> script; // empty
   Parser p{std::span<const uint8_t>(script.data(), script.size())};
-  EXPECT_TRUE(p.IsEof());
   EXPECT_FALSE(p.Next().has_value());
 }
 
@@ -85,7 +83,6 @@ TEST(ScriptParserTest, MalformedHeaderTerminates) {
   // First Next() should detect malformed header, return nullopt and set EOF.
   auto ins = p.Next();
   EXPECT_FALSE(ins.has_value());
-  EXPECT_TRUE(p.IsEof());
 }
 
 TEST(ScriptParserTest, MalformedPayloadTerminates) {
@@ -97,7 +94,6 @@ TEST(ScriptParserTest, MalformedPayloadTerminates) {
 
   auto ins = p.Next();
   EXPECT_FALSE(ins.has_value());
-  EXPECT_TRUE(p.IsEof());
 }
 
 TEST(ScriptParserTest, PushData4ZeroLengthAllowed) {
@@ -112,7 +108,6 @@ TEST(ScriptParserTest, PushData4ZeroLengthAllowed) {
   EXPECT_EQ(ins->opcode, Op::PushData4);
   EXPECT_EQ(ins->data.size(), 0u);
 
-  EXPECT_TRUE(p.IsEof());
 }
 
 TEST(ScriptParserTest, PeekDoesNotAdvance) {
@@ -137,7 +132,6 @@ TEST(ScriptParserTest, PeekDoesNotAdvance) {
     ASSERT_TRUE(m.has_value());
     EXPECT_EQ(static_cast<uint8_t>(m->opcode), 0xAC);
     EXPECT_EQ(m->data.size(), 0u);
-    EXPECT_TRUE(p.IsEof());
   }
 }
 
