@@ -11,7 +11,7 @@
 #include <thread>
 
 #include "hornetlib/consensus/types.h"
-#include "hornetlib/consensus/validator.h"
+#include "hornetlib/consensus/validate_block.h"
 #include "hornetlib/data/sidecar_binding.h"
 #include "hornetlib/data/timechain.h"
 #include "hornetlib/protocol/message/block.h"
@@ -191,7 +191,6 @@ inline void BlockSync::OnBlock(net::SharedPeer peer, const protocol::message::Bl
 }
 
 inline void BlockSync::Process() {
-  consensus::Validator validator;
   for (std::optional<Item> item; (item = queue_.WaitPop());) {
     queue_bytes_ -= SizeInBytes(*item);
 
@@ -199,7 +198,7 @@ inline void BlockSync::Process() {
     const auto request_state = RequestNextBlock(item->peer);
 
     // Validates the block.
-    const consensus::BlockError error = validator.ValidateBlockStructure(*item->block);
+    const consensus::BlockError error = consensus::ValidateBlockStructure(*item->block);
 
     // If validation fails, disconnect/ban the peer that provided it,
     // delete this block and any downstream blocks, and cancel any downstream block requests.
