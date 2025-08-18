@@ -8,7 +8,7 @@
 #include <thread>
 #include <variant>
 
-#include "hornetlib/consensus/validator.h"
+#include "hornetlib/consensus/validate_header.h"
 #include "hornetlib/data/header_context.h"
 #include "hornetlib/data/timechain.h"
 #include "hornetlib/protocol/block_header.h"
@@ -70,7 +70,6 @@ class HeaderSync {
   data::Timechain& timechain_;         // Timechain to receive validated headers.
   SyncHandler& handler_;               // Callbacks for peer-related behavior.
   util::ThreadSafeQueue<Item> queue_;  // Queue of unverified headers to process.
-  consensus::Validator validator_;     // Performs consensus rule checks.
   std::thread worker_thread_;          // Background worker thread for processing.
   int max_queue_items_ = 16;           // Default queue capacity to hide download latency.
   std::atomic_flag send_blocked_;      // Whether getheaders messages are currently blocked.
@@ -152,7 +151,7 @@ inline void HeaderSync::Process() {
 
       for (const auto& header : item->batch) {
         // Validates the header against consensus rules.
-        const auto validated = validator_.ValidateDownloadedHeader(*parent, header, *view);
+        const auto validated = consensus::ValidateDownloadedHeader(*parent, header, *view);
 
         // Handles consensus failures, breaking out of this batch.
         if (const auto* error = std::get_if<consensus::HeaderError>(&validated)) {

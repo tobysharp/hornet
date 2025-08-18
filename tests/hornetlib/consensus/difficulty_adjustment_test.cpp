@@ -20,7 +20,7 @@ TEST(DifficultyAdjustmentTest, ReturnsPrevBitsWhenHeightNotBoundary) {
 
 TEST(DifficultyAdjustmentTest, UnchangedWhenPeriodMatchesTarget) {
   DifficultyAdjustment da;
-  constexpr uint32_t height = da.GetBlocksPerPeriod();
+  const uint32_t height = da.GetBlocksPerPeriod();
   constexpr CompactTarget prev_bits = 0x1d00ffff;
 
   const auto result =
@@ -30,7 +30,7 @@ TEST(DifficultyAdjustmentTest, UnchangedWhenPeriodMatchesTarget) {
 
 TEST(DifficultyAdjustmentTest, AdjustsDownWhenBlocksFaster) {
   DifficultyAdjustment da;
-  constexpr uint32_t height = da.GetBlocksPerPeriod();
+  const uint32_t height = da.GetBlocksPerPeriod();
   constexpr CompactTarget prev_bits = 0x1d00ffff;
   const uint32_t end_time = kTargetDuration / 2;
   const auto result =
@@ -48,7 +48,7 @@ TEST(DifficultyAdjustmentTest, AdjustsDownWhenBlocksFaster) {
 
 TEST(DifficultyAdjustmentTest, CapsAtTargetLimit) {
   DifficultyAdjustment da;
-  constexpr uint32_t height = da.GetBlocksPerPeriod();
+  const uint32_t height = da.GetBlocksPerPeriod();
   constexpr CompactTarget prev_bits = 0x1d00eeff;  // Near the limit
   const auto result =
       da.ComputeCompactTarget(height, prev_bits, 0, kTargetDuration * 10);
