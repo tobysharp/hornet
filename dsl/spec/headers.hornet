@@ -50,16 +50,16 @@ void ValidateDifficultyAdjustment(
 uint32 ComputeNextTarget(
     int height,
     uint32 prevBits,
-    uint32 startTime,
-    uint32 endTime
+    int64 startTime,
+    int64 endTime
 ) {
   if (!IsDifficultyTransition(height)) {
     return prevBits;
   }
 
-  uint32 duration = endTime - startTime;
-  uint32 targetDuration = BlocksPerPeriod * TargetBlockSpacing;
-  uint32 clampedDuration = Clamp(duration, targetDuration / 4, targetDuration * 4);
+  int64 duration = endTime - startTime;
+  int64 targetDuration = BlocksPerPeriod * TargetBlockSpacing;
+  int64 clampedDuration = Clamp(duration, targetDuration / 4, targetDuration * 4);
 
   uint256 lastTarget = CompactToUint256(prevBits);
   uint256 nextTarget = lastTarget * clampedDuration / targetDuration;

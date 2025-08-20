@@ -21,7 +21,7 @@
     "types": {
       "patterns": [
         {
-          "match": "\\b(void|int|uint32|uint256|bool|struct|enum)\\b",
+          "match": "\\b(void|int|uint32|int32|int64|uint256|bool|struct|enum)\\b",
           "name": "storage.type.hornetdsl"
         },
         {
