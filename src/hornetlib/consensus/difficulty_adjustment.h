@@ -16,56 +16,31 @@
 namespace hornet::consensus {
 
 namespace constants {
-static constexpr int kAdjustmentInterval = 2016;                // Blocks per difficulty period
-static constexpr uint32_t kTargetDuration = 14 * 24 * 60 * 60;  // Two weeks in seconds
-static constexpr protocol::Target kTargetLimit =
+inline constexpr int kBlocksPerDifficultyPeriod = 2016;                   // Blocks per difficulty period
+inline constexpr int64_t kDifficultyPeriodDuration = 14 * 24 * 60 * 60;   // Two weeks in seconds
+inline constexpr protocol::Target kPoWTargetLimit =
     "00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"_h256;
 }  // namespace constants
 
-class DifficultyAdjustment {
- public:
-  struct Parameters {
-    int blocks_per_period;
-    int64_t target_duration;
-    protocol::Target pow_limit;
+[[nodiscard]] inline constexpr bool IsDifficultyTransition(int height) {
+  return (height % constants::kBlocksPerDifficultyPeriod) == 0;
+}
 
-    static Parameters Mainnet() {
-      return {.blocks_per_period = constants::kAdjustmentInterval,
-              .target_duration = constants::kTargetDuration,
-              .pow_limit = constants::kTargetLimit};
-    }
-  };
+[[nodiscard]] inline protocol::CompactTarget ComputeCompactTarget(int height,
+                                                            protocol::CompactTarget prev_bits,
+                                                            int64_t period_start_time,
+                                                            int64_t period_end_time) {
+  if (!IsDifficultyTransition(height)) return prev_bits;
 
-  DifficultyAdjustment() : parameters_(Parameters::Mainnet()) {}
-  DifficultyAdjustment(const Parameters& parameters) : parameters_(parameters) {}
+  int64_t period_duration = period_end_time - period_start_time;
+  period_duration = std::clamp(period_duration, constants::kDifficultyPeriodDuration / 4,
+                                constants::kDifficultyPeriodDuration * 4);
 
-  [[nodiscard]] int GetBlocksPerPeriod() const {
-    return parameters_.blocks_per_period;
-  }
-
-  [[nodiscard]] bool IsTransition(int height) const {
-    return (height % parameters_.blocks_per_period) == 0;
-  }
-
-  [[nodiscard]] protocol::CompactTarget ComputeCompactTarget(int height,
-                                                             protocol::CompactTarget prev_bits,
-                                                             int64_t period_start_time,
-                                                             int64_t period_end_time) const {
-    if (!IsTransition(height)) return prev_bits;
-
-    int64_t period_duration = period_end_time - period_start_time;
-    period_duration = std::clamp(period_duration, parameters_.target_duration / 4,
-                                 parameters_.target_duration * 4);
-
-    const protocol::Target last_target = prev_bits.Expand();
-    const protocol::Target next_target =
-        (last_target.Value() * period_duration) / parameters_.target_duration;
-    const protocol::Target limit_target = std::min(next_target, parameters_.pow_limit);
-    return limit_target;
-  }
-
- private:
-  Parameters parameters_;
-};
+  const protocol::Target last_target = prev_bits.Expand();
+  const protocol::Target next_target =
+      (last_target.Value() * period_duration) / constants::kDifficultyPeriodDuration;
+  const protocol::Target limit_target = std::min(next_target, constants::kPoWTargetLimit);
+  return limit_target;
+}
 
 }  // namespace hornet::consensus

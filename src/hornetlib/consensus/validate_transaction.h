@@ -10,9 +10,9 @@
 namespace hornet::consensus {
 
 namespace constants {
-  static constexpr int kMaximumTransactionBytesNoWitness = 1'000'000;
-  static constexpr int64_t kSatoshisPerBitcoin = 100'000'000;
-  static constexpr int64_t kMoneySupplyLimit = 21'000'000 * kSatoshisPerBitcoin;
+  inline constexpr int kMaximumTransactionBytesNoWitness = 1'000'000;
+  inline constexpr int64_t kSatoshisPerBitcoin = 100'000'000;
+  inline constexpr int64_t kMoneySupplyLimit = 21'000'000 * kSatoshisPerBitcoin;
 }
 
 [[nodiscard]] inline TransactionError ValidateTransaction(const protocol::TransactionConstView transaction) {

@@ -8,57 +8,54 @@ namespace {
 using protocol::CompactTarget;
 
 // Constants replicated from DifficultyAdjustment for testing
-constexpr uint32_t kTargetDuration = 14 * 24 * 60 * 60;  // Two weeks
-constexpr protocol::Target kTargetLimit =
+constexpr int kBlocksPerDifficultyPeriod = 2016;
+constexpr int64_t kDifficultyPeriodDuration = 14 * 24 * 60 * 60;  // Two weeks
+constexpr protocol::Target kPoWTargetLimit =
     "00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"_h256;
 
 TEST(DifficultyAdjustmentTest, ReturnsPrevBitsWhenHeightNotBoundary) {
-  DifficultyAdjustment da;
   constexpr CompactTarget prev_bits = 0x1d00ffff;
-  EXPECT_EQ(da.ComputeCompactTarget(1000, prev_bits, 0, 0), prev_bits);
+  EXPECT_EQ(ComputeCompactTarget(1000, prev_bits, 0, 0), prev_bits);
 }
 
 TEST(DifficultyAdjustmentTest, UnchangedWhenPeriodMatchesTarget) {
-  DifficultyAdjustment da;
-  const uint32_t height = da.GetBlocksPerPeriod();
+  const int height = kBlocksPerDifficultyPeriod;
   constexpr CompactTarget prev_bits = 0x1d00ffff;
 
   const auto result =
-      da.ComputeCompactTarget(height, prev_bits, 0, kTargetDuration);
+      ComputeCompactTarget(height, prev_bits, 0, kDifficultyPeriodDuration);
   EXPECT_EQ(result, prev_bits);
 }
 
 TEST(DifficultyAdjustmentTest, AdjustsDownWhenBlocksFaster) {
-  DifficultyAdjustment da;
-  const uint32_t height = da.GetBlocksPerPeriod();
+  const int height = constants::kBlocksPerDifficultyPeriod;
   constexpr CompactTarget prev_bits = 0x1d00ffff;
-  const uint32_t end_time = kTargetDuration / 2;
+  const int64_t end_time = kDifficultyPeriodDuration / 2;
   const auto result =
-      da.ComputeCompactTarget(height, prev_bits, 0, end_time);
+      ComputeCompactTarget(height, prev_bits, 0, end_time);
 
   const protocol::Target last_target = prev_bits.Expand();
-  const uint32_t clamped =
-      std::clamp(end_time, kTargetDuration / 4, kTargetDuration * 4);
+  const int64_t clamped =
+      std::clamp(end_time, kDifficultyPeriodDuration / 4, kDifficultyPeriodDuration * 4);
   const protocol::Target expected_target =
-      std::min((last_target.Value() * clamped) / kTargetDuration,
-               kTargetLimit.Value());
+      std::min((last_target.Value() * clamped) / kDifficultyPeriodDuration,
+               kPoWTargetLimit.Value());
   const CompactTarget expected_bits = expected_target;
   EXPECT_EQ(result, expected_bits);
 }
 
 TEST(DifficultyAdjustmentTest, CapsAtTargetLimit) {
-  DifficultyAdjustment da;
-  const uint32_t height = da.GetBlocksPerPeriod();
+  const int height = constants::kBlocksPerDifficultyPeriod;
   constexpr CompactTarget prev_bits = 0x1d00eeff;  // Near the limit
   const auto result =
-      da.ComputeCompactTarget(height, prev_bits, 0, kTargetDuration * 10);
+      ComputeCompactTarget(height, prev_bits, 0, kDifficultyPeriodDuration * 10);
 
   const protocol::Target last_target = prev_bits.Expand();
-  const uint32_t clamped =
-      std::clamp(kTargetDuration * 10u, kTargetDuration / 4, kTargetDuration * 4);
+  const int64_t clamped =
+      std::clamp(kDifficultyPeriodDuration * 10u, kDifficultyPeriodDuration / 4, kDifficultyPeriodDuration * 4);
   const protocol::Target expected_target =
-      std::min((last_target.Value() * clamped) / kTargetDuration,
-               kTargetLimit.Value());
+      std::min((last_target.Value() * clamped) / kDifficultyPeriodDuration,
+               kPoWTargetLimit.Value());
   const CompactTarget expected_bits = expected_target;
   EXPECT_EQ(result, expected_bits);
 }

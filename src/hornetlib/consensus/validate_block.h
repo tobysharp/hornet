@@ -17,10 +17,10 @@
 namespace hornet::consensus {
   
 namespace constants {
-  static constexpr int kMaxPubKeysPerMultiSig = 20;
-  static constexpr int kMaximumWeightUnits = 4'000'000;
-  static constexpr int kWitnessScaleFactor = 4;
-  static constexpr int kMaxBlockSigOpsCost = 80'000;
+  inline constexpr int kMaxPubKeysPerMultiSig = 20;
+  inline constexpr int kMaximumWeightUnits = 4'000'000;
+  inline constexpr int kWitnessScaleFactor = 4;
+  inline constexpr int kMaxBlockSigOpsCost = 80'000;
 }  // namespace constants
 
 namespace detail {
@@ -39,8 +39,7 @@ namespace detail {
         case Op::CheckMultiSigVerify:
           count += constants::kMaxPubKeysPerMultiSig;  // = 20
           break;
-        default:
-          break;
+        default:;
       }
     }
     return count;

@@ -16,11 +16,11 @@
 namespace hornet::consensus {
 
 namespace constants {
-  static constexpr int kBIP34Height = 227931;
-  static constexpr int kBIP65Height = 388381;
-  static constexpr int kBIP66Height = 363725;
-  static constexpr int kBlocksForMedianTime = 11;
-  static constexpr int kTimestampTolerance = 2 * 60 * 60;
+  inline constexpr int kBIP34Height = 227931;
+  inline constexpr int kBIP65Height = 388381;
+  inline constexpr int kBIP66Height = 363725;
+  inline constexpr int kBlocksForMedianTime = 11;
+  inline constexpr int kTimestampTolerance = 2 * 60 * 60;
 }  // namespace constants
 
 namespace detail {
@@ -52,15 +52,14 @@ using HeaderResult = std::variant<data::HeaderContext, HeaderError>;
   if (!(hash <= target)) return HeaderError::InvalidProofOfWork;
 
   // Verify PoW target obeys the difficulty adjustment rules.
-  DifficultyAdjustment difficulty_adjustment;
   protocol::CompactTarget expected_bits = parent.data.GetCompactTarget();
-  if (difficulty_adjustment.IsTransition(height)) {
-    const int blocks_per_period = difficulty_adjustment.GetBlocksPerPeriod();
+  if (IsDifficultyTransition(height)) {
+    constexpr int blocks_per_period = constants::kBlocksPerDifficultyPeriod;
     Assert(height - blocks_per_period < view.Length());
     const uint32_t period_start_time =
         view.TimestampAt(height - blocks_per_period);             // block[height - 2016].time
     const uint32_t period_end_time = parent.data.GetTimestamp();  // block[height - 1].time
-    expected_bits = difficulty_adjustment.ComputeCompactTarget(
+    expected_bits = ComputeCompactTarget(
         height, parent.data.GetCompactTarget(), period_start_time, period_end_time);
   }
   if (expected_bits != header.GetCompactTarget()) return HeaderError::BadDifficultyTransition;
