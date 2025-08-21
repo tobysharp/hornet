@@ -39,11 +39,13 @@ void ValidateDifficultyAdjustment(
     BlockHeader header,
     BlockHeader parent,
 ) {
-  uint32 startTime = TimestampAt(parent, height - BlocksPerPeriod);
-  uint32 endTime = parent.Timestamp;
-  uint32 expectedBits = ComputeNextTarget(height, parent.Bits, startTime, endTime);
-  if (header.Bits != expectedBits) {
-    throw HeaderError::BadDifficultyTransition;
+  if (height >= BlocksPerPeriod) {
+    uint32 startTime = TimestampAt(parent, height - BlocksPerPeriod);
+    uint32 endTime = parent.Timestamp;
+    uint32 expectedBits = ComputeNextTarget(height, parent.Bits, startTime, endTime);
+    if (header.Bits != expectedBits) {
+      throw HeaderError::BadDifficultyTransition;
+    }
   }
 }
 
@@ -73,8 +75,8 @@ bool IsDifficultyTransition(int height) {
 }
 
 void ValidateMedianTimePast(BlockHeader header, BlockHeader parent) {
-  array<uint32> times = LastNTimestamps(parent, MedianWindow);
-  uint32 medianTime = Median(times);
+  array<uint32> times = LastNTimestamps(parent, MedianWindow);  // Returns between 1 and 11 timestamps.
+  uint32 medianTime = times[times.size() / 2];
   if (header.Timestamp <= medianTime) {
     throw HeaderError::BadTimestamp;
   }
@@ -160,7 +162,6 @@ builtin uint256 Hash(BlockHeader header);
 builtin uint256 CompactToUint256(uint32 bits);
 builtin uint32 Uint256ToCompact(uint256 target);
 builtin uint32 SystemTime();
-builtin uint32 Median(array<uint32> values);
 builtin uint32 Clamp(uint32 value, uint32 min, uint32 max);
 builtin uint256 Min(uint256 a, uint256 b);
 builtin BlockHeader? GetAncestorAtHeight(BlockHeader tip, int height);
