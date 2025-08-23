@@ -9,19 +9,20 @@
 
 #include "hornetlib/consensus/header_ancestry_view.h"
 #include "hornetlib/data/chain_tree.h"
-#include "hornetlib/data/header_context.h"
+#include "hornetlib/model/header_context.h"
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/hash.h"
 
 namespace hornet::data {
 
-class HeaderTimechain : public ChainTree<protocol::BlockHeader, HeaderContext> {
+class HeaderTimechain : public ChainTree<protocol::BlockHeader, model::HeaderContext> {
  public:
   // Public types
   class ValidationView;
   template <bool kIsConst> class ContextIterator;
   using Iterator = ContextIterator<false>;
   using ConstIterator = ContextIterator<true>;
+  using HeaderContext = model::HeaderContext;
   struct AddResult;
 
   // Public methods

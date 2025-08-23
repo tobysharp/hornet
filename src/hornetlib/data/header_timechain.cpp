@@ -5,8 +5,8 @@
 #include <ranges>
 #include <stack>
 
-#include "hornetlib/data/header_context.h"
 #include "hornetlib/data/header_timechain.h"
+#include "hornetlib/model/header_context.h"
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/hash.h"
 #include "hornetlib/util/throw.h"

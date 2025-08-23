@@ -10,7 +10,7 @@
 #include "hornetlib/protocol/hash.h"
 #include "hornetlib/protocol/work.h"
 
-namespace hornet::data {
+namespace hornet::model {
 
 struct HeaderContext {
   static HeaderContext Null() {
@@ -54,4 +54,4 @@ struct HeaderContext {
   int height = -1;
 };
 
-}  // namespace hornet::data
+}  // namespace hornet::model

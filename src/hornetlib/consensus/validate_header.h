@@ -6,7 +6,7 @@
 
 #include <array>
 
-#include "hornetlib/data/header_context.h"
+#include "hornetlib/model/header_context.h"
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/compact_target.h"
 #include "hornetlib/protocol/hash.h"
@@ -36,9 +36,9 @@ namespace detail {
   }
 }  // namespace detail
 
-using HeaderResult = std::variant<data::HeaderContext, HeaderError>;
+using HeaderResult = std::variant<model::HeaderContext, HeaderError>;
 
-[[nodiscard]] inline HeaderResult ValidateDownloadedHeader(const data::HeaderContext& parent,
+[[nodiscard]] inline HeaderResult ValidateDownloadedHeader(const model::HeaderContext& parent,
                                                     const protocol::BlockHeader& header,
                                                     const HeaderAncestryView& view) {
   const int height = parent.height + 1;
