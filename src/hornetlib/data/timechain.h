@@ -11,6 +11,7 @@
 #include "hornetlib/data/key.h"
 #include "hornetlib/data/lock.h"
 #include "hornetlib/data/sidecar.h"
+#include "hornetlib/model/header_context.h"
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/hash.h"
 #include "hornetlib/util/assert.h"
@@ -27,14 +28,14 @@ class Timechain {
   };
 
   Timechain() {
-    headers_.Add(HeaderContext::Genesis(GetGenesisHeader()));
+    headers_.Add(model::HeaderContext::Genesis(GetGenesisHeader()));
   }
 
   ReadLock<HeaderTimechain> ReadHeaders() const {
     return { mutex_, headers_ };  // Lock header values for reading.
   }
 
-  HeaderTimechain::Iterator AddHeader(HeaderTimechain::ConstIterator parent, const HeaderContext& header_context) {
+  HeaderTimechain::Iterator AddHeader(HeaderTimechain::ConstIterator parent, const model::HeaderContext& header_context) {
     auto lock = LockWrite();  // Lock both structure and values of headers and sidecars, and the sidecar array.
     const auto [child_it, moved] = headers_.Add(parent, header_context);
     SidecarAddSync sync = {parent.Locator(), child_it->hash, moved};

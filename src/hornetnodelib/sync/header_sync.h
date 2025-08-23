@@ -9,8 +9,8 @@
 #include <variant>
 
 #include "hornetlib/consensus/validate_header.h"
-#include "hornetlib/data/header_context.h"
 #include "hornetlib/data/timechain.h"
+#include "hornetlib/model/header_context.h"
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/hash.h"
 #include "hornetlib/protocol/message/getheaders.h"
@@ -161,7 +161,7 @@ inline void HeaderSync::Process() {
         }
 
         // Adds the validated header to the headers timechain.
-        const auto& context = std::get<data::HeaderContext>(validated);
+        const auto& context = std::get<model::HeaderContext>(validated);
         view->SetTip(parent = timechain_.AddHeader(parent, context));
       }
     }

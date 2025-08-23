@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include "hornetlib/model/header_context.h"
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/hash.h"
 #include "hornetlib/protocol/work.h"
@@ -13,6 +14,7 @@
 namespace hornet::data {
 namespace {
 
+using model::HeaderContext;
 using protocol::BlockHeader;
 using protocol::Hash;
 using protocol::Work;
