@@ -7,7 +7,6 @@ add_executable(hornetlib_tests
    crypto/hash_test.cpp
    data/chain_tree_test.cpp
    data/hashed_tree_test.cpp
-   data/header_context_test.cpp
    data/header_timechain_test.cpp
    data/keyframe_sidecar_test.cpp
    data/sidecar_test.cpp
@@ -15,6 +14,7 @@ add_executable(hornetlib_tests
    encoding/writer_test.cpp
    message/version_test.cpp
    message/verack_test.cpp
+   model/header_context_test.cpp
    protocol/block_test.cpp
    protocol/block_header_test.cpp
    protocol/compact_target_test.cpp

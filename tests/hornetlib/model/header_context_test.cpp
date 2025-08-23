@@ -2,14 +2,14 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "hornetlib/data/header_context.h"
+#include "hornetlib/model/header_context.h"
 
 #include <gtest/gtest.h>
 
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/hash.h"
 
-namespace hornet::data {
+namespace hornet::model {
 namespace {
 
 // Helper to create a basic block header with given previous hash and timestamp.
@@ -85,4 +85,4 @@ TEST(HeaderContextTest, RewindReturnsPreviousContext) {
 }
 
 }  // namespace
-}  // namespace hornet::data
+}  // namespace hornet::model
