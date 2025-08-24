@@ -6,33 +6,29 @@
 
 #include <array>
 
+#include "hornetlib/consensus/bips.h"
+#include "hornetlib/consensus/difficulty_adjustment.h"
+#include "hornetlib/consensus/header_ancestry_view.h"
 #include "hornetlib/model/header_context.h"
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/compact_target.h"
 #include "hornetlib/protocol/hash.h"
-#include "hornetlib/consensus/header_ancestry_view.h"
-#include "hornetlib/consensus/difficulty_adjustment.h"
 
 namespace hornet::consensus {
 
 namespace constants {
-  inline constexpr int kBIP34Height = 227931;
-  inline constexpr int kBIP65Height = 388381;
-  inline constexpr int kBIP66Height = 363725;
   inline constexpr int kBlocksForMedianTime = 11;
   inline constexpr int kTimestampTolerance = 2 * 60 * 60;
 }  // namespace constants
 
 namespace detail {
-    inline bool IsVersionRetiredAtHeight(int version, int height) {
-    const std::array<int, 4> kVersionExpiryHeights = {
-        0,                        // v0: Invalid from genesis.
-        constants::kBIP34Height,  // v1: Retired at BIP34 height.
-        constants::kBIP66Height,  // v2: Retired at BIP66 height.
-        constants::kBIP65Height   // v3: Retired at BIP65 height.
+inline bool IsVersionValidAtHeight(int version, int height) {
+  constexpr std::array<BIP, 4> kVersionExpiryToBIP = {
+      static_cast<BIP>(-1),  // v0 invalid from genesis, never queried.
+      BIP34, BIP66, BIP65    // v1, v2, v3 retired with BIP34, BIP66, BIP65.
     };
-    return version < 0 || (version < std::ssize(kVersionExpiryHeights) &&
-                           height >= kVersionExpiryHeights[version]);
+  if (version <= 0 || version >= std::ssize(kVersionExpiryToBIP)) return false;
+  return !IsBIPEnabledAtHeight(kVersionExpiryToBIP[version], height);
   }
 }  // namespace detail
 
@@ -76,8 +72,7 @@ using HeaderResult = std::variant<model::HeaderContext, HeaderError>;
     return HeaderError::BadTimestamp;
 
   // Verify that the version number is allowed at this height.
-  if (detail::IsVersionRetiredAtHeight(header.GetVersion(), height))
-    return HeaderError::BadVersion;
+  if (!detail::IsVersionValidAtHeight(header.GetVersion(), height)) return HeaderError::BadVersion;
 
   return parent.Extend(header, hash);
 }
