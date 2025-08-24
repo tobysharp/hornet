@@ -2,7 +2,7 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "hornetlib/protocol/script/script_view.h"
+#include "hornetlib/protocol/script/view.h"
 
 #include <cstdint>
 #include <span>
@@ -18,7 +18,7 @@ namespace {
 
 TEST(ScriptViewInstructions, EmptyScriptYieldsNoElements) {
   std::vector<uint8_t> script{};
-  ScriptView view(std::span<const uint8_t>(script.data(), script.size()));
+  View view(std::span<const uint8_t>(script.data(), script.size()));
 
   size_t count = 0;
   for (const Instruction& ins : view.Instructions()) {
@@ -41,7 +41,7 @@ TEST(ScriptViewInstructions, ParsesMixedSequence) {
       static_cast<uint8_t>(Op::PushData2), 0x01, 0x00, 0xFF
   };
 
-  ScriptView view(std::span<const uint8_t>(script.data(), script.size()));
+  View view(std::span<const uint8_t>(script.data(), script.size()));
 
   std::vector<Instruction> got;
   for (const Instruction& ins : view.Instructions()) {
@@ -79,7 +79,7 @@ TEST(ScriptViewInstructions, ZeroLengthPushDataIsParsed) {
       static_cast<uint8_t>(Op::PushData4), 0x00, 0x00, 0x00, 0x00
   };
 
-  ScriptView view(std::span<const uint8_t>(script.data(), script.size()));
+  View view(std::span<const uint8_t>(script.data(), script.size()));
 
   size_t seen = 0;
   for (const Instruction& ins : view.Instructions()) {
@@ -96,7 +96,7 @@ TEST(ScriptViewInstructions, MalformedHeaderTerminatesIterationCleanly) {
       static_cast<uint8_t>(Op::PushData2), 0x05
   };
 
-  ScriptView view(std::span<const uint8_t>(script.data(), script.size()));
+  View view(std::span<const uint8_t>(script.data(), script.size()));
 
   size_t count = 0;
   for (const Instruction& ins : view.Instructions()) {
@@ -115,7 +115,7 @@ TEST(ScriptViewInstructions, MalformedPayloadStopsAfterPriorGoodOps) {
       static_cast<uint8_t>(Op::PushData1), 0x05, 0xAA, 0xBB
   };
 
-  ScriptView view(std::span<const uint8_t>(script.data(), script.size()));
+  View view(std::span<const uint8_t>(script.data(), script.size()));
 
   std::vector<Instruction> got;
   for (const Instruction& ins : view.Instructions()) {
@@ -131,7 +131,7 @@ TEST(ScriptViewInstructions, MalformedPayloadStopsAfterPriorGoodOps) {
 TEST(ScriptViewInstructions, IteratorOperatorArrowWorks) {
   // 0x01 <0x42> followed by a non-push (0xAC)
   std::vector<uint8_t> script = { 0x01, 0x42, 0xAC };
-  ScriptView view(std::span<const uint8_t>(script.data(), script.size()));
+  View view(std::span<const uint8_t>(script.data(), script.size()));
 
   auto range = view.Instructions();
   auto it = range.begin();

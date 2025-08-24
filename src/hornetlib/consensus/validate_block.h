@@ -13,7 +13,7 @@
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/script/op.h"
-#include "hornetlib/protocol/script/script_view.h"
+#include "hornetlib/protocol/script/view.h"
 #include "hornetlib/protocol/transaction.h"
 #include "hornetlib/util/log.h"
 
@@ -31,7 +31,7 @@ inline int GetSigOpCount(std::span<const uint8_t> script) {
   using protocol::script::Op;
 
   int count = 0;
-  const protocol::script::ScriptView view{script};
+  const protocol::script::View view{script};
   for (const auto& instruction : view.Instructions()) {
     switch (instruction.opcode) {
       case Op::CheckSig:
