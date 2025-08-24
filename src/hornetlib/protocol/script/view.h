@@ -48,7 +48,7 @@ class View {
     std::optional<lang::Instruction> op_;
   };
 
-  View(lang::Bytes bytes) : bytes_(bytes) {}
+  View(std::span<const uint8_t> bytes) : bytes_(bytes) {}
 
   // Returns an iterable sequence of Instruction objects.
   auto Instructions() const {
