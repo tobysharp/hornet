@@ -17,8 +17,7 @@
 namespace hornet::consensus {
 
 namespace constants {
-  inline constexpr int kBlocksForMedianTime = 11;
-  inline constexpr int kTimestampTolerance = 2 * 60 * 60;
+inline constexpr int kTimestampTolerance = 2 * 60 * 60;
 }  // namespace constants
 
 namespace detail {
@@ -26,17 +25,17 @@ inline bool IsVersionValidAtHeight(int version, int height) {
   constexpr std::array<BIP, 4> kVersionExpiryToBIP = {
       static_cast<BIP>(-1),  // v0 invalid from genesis, never queried.
       BIP34, BIP66, BIP65    // v1, v2, v3 retired with BIP34, BIP66, BIP65.
-    };
+  };
   if (version <= 0 || version >= std::ssize(kVersionExpiryToBIP)) return false;
   return !IsBIPEnabledAtHeight(kVersionExpiryToBIP[version], height);
-  }
+}
 }  // namespace detail
 
 using HeaderResult = std::variant<model::HeaderContext, HeaderError>;
 
 [[nodiscard]] inline HeaderResult ValidateDownloadedHeader(const model::HeaderContext& parent,
-                                                    const protocol::BlockHeader& header,
-                                                    const HeaderAncestryView& view) {
+                                                           const protocol::BlockHeader& header,
+                                                           const HeaderAncestryView& view) {
   const int height = parent.height + 1;
 
   // Verify previous hash
@@ -55,15 +54,13 @@ using HeaderResult = std::variant<model::HeaderContext, HeaderError>;
     const uint32_t period_start_time =
         view.TimestampAt(height - blocks_per_period);             // block[height - 2016].time
     const uint32_t period_end_time = parent.data.GetTimestamp();  // block[height - 1].time
-    expected_bits = ComputeCompactTarget(
-        height, parent.data.GetCompactTarget(), period_start_time, period_end_time);
+    expected_bits = ComputeCompactTarget(height, parent.data.GetCompactTarget(), period_start_time,
+                                         period_end_time);
   }
   if (expected_bits != header.GetCompactTarget()) return HeaderError::BadDifficultyTransition;
 
   // Verify median of recent timestamps.
-  const auto recent_times = view.LastNTimestamps(constants::kBlocksForMedianTime);
-  const uint32_t median_time = recent_times[recent_times.size() / 2];
-  if (header.GetTimestamp() <= median_time) return HeaderError::BadTimestamp;
+  if (header.GetTimestamp() <= view.MedianTimePast()) return HeaderError::BadTimestamp;
 
   // Verify that the timestamp isn't too far in the future.
   const auto now = std::chrono::system_clock::now().time_since_epoch();
