@@ -337,6 +337,9 @@ class TransactionViewT {
   uint32_t LockTime() const {
     return detail_.lock_time;
   }
+  std::span<const struct Input> Inputs() const {
+    return detail_.inputs.Span(data_.inputs);
+  }
   std::span<const struct Output> Outputs() const {
     return detail_.outputs.Span(data_.outputs);
   }
@@ -370,6 +373,9 @@ class TransactionViewT {
   }
   auto& LockTime() {
     return detail_.lock_time;
+  }
+  auto Inputs() {
+    return detail_.inputs.Span(data_.inputs);
   }
   auto Outputs() {
     return detail_.outputs.Span(data_.outputs);
