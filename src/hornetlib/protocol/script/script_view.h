@@ -4,6 +4,7 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -19,8 +20,7 @@ class ScriptView {
   class EofTag {};
   class Iterator {
    public:
-    Iterator(std::span<const uint8_t> data) : parser_(data), op_(parser_.Next()) {
-    }
+    Iterator(std::span<const uint8_t> data) : parser_(data), op_(parser_.Next()) {}
     bool operator==(EofTag) const {
       return !op_.has_value();
     }
@@ -42,6 +42,7 @@ class ScriptView {
     const Instruction* operator->() const {
       return &*op_;
     }
+
    private:
     Parser parser_;
     std::optional<Instruction> op_;
@@ -53,7 +54,13 @@ class ScriptView {
   auto Instructions() const {
     return util::MakeRange<Iterator, EofTag>(bytes_, {});
   }
-  
+
+  // Returns true if the script starts with the given prefix.
+  bool StartsWith(std::span<const uint8_t> prefix) const {
+    return prefix.size() <= bytes_.size() &&
+           std::equal(prefix.begin(), prefix.end(), bytes_.begin());
+  }
+
  private:
   std::span<const uint8_t> bytes_;
 };

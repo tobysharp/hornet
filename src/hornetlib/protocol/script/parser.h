@@ -23,16 +23,17 @@ class Parser {
   std::optional<Instruction> Next() {
     if (cursor_ >= end_) return std::nullopt;
 
-    auto start = cursor_;
-    const Op opcode = static_cast<Op>(*start++);
-    const auto size = ReadPushSize(opcode, start);
-    if (!size || start + size->variable_size + size->length_bytes > end_) {
+    const auto it_opcode = cursor_;
+    const Op opcode = static_cast<Op>(*it_opcode);
+    const auto it_pushdata = it_opcode + 1;
+    const auto size = ReadInstructionSize(opcode, it_pushdata);
+    if (!size || it_pushdata + size->pushdata_bytes + size->payload_bytes > end_) {
       cursor_ = end_;
       return std::nullopt;
     }
-    start += size->variable_size;
-    cursor_ = start + size->length_bytes;
-    return Instruction{opcode, {&*start, size->length_bytes}};
+    const auto it_payload = it_pushdata + size->pushdata_bytes;
+    cursor_ = it_payload + size->payload_bytes;
+    return Instruction{opcode, {size->payload_bytes > 0 ? &*it_payload : nullptr, size->payload_bytes}};
   }
 
   std::optional<Op> Peek() const {
@@ -41,31 +42,30 @@ class Parser {
   }
 
  private:
-  struct PushSize {
-    uint8_t variable_size;
-    uint32_t length_bytes;
+  struct InstructionSize {
+    uint8_t pushdata_bytes;
+    uint32_t payload_bytes;
   };
 
-  std::optional<PushSize> ReadPushSize(Op opcode, Iterator start) const {
+  std::optional<InstructionSize> ReadInstructionSize(Op opcode, Iterator pushdata) const {
     if (opcode < Op::PushData1)
-      return PushSize{0, ToByte(opcode)};
+      return InstructionSize{0, ToByte(opcode)};
     else if (opcode == Op::PushData1)
-      return ReadPushSizeVariable<uint8_t>(start);
+      return ReadPushSizeVariable<uint8_t>(pushdata);
     else if (opcode == Op::PushData2)
-      return ReadPushSizeVariable<uint16_t>(start);
+      return ReadPushSizeVariable<uint16_t>(pushdata);
     else if (opcode == Op::PushData4)
-      return ReadPushSizeVariable<uint32_t>(start);
-    return PushSize{0, 0};
+      return ReadPushSizeVariable<uint32_t>(pushdata);
+    return InstructionSize{0, 0};
   }
 
   template <std::unsigned_integral T>
-  std::optional<PushSize> ReadPushSizeVariable(Iterator start) const {
-    if (start + sizeof(T) > end_)
-      return std::nullopt;
-    encoding::Reader reader({&*start, static_cast<size_t>(end_ - start)});
-    return PushSize{sizeof(T), reader.ReadLE<T>()};
+  std::optional<InstructionSize> ReadPushSizeVariable(Iterator pushdata) const {
+    if (pushdata + sizeof(T) > end_) return std::nullopt;
+    encoding::Reader reader({&*pushdata, static_cast<size_t>(end_ - pushdata)});
+    return InstructionSize{sizeof(T), reader.ReadLE<T>()};
   }
-  
+
   Iterator cursor_;
   Iterator end_;
 };

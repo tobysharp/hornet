@@ -10,7 +10,7 @@
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/script/op.h"
-#include "hornetlib/protocol/script/script_view.h"
+#include "hornetlib/protocol/script/view.h"
 #include "hornetlib/protocol/transaction.h"
 #include "hornetlib/util/log.h"
 
