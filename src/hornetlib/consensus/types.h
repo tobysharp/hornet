@@ -33,7 +33,8 @@ enum class BlockError {
   BadMerkleRoot,
   BadTransaction,
   BadSigOpCount,
-  NonFinalTransaction
+  NonFinalTransaction,
+  BadCoinbaseHeight
 };
 
 enum class TransactionError {

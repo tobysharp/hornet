@@ -25,7 +25,9 @@ add_executable(hornetlib_tests
    protocol/handshake_test.cpp
    protocol/parser_test.cpp
    protocol/script/parser_test.cpp
+   protocol/script/script_processor_test.cpp
    protocol/script/script_view_test.cpp
+   protocol/script/script_writer_test.cpp
    util/big_uint_test.cpp
    util/hex_test.cpp
    util/pointer_iterator_test.cpp
