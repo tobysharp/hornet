@@ -14,6 +14,7 @@
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/script/lang/op.h"
 #include "hornetlib/protocol/script/view.h"
+#include "hornetlib/protocol/script/writer.h"
 #include "hornetlib/protocol/transaction.h"
 #include "hornetlib/util/log.h"
 
@@ -107,6 +108,16 @@ inline int GetLegacySigOpCount(const protocol::TransactionConstView& tx) {
     if (!detail::IsTransactionFinalAt(tx, height, current_locktime))
       return BlockError::NonFinalTransaction;
   }
+
+  // From BIP34 onwards, we enforce that the coinbase signature script starts with block height.
+  if (IsBIPEnabledAtHeight(BIP::HeightInCoinbase, height)) {
+    protocol::script::Writer expected_prefix;
+    expected_prefix.PushInt(height);
+    if (!block.CoinbaseSignature().StartsWith(expected_prefix))
+      return BlockError::BadCoinbaseHeight;
+  }
+
+  // TODO: Unit tests for BIP113 and BIP34 above.
 
   // TODO: !! Other checks. Not yet finished !!
 

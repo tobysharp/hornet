@@ -20,7 +20,7 @@ class View {
   class EofTag {};
   class Iterator {
    public:
-    Iterator(lang::Bytes data) : parser_(data), op_(parser_.Next()) {}
+    Iterator(std::span<const uint8_t> data) : parser_(data), op_(parser_.Next()) {}
     bool operator==(EofTag) const {
       return !op_.has_value();
     }
