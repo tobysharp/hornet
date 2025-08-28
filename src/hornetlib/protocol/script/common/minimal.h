@@ -2,14 +2,12 @@
 
 #include <array>
 #include <concepts>
-#include <numeric>
-#include <optional>
 #include <span>
 
 #include "hornetlib/util/assert.h"
 #include "hornetlib/util/throw.h"
 
-namespace hornet::protocol::script {
+namespace hornet::protocol::script::common {
 
 namespace detail {
 
@@ -38,7 +36,7 @@ struct MinimalIntEncoded {
     bytes[size++] = value;
   }
   operator std::span<const uint8_t>() const {
-    return {&bytes[0], size};
+    return {&bytes[0], size_t(size)};
   }
   std::array<uint8_t, sizeof(T) + 1> bytes;
   int size = 0;
@@ -58,15 +56,17 @@ MinimalIntEncoded<T> EncodeMinimalInt(T value) {
 
 template <typename T>
 struct MinimalIntDecoded {
+  operator T() const { return value; }
   T value;
   bool minimal;
+  bool overflow;
 };
 
 template <std::signed_integral T>
 MinimalIntDecoded<T> DecodeMinimalInt(std::span<const uint8_t> bytes) {
   using U = std::make_unsigned_t<T>;
-  if (bytes.empty()) return {0, true};
-  MinimalIntDecoded<T> result = {0, true};
+  if (bytes.empty()) return {0, true, false};
+  MinimalIntDecoded<T> result = {0, true, false};
   const int last = std::ssize(bytes) - 1;
   int pos = last;
   const bool negative = (bytes[pos] & 0x80) != 0;
@@ -79,11 +79,13 @@ MinimalIntDecoded<T> DecodeMinimalInt(std::span<const uint8_t> bytes) {
   U absval = 0;
   for (; pos >= 0; --pos) {
     const uint8_t mask = pos == last ? 0x7F : 0xFF;  // Mask out the sign bit only.
+    // Causes overflow if the high byte is non-zero.
+    result.overflow |= (absval >> ((sizeof(U) - 1) << 3)) != 0;
     absval = (absval << 8) | (bytes[pos] & mask);
   }
   result.value = negative ? detail::Negate(absval) : T(absval);
   return result;
 }
 
-}  // namespace hornet::protocol::script
+}  // namespace hornet::protocol::script::common
 

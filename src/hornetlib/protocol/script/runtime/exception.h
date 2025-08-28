@@ -22,7 +22,7 @@ class Exception : public std::exception {
 
 template <typename... Args>
 [[noreturn]] inline void Throw(Args... args) {
-  throw Exception{ToString(std::forward<Args>(args)...)};
+  throw Exception{util::ToString(std::forward<Args>(args)...)};
 }
 
 }  // namespace hornet::protocol::script::runtime

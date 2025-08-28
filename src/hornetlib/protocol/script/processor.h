@@ -75,7 +75,7 @@ class Processor {
     }
     void PushImmediate(int8_t value) {
       Assert(IsImmediate(value) && value != 0);
-      // PushData(EncodeMinimalInt(value));
+      // Equivalent to: PushData(EncodeMinimalInt(value));
       PushByte(value == -1 ? 0x81 : uint8_t(value));
     }
     std::span<const uint8_t> Top() const {
