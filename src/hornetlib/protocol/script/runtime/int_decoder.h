@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <span>
 
+#include "hornetlib/protocol/script/common/minimal.h"
 #include "hornetlib/protocol/script/runtime/exception.h"
 
 namespace hornet::protocol::script::runtime {
@@ -30,9 +31,10 @@ class MinimalIntDecoder {
   T Decode(std::span<const uint8_t> bytes) const {
     if (std::ssize(bytes) > kMaxNumBytes)
       Throw("Could not decode a buffer of size ", bytes.size(), " bytes (max ", kMaxNumBytes, ").");
-    const auto decoded = DecodeMinimalInt<T>(bytes);
+    const auto decoded = common::DecodeMinimalInt<T>(bytes);
     if (is_minimal_required_ && !decoded.minimal)
       Throw("Value ", decoded.value, " was not minimally encoded.");
+    Assert(!decoded.overflow);
     return decoded.value;
   }
 
