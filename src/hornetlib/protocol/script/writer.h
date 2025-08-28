@@ -8,7 +8,7 @@
 #include <span>
 #include <vector>
 
-#include "hornetlib/protocol/script/minimal.h"
+#include "hornetlib/protocol/script/common/minimal.h"
 #include "hornetlib/protocol/script/op.h"
 #include "hornetlib/util/abs.h"
 #include "hornetlib/util/assert.h"
@@ -44,7 +44,7 @@ class Writer {
     else {
       // Encodes the integer in the minimum number of bytes using little-endian ordering.
       // Negatives are encoded as absolute values with a high-order sign bit.
-      PushData(EncodeMinimalInt(value));
+      PushData(common::EncodeMinimalInt(value));
     }
   }
 
