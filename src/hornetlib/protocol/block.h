@@ -105,5 +105,4 @@ class Block {
   int serialized_bytes_ = 0;
 };
 
-
 }  // namespace hornet::protocol

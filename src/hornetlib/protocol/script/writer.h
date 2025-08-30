@@ -22,7 +22,7 @@ class Writer {
   }
 
   // Writes an instruction to push the given data onto the execution stack.
-  void PushData(std::span<const uint8_t> data) {
+  Writer& PushData(std::span<const uint8_t> data) {
     using lang::Op;
     Assert(data.size() < 0xFFFFFFFF);
     if (data.empty())
@@ -35,10 +35,11 @@ class Writer {
       *this << Op::PushData2 << uint16_t(data.size()) << data;
     else
       *this << Op::PushData4 << uint32_t(data.size()) << data;
+    return *this;
   }
 
   // Writes an instruction to push the given integer onto the execution stack.
-  void PushInt(int32_t value) {
+  Writer& PushInt(int32_t value) {
     // If the value is in [-1, 16], push as immediate data in an opcode.
     if (lang::IsImmediate(value))
       *this << lang::ImmediateToOp(value);
@@ -47,6 +48,11 @@ class Writer {
       // Negatives are encoded as absolute values with a high-order sign bit.
       PushData(lang::EncodeMinimalInt(value));
     }
+    return *this;
+  }
+
+  Writer& Then(lang::Op opcode) {
+    return *this << opcode;
   }
 
  private:

@@ -1,8 +1,12 @@
+// Copyright 2025 Toby Sharp
+//
+// This file is part of the Hornet Node project. All rights reserved.
+// For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
 #include <array>
-#include <cstdint>
 #include <concepts>
+#include <cstdint>
 #include <span>
 
 #include "hornetlib/util/assert.h"
@@ -21,7 +25,7 @@ inline constexpr auto Negate(U value) noexcept {
 }
 
 // Returns the unsigned absolute value of any integer.
-// Safe for extreme values, e.g. Abs : (int8_t)0x80 --> (uint8_t)0x80.
+// Unlike std::abs, safe for extreme values, i.e. Abs : (int8_t)-128 --> (uint8_t)128.
 template <std::integral T>
 inline constexpr auto Abs(T value) noexcept {
   using U = std::make_unsigned_t<T>;
@@ -33,7 +37,7 @@ inline constexpr auto Abs(T value) noexcept {
 
 template <std::integral T>
 struct MinimalIntEncoded {
-  void Add(uint8_t value) {
+  void Append(uint8_t value) {
     Assert(size < std::ssize(bytes));
     bytes[size++] = value;
   }
@@ -44,8 +48,9 @@ struct MinimalIntEncoded {
   int size = 0;
 };
 
+// Encodes a compile-time small integer in the minimal encoding format. 
 template <int8_t N>
-inline uint8_t EncodeMinimalConst() {
+constexpr inline uint8_t EncodeMinimalConst() {
   static_assert(N == -1 || (N >= 1 && N <= 16));
   if constexpr (N == -1) return 0x81;
   return uint8_t(N);
@@ -57,9 +62,10 @@ template <std::integral T>
 MinimalIntEncoded<T> EncodeMinimalInt(T value) {
   MinimalIntEncoded<T> x;
   if (value == 0) return x;
-  for (auto remainder = detail::Abs(value); remainder > 0; remainder >>= 8) x.Add(remainder & 0xFF);
-  if (x.bytes[x.size - 1] & 0x80) x.Add(0);    // Adds a byte to disambiguate sign bit.
-  if (value < 0) x.bytes[x.size - 1] |= 0x80;  // Sets the sign bit for negatives.
+  for (auto remainder = detail::Abs(value); remainder > 0; remainder >>= 8)
+    x.Append(remainder & 0xFF);
+  if (x.bytes[x.size - 1] & 0x80) x.Append(0);  // Adds a byte to disambiguate sign bit.
+  if (value < 0) x.bytes[x.size - 1] |= 0x80;   // Sets the sign bit for negatives.
   return x;
 }
 
@@ -68,11 +74,12 @@ struct MinimalIntDecoded {
   operator T() const {
     return value;
   }
-  T value;
-  bool minimal;
-  bool overflow;
+  T value;        // The decoded integer value.
+  bool minimal;   // Whether the encoding was minimal.
+  bool overflow;  // Whether overflow occurred during decoding.
 };
 
+// Decodes an integer from its minimal encoding.
 template <std::signed_integral T>
 MinimalIntDecoded<T> DecodeMinimalInt(std::span<const uint8_t> bytes) {
   using U = std::make_unsigned_t<T>;
@@ -96,6 +103,15 @@ MinimalIntDecoded<T> DecodeMinimalInt(std::span<const uint8_t> bytes) {
   }
   result.value = negative ? detail::Negate(absval) : T(absval);
   return result;
+}
+
+inline bool IsEncodedZero(std::span<const uint8_t> data) {
+  bool zero = true;
+  for (int i = 0; i < std::ssize(data); ++i) {
+    const uint8_t nonsign_bits = i < std::ssize(data) - 1 ? data[i] : data[i] & 0x7F;
+    if (!(zero &= nonsign_bits == 0)) break;
+  }
+  return zero;
 }
 
 }  // namespace hornet::protocol::script::lang
