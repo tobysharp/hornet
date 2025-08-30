@@ -12,7 +12,7 @@
 #include "hornetlib/model/header_context.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/block_header.h"
-#include "hornetlib/protocol/script/op.h"
+#include "hornetlib/protocol/script/lang/op.h"
 #include "hornetlib/protocol/script/view.h"
 #include "hornetlib/protocol/script/writer.h"
 #include "hornetlib/protocol/transaction.h"
@@ -29,7 +29,7 @@ inline constexpr int kMaxBlockSigOpsCost = 80'000;
 
 namespace detail {
 inline int GetSigOpCount(std::span<const uint8_t> script) {
-  using protocol::script::Op;
+  using protocol::script::lang::Op;
 
   int count = 0;
   const protocol::script::View view{script};

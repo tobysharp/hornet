@@ -2,12 +2,15 @@
 
 #include <numeric>
 
+#include "hornetlib/protocol/script/lang/op.h"
 #include "hornetlib/protocol/script/view.h"
 
 #include <gtest/gtest.h>
 
 namespace hornet::protocol::script {
 namespace {
+
+using lang::Op;
 
 TEST(ScriptWriterTest, PushZero) {
   Writer w;

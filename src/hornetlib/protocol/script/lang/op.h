@@ -10,7 +10,7 @@
 
 #include "hornetlib/util/assert.h"
 
-namespace hornet::protocol::script {
+namespace hornet::protocol::script::lang {
 
 // The set of Bitcoin Script opcodes.
 enum class Op : uint8_t {
@@ -85,4 +85,4 @@ inline constexpr bool IsPush(Op opcode) {
   return opcode <= Op::PushConstMax;
 }
 
-}  // namespace hornet::protocol::script
+}  // namespace hornet::protocol::script::lang

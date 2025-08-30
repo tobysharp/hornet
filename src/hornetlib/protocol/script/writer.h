@@ -8,8 +8,8 @@
 #include <span>
 #include <vector>
 
-#include "hornetlib/protocol/script/common/minimal.h"
-#include "hornetlib/protocol/script/op.h"
+#include "hornetlib/protocol/script/lang/minimal.h"
+#include "hornetlib/protocol/script/lang/op.h"
 #include "hornetlib/util/abs.h"
 #include "hornetlib/util/assert.h"
 
@@ -23,6 +23,7 @@ class Writer {
 
   // Writes an instruction to push the given data onto the execution stack.
   void PushData(std::span<const uint8_t> data) {
+    using lang::Op;
     Assert(data.size() < 0xFFFFFFFF);
     if (data.empty())
       *this << Op::PushConst0;
@@ -39,12 +40,12 @@ class Writer {
   // Writes an instruction to push the given integer onto the execution stack.
   void PushInt(int32_t value) {
     // If the value is in [-1, 16], push as immediate data in an opcode.
-    if (IsImmediate(value))
-      *this << ImmediateToOp(value);
+    if (lang::IsImmediate(value))
+      *this << lang::ImmediateToOp(value);
     else {
       // Encodes the integer in the minimum number of bytes using little-endian ordering.
       // Negatives are encoded as absolute values with a high-order sign bit.
-      PushData(common::EncodeMinimalInt(value));
+      PushData(lang::EncodeMinimalInt(value));
     }
   }
 
@@ -63,7 +64,7 @@ class Writer {
   }
   
   // Writes a one-byte opcode to the instruction stream.
-  Writer& operator<<(Op opcode) {
+  Writer& operator<<(lang::Op opcode) {
     return *this << ToByte(opcode);
   }
 

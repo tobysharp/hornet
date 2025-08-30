@@ -8,13 +8,16 @@
 #include <span>
 #include <vector>
 
-#include "hornetlib/protocol/script/instruction.h"   // Instruction { Op opcode; span data; }
-#include "hornetlib/protocol/script/op.h"            // enum class Op : uint8_t { PushData1, ... }
+#include "hornetlib/protocol/script/lang/op.h"
+#include "hornetlib/protocol/script/lang/types.h"
 
 #include <gtest/gtest.h>
 
 namespace hornet::protocol::script {
 namespace {
+
+using lang::Op;
+using lang::Instruction;
 
 TEST(ScriptViewInstructions, EmptyScriptYieldsNoElements) {
   std::vector<uint8_t> script{};
