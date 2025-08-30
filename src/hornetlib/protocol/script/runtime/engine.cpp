@@ -2,13 +2,17 @@
 #include <array>
 
 #include "hornetlib/protocol/script/lang/types.h"
-#include "hornetlib/protocol/script/runtime/dispatch.h"
+#include "hornetlib/protocol/script/runtime/engine.h"
 
 namespace hornet::protocol::script::runtime {
 
-void RegisterPushHandlers(Dispatcher& table);  // In push.cpp
+void RegisterPushHandlers(Dispatcher& table);  // In stack_ops.cpp
 
 namespace detail {
+[[noreturn]] static void OnUnknown(const Context& context) {
+  util::ThrowLogicError("Opcode ", int(context.instruction.opcode), " not yet implemented.");
+}
+
 static Dispatcher BuildDispatcher(lang::Mode /*mode*/) {
   Dispatcher handlers;
   std::fill(handlers.begin(), handlers.end(), &OnUnknown);
@@ -18,17 +22,17 @@ static Dispatcher BuildDispatcher(lang::Mode /*mode*/) {
 }
 }  // namespace detail
 
-const auto kDispatchTable = []{
-    std::array<Dispatcher, lang::Mode::Count> table;
-    for (int i = 0; i < int{lang::Mode::Count}; ++i)
-        table[i] = detail::BuildDispatcher(lang::Mode(i));
-    return table;
+const auto kDispatchTable = [] {
+  std::array<Dispatcher, lang::Mode::Count> table;
+  for (int i = 0; i < int{lang::Mode::Count}; ++i)
+    table[i] = detail::BuildDispatcher(lang::Mode(i));
+  return table;
 }();
 
-void StepExecution(const Environment& env, Machine& machine,
-                          const lang::Instruction& instruction) {
-  const Handler handler = kDispatchTable[uint8_t(env.mode)][uint8_t(instruction.opcode)];
-  handler(env, machine, instruction);
+void StepExecution(const Context& context) {
+  const Handler handler =
+      kDispatchTable[uint8_t(context.env.mode)][context.instruction.opcode];
+  handler(context);
 }
 
 }  // namespace hornet::protocol::script::runtime

@@ -38,7 +38,12 @@ enum class Op : uint8_t {
   PushFalse = PushConst0,     // Pushes the immediate Boolean FALSE.
   PushTrue = PushConst1,      // Pushes the immediate Boolean TRUE.
 
-  // Checks signature opcodes
+  // Stack operations.
+  Drop = 0x75,
+  Pop = Drop,
+  Duplicate = 0x76,
+
+  // Check signature opcodes.
   CheckSig = 0xac,
   CheckSigVerify = 0xad,
   CheckMultiSig = 0xae,
@@ -61,6 +66,10 @@ inline constexpr int operator -(Op lhs, Op rhs) {
 
 inline constexpr Op operator +(Op lhs, int rhs) {
   return Op(ToByte(lhs) + rhs);
+}
+
+inline constexpr Op& operator++(Op& op) {
+  return op = op + 1;
 }
 
 inline constexpr bool IsImmediate(int value) {

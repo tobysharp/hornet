@@ -39,8 +39,13 @@ class Stack {
   void Push(uint8_t byte) {
     Push({&byte, 1});
   }
+  void Pop() {
+    if (Empty()) Throw(lang::Error::StackUnderflow, "Pop() of empty stack.");
+    items_.pop_back();
+    data_.resize(items_.empty() ? 0 : items_.back().EndIndex());
+  }
   lang::Bytes Top() const {
-    if (Empty()) Throw(lang::Error::StackEmpty, "It is invalid to call Top on an empty stack.");
+    if (Empty()) Throw(lang::Error::StackUnderflow, "Top() of empty stack.");
     return items_.back().Span(data_);
   }
   // Interpret the top-of-stack as a Boolean. Throws if stack is empty.
