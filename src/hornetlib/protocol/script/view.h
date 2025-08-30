@@ -20,7 +20,7 @@ class View {
   class EofTag {};
   class Iterator {
    public:
-    Iterator(std::span<const uint8_t> data) : parser_(data), op_(parser_.Next()) {}
+    Iterator(lang::Bytes data) : parser_(data), op_(parser_.Next()) {}
     bool operator==(EofTag) const {
       return !op_.has_value();
     }
@@ -48,7 +48,7 @@ class View {
     std::optional<lang::Instruction> op_;
   };
 
-  View(std::span<const uint8_t> bytes) : bytes_(bytes) {}
+  View(lang::Bytes bytes) : bytes_(bytes) {}
 
   // Returns an iterable sequence of Instruction objects.
   auto Instructions() const {
