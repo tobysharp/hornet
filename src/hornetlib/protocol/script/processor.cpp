@@ -68,7 +68,7 @@ void Processor::Execute(const lang::Instruction& instruction) {
                      "non-push operations per script.");
   }
 
-  runtime::StepExecution(env_, *machine_, instruction);
+  runtime::StepExecution(runtime::Context{env_, *machine_, instruction});
 }
 
 }  // namespace hornet::protocol::script

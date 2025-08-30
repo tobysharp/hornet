@@ -28,7 +28,7 @@ enum class Error {
   NumberOverflow,
   StackItemOverflow,
   StackOverflow,
-  StackEmpty,
+  StackUnderflow,
   OpCountExcessive
 };
 
