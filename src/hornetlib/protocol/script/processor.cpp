@@ -1,3 +1,7 @@
+// Copyright 2025 Toby Sharp
+//
+// This file is part of the Hornet Node project. All rights reserved.
+// For licensing or usage inquiries, contact: ask@hornetnode.com.
 #include <expected>
 #include <optional>
 
@@ -7,8 +11,19 @@
 #include "hornetlib/protocol/script/runtime/stack.h"
 #include "hornetlib/protocol/script/runtime/throw.h"
 #include "hornetlib/util/assert.h"
+#include "hornetlib/util/log.h"
 
 namespace hornet::protocol::script {
+
+Processor::Processor(std::span<const uint8_t> script,
+                    bool require_minimal,
+                    int height
+                    )
+    : parser_(script),
+      policy_{require_minimal},
+      env_{height, runtime::Version::Legacy},
+      machine_(runtime::Machine{.stack = stack_, .script = parser_.Script(), .policy = policy_}) {
+}
 
 std::optional<int32_t> Processor::TryPeekInt() const {
   if (stack_.Empty()) return std::nullopt;
@@ -31,6 +46,7 @@ Processor::StepResult Processor::Step() {
     return StepResult::Stepped;
   } catch (const runtime::Exception& e) {
     error_ = e.GetError();
+    LogWarn() << "Script execution error code " << int(*error_) << ": " << e.what();
     return StepResult::Error;
   }
 }
@@ -41,7 +57,7 @@ void Processor::Reset(std::span<const uint8_t> script, int height) {
   non_push_op_count_ = 0;
   stack_.Clear();
   env_ = { height };
-  machine_.emplace(stack_, script, policy_);
+  machine_.emplace(runtime::Machine{.stack = stack_, .script = script, .policy = policy_});
 }
 
 // Run the script to the end and return its Boolean result.
@@ -52,6 +68,7 @@ Processor::RunResult Processor::Run() {
     while (const auto instruction = parser_.Next()) Execute(*instruction);
   } catch (const runtime::Exception& e) {
     error_ = e.GetError();
+    LogWarn() << "Script execution error code " << int(*error_) << ": " << e.what();
     return RunResult::Error;
   }
   return !stack_.Empty() && stack_.TopAsBool() ? RunResult::True : RunResult::False;
@@ -59,15 +76,6 @@ Processor::RunResult Processor::Run() {
 
 void Processor::Execute(const lang::Instruction& instruction) {
   Assert(!error_);
-
-  const bool push = lang::IsPush(instruction.opcode);
-  if (!push) {
-    const int max_non_push_ops = lang::MaxNonPushOps(env_.mode);
-    if (non_push_op_count_++ >= max_non_push_ops)
-      runtime::Throw(lang::Error::OpCountExcessive, "Hit the limit of ", max_non_push_ops,
-                     "non-push operations per script.");
-  }
-
   runtime::StepExecution(runtime::Context{env_, *machine_, instruction});
 }
 
