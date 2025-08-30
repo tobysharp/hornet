@@ -1,13 +1,14 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <concepts>
 #include <span>
 
 #include "hornetlib/util/assert.h"
 #include "hornetlib/util/throw.h"
 
-namespace hornet::protocol::script::common {
+namespace hornet::protocol::script::lang {
 
 namespace detail {
 
@@ -27,6 +28,7 @@ inline constexpr auto Abs(T value) noexcept {
   // Uses twos-complement conversion to avoid UB on INT_MIN.
   return value < T{0} ? ~U(value) + 1 : U(value);
 }
+
 }  // namespace detail
 
 template <std::integral T>
@@ -42,6 +44,13 @@ struct MinimalIntEncoded {
   int size = 0;
 };
 
+template <int8_t N>
+inline uint8_t EncodeMinimalConst() {
+  static_assert(N == -1 || (N >= 1 && N <= 16));
+  if constexpr (N == -1) return 0x81;
+  return uint8_t(N);
+}
+
 // Encodes the integer in the minimum number of bytes using little-endian ordering.
 // Negatives are encoded as absolute values with a high-order sign bit.
 template <std::integral T>
@@ -56,7 +65,9 @@ MinimalIntEncoded<T> EncodeMinimalInt(T value) {
 
 template <typename T>
 struct MinimalIntDecoded {
-  operator T() const { return value; }
+  operator T() const {
+    return value;
+  }
   T value;
   bool minimal;
   bool overflow;
@@ -87,5 +98,4 @@ MinimalIntDecoded<T> DecodeMinimalInt(std::span<const uint8_t> bytes) {
   return result;
 }
 
-}  // namespace hornet::protocol::script::common
-
+}  // namespace hornet::protocol::script::lang

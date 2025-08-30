@@ -1,6 +1,7 @@
 #include "hornetlib/protocol/script/processor.h"
 
 #include <numeric>
+#include <optional>
 
 #include "hornetlib/protocol/script/writer.h"
 
@@ -12,7 +13,7 @@ void RoundTripInt(int value) {
   Writer w;
   w.PushInt(value);
   Processor vm{w};
-  EXPECT_EQ(vm.Run(), value != 0);
+  EXPECT_EQ(vm.Run(), value == 0 ? Processor::RunResult::False : Processor::RunResult::True);
   const auto read = vm.TryPeekInt();
   EXPECT_TRUE(read.has_value());
   EXPECT_EQ(value, *read);

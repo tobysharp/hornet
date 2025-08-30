@@ -9,7 +9,7 @@
 #include "hornetlib/consensus/validate_transaction.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/block_header.h"
-#include "hornetlib/protocol/script/op.h"
+#include "hornetlib/protocol/script/lang/op.h"
 #include "hornetlib/protocol/script/view.h"
 #include "hornetlib/protocol/transaction.h"
 #include "hornetlib/util/log.h"
@@ -24,8 +24,8 @@ namespace constants {
 }  // namespace constants
 
 namespace detail {
-  inline int GetSigOpCount(std::span<const uint8_t> script) {
-    using protocol::script::Op;
+inline int GetSigOpCount(std::span<const uint8_t> script) {
+  using protocol::script::lang::Op;
 
   int count = 0;
   const protocol::script::View view{script};

@@ -9,7 +9,7 @@
 #include <optional>
 #include <span>
 
-#include "hornetlib/protocol/script/instruction.h"
+#include "hornetlib/protocol/script/lang/types.h"
 #include "hornetlib/protocol/script/parser.h"
 #include "hornetlib/util/iterator_range.h"
 
@@ -20,7 +20,7 @@ class View {
   class EofTag {};
   class Iterator {
    public:
-    Iterator(std::span<const uint8_t> data) : parser_(data), op_(parser_.Next()) {}
+    Iterator(lang::Bytes data) : parser_(data), op_(parser_.Next()) {}
     bool operator==(EofTag) const {
       return !op_.has_value();
     }
@@ -36,19 +36,19 @@ class View {
       ++(*this);
       return tmp;
     }
-    const Instruction& operator*() const {
+    const lang::Instruction& operator*() const {
       return *op_;
     }
-    const Instruction* operator->() const {
+    const lang::Instruction* operator->() const {
       return &*op_;
     }
 
    private:
     Parser parser_;
-    std::optional<Instruction> op_;
+    std::optional<lang::Instruction> op_;
   };
 
-  View(std::span<const uint8_t> bytes) : bytes_(bytes) {}
+  View(lang::Bytes bytes) : bytes_(bytes) {}
 
   // Returns an iterable sequence of Instruction objects.
   auto Instructions() const {
@@ -62,7 +62,7 @@ class View {
   }
 
  private:
-  std::span<const uint8_t> bytes_;
+  lang::Bytes bytes_;
 };
 
 }  // namespace hornet::protocol::script

@@ -9,6 +9,8 @@
 namespace hornet::protocol::script {
 namespace {
 
+using lang::Op;
+
 void ExpectNext(Parser& p, Op expected_opcode, std::initializer_list<uint8_t> expected_data) {
   auto ins = p.Next();
   ASSERT_TRUE(ins.has_value()) << "expected another instruction";
