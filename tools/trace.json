@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "version": 1,
+    "script_hex": "020001010293",
+    "flags": {
+      "minimal_num_required": true
+    }
+  },
+  "script_bytes": ["02","00","01","01","02","93"],
+  "steps": [
+    {
+      "pc": 0,
+      "byte_start": 0,
+      "byte_end": 3,
+      "opcode_byte": 2,
+      "stack_after": ["0001"],
+      "opcount": 0,
+      "sigchecks": 0,
+      "error": null,
+      "finished": false
+    },
+    {
+      "pc": 3,
+      "byte_start": 3,
+      "byte_end": 5,
+      "opcode_byte": 1,
+      "stack_after": ["0001","02"],
+      "opcount": 0,
+      "sigchecks": 0,
+      "error": null,
+      "finished": false
+    },
+    {
+      "pc": 5,
+      "byte_start": 5,
+      "byte_end": 6,
+      "opcode_byte": 147,
+      "stack_after": ["0201"],
+      "opcount": 1,
+      "sigchecks": 0,
+      "error": null,
+      "finished": true
+    }
+  ]
+}
