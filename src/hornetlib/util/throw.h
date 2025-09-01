@@ -14,9 +14,10 @@
 namespace hornet::util {
 
 template <typename... Args>
-inline std::string ToString(const Args&... args) {
+[[nodiscard]] inline std::string ToString(const Args&... args) {
     std::ostringstream oss;
-    (oss << ... << args);  // Fold expression (C++17)
+    if constexpr (sizeof...(args) > 0)
+        (oss << ... << args);  // Fold expression (C++17)
     return oss.str();
 }
 
@@ -33,6 +34,11 @@ template <typename... Args>
 template <typename... Args>
 [[noreturn]] inline void ThrowInvalidArgument(const Args&... args) {
     throw std::invalid_argument{ToString(args...)};
+}
+
+template <typename... Args>
+[[noreturn]] inline void ThrowLogicError(const Args&... args) {
+    throw std::runtime_error{ToString(args...)};
 }
 
 }  // namespace hornet::util

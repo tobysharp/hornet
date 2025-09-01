@@ -9,7 +9,7 @@
 #include "hornetlib/consensus/validate_transaction.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/block_header.h"
-#include "hornetlib/protocol/script/op.h"
+#include "hornetlib/protocol/script/lang/op.h"
 #include "hornetlib/protocol/script/view.h"
 #include "hornetlib/protocol/transaction.h"
 #include "hornetlib/util/log.h"
@@ -24,26 +24,26 @@ namespace constants {
 }  // namespace constants
 
 namespace detail {
-  inline int GetSigOpCount(std::span<const uint8_t> script) {
-    using protocol::script::Op;
+inline int GetSigOpCount(std::span<const uint8_t> script) {
+  using protocol::script::lang::Op;
 
-    int count = 0;
-    const protocol::script::ScriptView view{script};
-    for (const auto& instruction : view.Instructions()) {
-      switch (instruction.opcode) {
-        case Op::CheckSig:
-        case Op::CheckSigVerify:
-          ++count;
-          break;
-        case Op::CheckMultiSig:
-        case Op::CheckMultiSigVerify:
-          count += constants::kMaxPubKeysPerMultiSig;  // = 20
-          break;
-        default:;
-      }
+  int count = 0;
+  const protocol::script::View view{script};
+  for (const auto& instruction : view.Instructions()) {
+    switch (instruction.opcode) {
+      case Op::CheckSig:
+      case Op::CheckSigVerify:
+        ++count;
+        break;
+      case Op::CheckMultiSig:
+      case Op::CheckMultiSigVerify:
+        count += constants::kMaxPubKeysPerMultiSig;  // = 20
+        break;
+      default:;
     }
-    return count;
   }
+  return count;
+}
 
   inline int GetLegacySigOpCount(const protocol::TransactionConstView& tx) {
     int count = 0;

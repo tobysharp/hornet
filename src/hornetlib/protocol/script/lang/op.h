@@ -10,7 +10,7 @@
 
 #include "hornetlib/util/assert.h"
 
-namespace hornet::protocol::script {
+namespace hornet::protocol::script::lang {
 
 // The set of Bitcoin Script opcodes.
 enum class Op : uint8_t {
@@ -38,7 +38,12 @@ enum class Op : uint8_t {
   PushFalse = PushConst0,     // Pushes the immediate Boolean FALSE.
   PushTrue = PushConst1,      // Pushes the immediate Boolean TRUE.
 
-  // Checks signature opcodes
+  // Stack operations.
+  Drop = 0x75,
+  Pop = Drop,
+  Duplicate = 0x76,
+
+  // Check signature opcodes.
   CheckSig = 0xac,
   CheckSigVerify = 0xad,
   CheckMultiSig = 0xae,
@@ -63,6 +68,10 @@ inline constexpr Op operator +(Op lhs, int rhs) {
   return Op(ToByte(lhs) + rhs);
 }
 
+inline constexpr Op& operator++(Op& op) {
+  return op = op + 1;
+}
+
 inline constexpr bool IsImmediate(int value) {
   return value >= kImmediateMin && value <= kImmediateMin + (Op::PushConstMax - Op::PushConstMin);
 }
@@ -85,4 +94,4 @@ inline constexpr bool IsPush(Op opcode) {
   return opcode <= Op::PushConstMax;
 }
 
-}  // namespace hornet::protocol::script
+}  // namespace hornet::protocol::script::lang
