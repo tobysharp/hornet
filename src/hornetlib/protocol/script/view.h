@@ -15,7 +15,7 @@
 
 namespace hornet::protocol::script {
 
-class ScriptView {
+class View {
  public:
   class EofTag {};
   class Iterator {
@@ -48,7 +48,7 @@ class ScriptView {
     std::optional<Instruction> op_;
   };
 
-  ScriptView(std::span<const uint8_t> bytes) : bytes_(bytes) {}
+  View(std::span<const uint8_t> bytes) : bytes_(bytes) {}
 
   // Returns an iterable sequence of Instruction objects.
   auto Instructions() const {

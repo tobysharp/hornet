@@ -27,23 +27,23 @@ namespace detail {
   inline int GetSigOpCount(std::span<const uint8_t> script) {
     using protocol::script::Op;
 
-    int count = 0;
-    const protocol::script::ScriptView view{script};
-    for (const auto& instruction : view.Instructions()) {
-      switch (instruction.opcode) {
-        case Op::CheckSig:
-        case Op::CheckSigVerify:
-          ++count;
-          break;
-        case Op::CheckMultiSig:
-        case Op::CheckMultiSigVerify:
-          count += constants::kMaxPubKeysPerMultiSig;  // = 20
-          break;
-        default:;
-      }
+  int count = 0;
+  const protocol::script::View view{script};
+  for (const auto& instruction : view.Instructions()) {
+    switch (instruction.opcode) {
+      case Op::CheckSig:
+      case Op::CheckSigVerify:
+        ++count;
+        break;
+      case Op::CheckMultiSig:
+      case Op::CheckMultiSigVerify:
+        count += constants::kMaxPubKeysPerMultiSig;  // = 20
+        break;
+      default:;
     }
-    return count;
   }
+  return count;
+}
 
   inline int GetLegacySigOpCount(const protocol::TransactionConstView& tx) {
     int count = 0;
