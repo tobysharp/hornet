@@ -34,7 +34,7 @@ python3 sidecar.py
 ### UDP metrics (JSON object)
 ```json
 {
-  "headers_total": <number>,          // or "headers_validated" (alias)
+  "headers_validated": <number>,      // legacy key "headers_total" is accepted
   "blocks_validated": <number>,
   "headers_rate_hz": <number>,        // optional
   "peers": <number>,                  // optional
@@ -42,7 +42,7 @@ python3 sidecar.py
 }
 ```
 Notes:
-- UI progress = `blocks_validated / headers_total`.
+- UI progress = `blocks_validated / headers_validated`.
 - Numbers may be strings or numbers; UI normalizes (prefer numbers).
 
 ### TCP JSONL — console
@@ -110,7 +110,7 @@ lsof -nP -iUDP:9999
 ```
 
 ## Mock expectations
-- UDP: emit metrics JSON at a steady cadence (e.g., 4 Hz) containing `headers_total` and `blocks_validated`.
+- UDP: emit metrics JSON at a steady cadence (e.g., 4 Hz) containing `headers_validated` and `blocks_validated`.
 - TCP: rotate console messages containing `DEBUG/INFO/WARN/ERROR`; emit occasional `reliable` events.
 
 ## Invariants

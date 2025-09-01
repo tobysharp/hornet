@@ -83,7 +83,7 @@ async def udp_metrics():
 
             obj = {
                 "t":"metrics","phase":phase,
-                "headers_total":headers,
+                "headers_validated":headers,
                 "blocks_validated":blocks,
                 "peers":peers,
                 "headers_rate_hz":rate
