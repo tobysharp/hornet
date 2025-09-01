@@ -90,7 +90,7 @@ async def udp_metrics():
             }
             data = json.dumps(obj, separators=(',',':')).encode()
             transport.sendto(data)
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(0.02)
     except asyncio.CancelledError:
         pass
     finally:
