@@ -108,25 +108,28 @@
   function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
   // ----- Staleness tracking -----
-  const FIELD_MAP = {
-    headers_validated: { el: hEl, labelEl: labelHeaders, fmt: fmtInt },
-    headers_total:     { el: hEl, labelEl: labelHeaders, fmt: fmtInt }, // alias
-    blocks_validated:  { el: bEl, labelEl: labelBlocks,  fmt: fmtInt },
-    peers:             { el: peersEl,                      fmt: (x)=>String(x), label: 'Peers: ' },
-    headers_rate_hz:   { el: rateEl,                      fmt: (x)=>`Headers/sec: ${x.toFixed ? x.toFixed(1) : x}` },
-    progress_bar:      { el: barEl, labelEl: labelProgress },
+  const PILL_FIELDS = {
+    phase:          { el: phaseEl, fmt: (x)=>`Phase: ${PHASE[x] ?? x}` },
+    headers_rate_hz:{ el: rateEl, fmt: (x)=>`Headers/sec: ${x.toFixed ? x.toFixed(1) : x}` },
+    peers:          { el: peersEl, fmt: (x)=>`Peers: ${x}` },
+  };
+  const CARD_FIELDS = {
+    headers_validated:{ el: hEl, labelEl: labelHeaders, fmt: fmtInt },
+    headers_total:    { el: hEl, labelEl: labelHeaders, fmt: fmtInt }, // alias
+    blocks_validated: { el: bEl, labelEl: labelBlocks,  fmt: fmtInt },
+    progress_bar:     { el: barEl, labelEl: labelProgress },
   };
   let lastPacketSeen = 0;
   const fieldSeenAt = new WeakMap(); // el -> packet index
 
-  function setField(key, val, packetId){
-    const rec = FIELD_MAP[key]; if(!rec) return;
-    const el  = rec.el, fmt = rec.fmt || String, prefix = rec.label || '';
+  function setMetric(key, val, packetId){
+    const rec = PILL_FIELDS[key] || CARD_FIELDS[key]; if(!rec) return;
+    const el  = rec.el, fmt = rec.fmt || String;
     if (val != null) {
       if (el === barEl) {
         el.classList.remove('stale');
       } else {
-        el.textContent = prefix + fmt(val);
+        el.textContent = fmt(val);
         el.classList.remove('stale');
       }
       if (rec.labelEl) {
@@ -138,7 +141,7 @@
   }
 
   function applyStalenessForPacket(packetId){
-    const recs = Object.values(FIELD_MAP);
+    const recs = [...Object.values(PILL_FIELDS), ...Object.values(CARD_FIELDS)];
     const uniqEls = new Set(recs.flatMap(r=> [r.el, r.labelEl].filter(Boolean)));
     uniqEls.forEach(el=>{
       const seen = fieldSeenAt.get(el);
@@ -197,23 +200,18 @@
       const m = JSON.parse(e.data);
       lastPacketSeen++;
 
-      if ('phase' in m) {
-        phaseEl.textContent = 'Phase: ' + (PHASE[m.phase] ?? m.phase);
-      }
-
       const headersVal = (m.headers_validated ?? m.headers_total);
 
-      setField('peers', m.peers, lastPacketSeen);
-      setField('headers_validated', headersVal, lastPacketSeen);
-      setField('blocks_validated', m.blocks_validated, lastPacketSeen);
-      if ('headers_rate_hz' in m) setField('headers_rate_hz', m.headers_rate_hz, lastPacketSeen);
+      for (const [k,v] of Object.entries(m)) {
+        setMetric(k, v, lastPacketSeen);
+      }
 
       const hv = Number(headersVal);
       const bv = Number(m.blocks_validated);
       if (Number.isFinite(hv) && Number.isFinite(bv) && hv > 0) {
         const pct = Math.round(clamp(bv / Math.max(hv,1), 0, 1) * 100);
         barEl.style.width = pct + '%';
-        setField('progress_bar', true, lastPacketSeen);
+        setMetric('progress_bar', true, lastPacketSeen);
       }
 
       applyStalenessForPacket(lastPacketSeen);
