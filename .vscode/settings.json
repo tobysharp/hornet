@@ -96,7 +96,9 @@
         "stack": "cpp",
         "version": "cpp",
         "shared_mutex": "cpp",
-        "complex": "cpp"
+        "complex": "cpp",
+        "print": "cpp",
+        "expected": "cpp"
     },
     "C_Cpp.default.compilerPath": "/usr/bin/clang++-20",
     "C_Cpp.default.compileCommands": "${workspaceFolder}/build/clang20-debug/compile_commands.json",

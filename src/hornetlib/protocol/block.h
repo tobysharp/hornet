@@ -11,6 +11,7 @@
 #include "hornetlib/encoding/writer.h"
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/transaction.h"
+#include "hornetlib/protocol/script/view.h"
 #include "hornetlib/util/iterator_range.h"
 
 namespace hornet::protocol {
@@ -40,6 +41,11 @@ class Block {
   }
   TransactionConstView Transaction(int index) const {
     return {data_, transactions_[index]};
+  }
+
+  // Returns the signature script of the coinbase transaction.
+  script::View CoinbaseSignature() const {
+    return Transaction(0).SignatureScript(0);
   }
 
   template <TransactionViewType View>
@@ -98,6 +104,5 @@ class Block {
   TransactionData data_;
   int serialized_bytes_ = 0;
 };
-
 
 }  // namespace hornet::protocol
