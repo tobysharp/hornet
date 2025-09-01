@@ -12,8 +12,17 @@ async def handle_tcp(reader, writer):
     try:
         while True:
             tick += 1
-            # Console message
-            msg = {"t":"console","msg":f"[INFO] Mock tick {tick}"}
+            # Console message: cycle levels DEBUG -> INFO -> WARN -> ERROR
+            level = (tick % 4)
+            if level == 0:
+                line = f"DEBUG starting tick {tick}"
+            elif level == 1:
+                line = f"INFO heartbeat tick {tick}"
+            elif level == 2:
+                line = f"WARN simulated lag on peer {tick % 8}"
+            else:
+                line = f"ERROR failed to parse block {100000 + tick} header"
+            msg = {"t":"console","msg": line}
             writer.write((json.dumps(msg)+"\n").encode())
 
             # Reliable event every 5 ticks
