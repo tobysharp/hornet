@@ -27,6 +27,8 @@
 #include <sstream>
 #include <string>
 
+#include "hornetlib/util/notify.h"
+
 // Compile with e.g. -DHORNET_MAX_LOG_LEVEL="None" to disable all logging at compile time.
 #ifndef HORNET_MAX_LOG_LEVEL
 #define HORNET_MAX_LOG_LEVEL Debug
@@ -44,27 +46,33 @@ class LogContext {
     static LogContext instance;
     return instance;
   }
-
   void SetLevel(LogLevel level) {
     max_level_.store(level, std::memory_order_relaxed);
-  }
-  void SetOutputFile(const std::string& filename) {
-    std::lock_guard lock(mutex_);
-    file_.open(filename, std::ios::app);
-  }
-  void EnableStdout(bool enabled) {
-    to_stdout_.store(enabled, std::memory_order_relaxed);
   }
   bool IsActive(LogLevel level) const {
     return static_cast<int>(level) <= static_cast<int>(max_level_.load(std::memory_order_relaxed));
   }
-
   void Emit(LogLevel level, const std::string& message) {
-    std::lock_guard lock(mutex_);
-    const std::string full = Prefix(level) + message + "\n";
-    if (to_stdout_) std::cout << full;
-    if (file_.is_open()) file_ << full;
-  }
+    auto LevelToString = [](LogLevel level) -> const char* {
+      switch (level) {
+        case LogLevel::None:
+          return "";
+        case LogLevel::Error:
+          return "ERROR";
+        case LogLevel::Warn:
+          return "WARN";
+        case LogLevel::Info:
+          return "INFO";
+        case LogLevel::Debug:
+          return "DEBUG";
+      }
+    };
+    using namespace std::chrono;
+    NotifyLog(
+          {{"time_us", duration_cast<microseconds>(system_clock::now().time_since_epoch()).count()},
+            {"level", LevelToString(level)},
+            {"msg", std::string{message}}});
+    }
 
  private:
   LogContext() = default;
@@ -94,10 +102,7 @@ class LogContext {
     return time + std::format(".{:04}", us.count() / 100);
   }
 
-  mutable std::mutex mutex_;
-  std::ofstream file_;
   std::atomic<LogLevel> max_level_ = LogLevel::HORNET_MAX_LOG_LEVEL;
-  std::atomic<bool> to_stdout_ = true;
 };
 
 // A move-only RAII class that enables streaming to the LogContext with simple, clean syntax.
