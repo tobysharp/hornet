@@ -25,6 +25,9 @@ void DefaultLogSink::EnableStdout(bool enabled) {
 }
 
 void DefaultLogSink::operator()(const NotificationPayload& payload) {
+  if (payload.type != NotificationType::Log)
+    return;
+
   std::lock_guard lock(mutex_);
   const std::string& level = std::get<std::string>(payload.map.at("level"));
   const std::string& message = std::get<std::string>(payload.map.at("msg"));
