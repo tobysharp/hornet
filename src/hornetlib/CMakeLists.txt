@@ -8,6 +8,7 @@ add_library(hornetlib STATIC
    protocol/script/runtime/ops/bitwise.cpp
    protocol/script/runtime/ops/stack.cpp
    protocol/script/processor.cpp
+   util/notify.cpp
 )
 target_compile_features(hornetlib PRIVATE cxx_std_20)
 target_include_directories(hornetlib PUBLIC ${PROJECT_SOURCE_DIR}/src)
