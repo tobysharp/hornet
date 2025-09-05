@@ -24,14 +24,14 @@ void DefaultLogSink::EnableStdout(bool enabled) {
   to_stdout_ = enabled;
 }
 
-void DefaultLogSink::operator()(const NotificationPayload& payload) {
+void DefaultLogSink::operator()(NotificationPayload payload) {
   if (payload.type != NotificationType::Log)
     return;
 
   std::lock_guard lock(mutex_);
-  const std::string& level = std::get<std::string>(payload.map.at("level"));
-  const std::string& message = std::get<std::string>(payload.map.at("msg"));
-  const int64_t time_us = std::get<int64_t>(payload.map.at("time_us"));
+  const std::string& level = std::get<std::string>(*payload.map.Find("level"));
+  const std::string& message = std::get<std::string>(*payload.map.Find("msg"));
+  const int64_t time_us = std::get<int64_t>(*payload.map.Find("time_us"));
   const std::string full = Prefix(level, time_us) + message + "\n";
 
   if (to_stdout_) std::cout << full;
@@ -48,25 +48,25 @@ std::string DefaultLogSink::Prefix(const std::string& level, int64_t time_us) co
 }
 
 namespace {
-NotificationSink notification_sink = [](const NotificationPayload& payload) {
-  DefaultLogSink::Instance()(payload);
+NotificationSink notification_sink = [](NotificationPayload payload) {
+  DefaultLogSink::Instance()(std::move(payload));
 };
 }  // namespace
 
-void Notify(NotificationType type, std::string_view path, const NotificationMap& values) {
-  notification_sink({type, path, values});
+void Notify(NotificationType type, std::string path, NotificationMap values) {
+  notification_sink({type, std::move(path), std::move(values)});
 }
 
-void NotifyLog(const NotificationMap& values) {
-  Notify(NotificationType::Log, "", values);
+void NotifyLog(NotificationMap values) {
+  Notify(NotificationType::Log, {}, std::move(values));
 }
 
-void NotifyEvent(std::string_view path, const NotificationMap& values) {
-  Notify(NotificationType::Discrete, path, values);
+void NotifyEvent(std::string path, NotificationMap values) {
+  Notify(NotificationType::Discrete, std::move(path), std::move(values));
 }
 
-void NotifyMetric(std::string_view path, const NotificationMap& values) {
-  Notify(NotificationType::Continuous, path, values);
+void NotifyMetric(std::string path, NotificationMap values) {
+  Notify(NotificationType::Continuous, std::move(path), std::move(values));
 }
 
 void SetNotificationSink(NotificationSink sink) {
