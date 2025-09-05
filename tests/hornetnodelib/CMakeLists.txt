@@ -4,6 +4,7 @@ add_executable(hornetnodelib_tests
    net/peer_test.cpp
    net/peer_manager_test.cpp
    net/socket_test.cpp
+   net/tcp_notification_sink_test.cpp
    dispatch/protocol_loop_test.cpp
    sync/sync_manager_test.cpp
 )

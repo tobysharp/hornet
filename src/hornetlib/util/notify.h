@@ -7,17 +7,50 @@
 #include <mutex>
 #include <string>
 #include <string_view>
-#include <unordered_map>
+#include <tuple>
 #include <variant>
+#include <vector>
 
 namespace hornet::util {
 
 using NotificationValue = std::variant<int64_t, double, std::string>;
-using NotificationMap = std::unordered_map<std::string_view, NotificationValue>;
 
-void NotifyEvent(std::string_view path, const NotificationMap& values);
-void NotifyMetric(std::string_view path, const NotificationMap& values);
-void NotifyLog(const NotificationMap& values);
+class NotificationMap {
+ public:
+  using Entry = std::pair<std::string_view, NotificationValue>;
+
+  NotificationMap() = default;
+  NotificationMap(std::initializer_list<Entry> list) : map_(list) {}
+  NotificationMap(const NotificationMap&) = default;
+  NotificationMap(NotificationMap&&) = default;
+  NotificationMap& operator =(const NotificationMap&) = default;
+  NotificationMap& operator =(NotificationMap&&) = default;
+
+  bool Empty() const {
+    return map_.empty();
+  }
+  int Size() const {
+    return std::ssize(map_);
+  }
+  void Insert(std::string_view key, NotificationValue value) {
+    map_.emplace_back(std::pair{std::move(key), std::move(value)});
+  }
+  const NotificationValue* Find(std::string_view key) const {
+    for (const auto& [k, v] : map_)
+        if (k == key) return &v;
+    return nullptr;
+  }
+
+  auto begin() const { return map_.begin(); }
+  auto end() const { return map_.end(); }
+
+ private:
+  std::vector<Entry> map_;
+};
+
+void NotifyEvent(std::string path, NotificationMap values);
+void NotifyMetric(std::string path, NotificationMap values);
+void NotifyLog(NotificationMap values);
 
 enum class NotificationType {
     Log,        // Console messages.
@@ -27,11 +60,11 @@ enum class NotificationType {
 
 struct NotificationPayload {
     NotificationType type;
-    std::string_view path;
-    const NotificationMap& map;
+    std::string path;
+    NotificationMap map;
 };
 
-using NotificationSink = std::function<void(const NotificationPayload&)>;
+using NotificationSink = std::function<void(NotificationPayload)>;
 
 // The notification sink is called once per Notify call. Must be thread-safe and non-blocking.
 void SetNotificationSink(NotificationSink sink);
@@ -42,7 +75,7 @@ class DefaultLogSink {
   static DefaultLogSink& Instance();
   void SetOutputFile(const std::string& filename);
   void EnableStdout(bool enabled);
-  void operator()(const NotificationPayload& payload);
+  void operator()(NotificationPayload payload);
 
  private:
   DefaultLogSink() = default;

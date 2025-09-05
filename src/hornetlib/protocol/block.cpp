@@ -39,15 +39,19 @@ static Block CreateGenesisBlockFromBinary() {
 
 static Block CreateGenesisBlock() {
   const Block block = CreateGenesisBlockFromBinary();
-  encoding::Writer writer;
-  block.Serialize(writer);
-  const auto& serialized = writer.Buffer();
+
+  {
+    // As a sanity check, validate that the instantiated block serializes to match our genesis bytes.
+    encoding::Writer writer;
+    block.Serialize(writer);
+    const auto& serialized = writer.Buffer();
   const auto& original = genesis::kRawBytes;
-  if (serialized.size() != original.size() ||
-      !std::equal(serialized.begin(), serialized.end(), original.begin()))
-    util::ThrowRuntimeError("CreateGenesisBlock serialization mismatch.");
-  if (block.Header().ComputeHash() != kGenesisHash)
-    util::ThrowRuntimeError("CreateGenesisBlock header hash mismatch.");
+    if (serialized.size() != original.size() ||
+        !std::equal(serialized.begin(), serialized.end(), original.begin()))
+      util::ThrowRuntimeError("CreateGenesisBlock serialization mismatch.");
+    if (block.Header().ComputeHash() != kGenesisHash)
+      util::ThrowRuntimeError("CreateGenesisBlock header hash mismatch.");
+  }
   return block;
 }
 
