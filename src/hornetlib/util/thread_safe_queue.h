@@ -4,6 +4,7 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
+#include <algorithm>
 #include <condition_variable>
 #include <deque>
 #include <mutex>
@@ -38,7 +39,7 @@ class ThreadSafeQueue {
         cv_.wait(lock, [&] { return is_stopped_ || !queue_.empty(); });
     } else {
         if (!cv_.wait_for(lock, timeout.RemainingMs(), [&] { return is_stopped_ || !queue_.empty(); })) {
-            return {};  // Timeout
+            return std::nullopt;  // Timeout
         }
     }
     if (!is_stopped_ && !queue_.empty()) {
@@ -47,11 +48,6 @@ class ThreadSafeQueue {
       return std::move(item);  // Explicit zero-copy return.
     }
     return {};
-  }
-
-  const T& Back() const {
-    std::scoped_lock lock{mutex_};
-    return queue_.back();
   }
 
   template <typename Pred>

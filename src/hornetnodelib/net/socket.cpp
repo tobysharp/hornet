@@ -117,6 +117,12 @@ std::optional<int> Socket::Write(std::span<const uint8_t> data) const {
   if (fd_ < 0) {
     throw std::runtime_error("Write on closed socket.");
   }
+  
+  // TODO: Apparently using ::write to a closed/reset TCP socket can raise SIGPIPE and
+  // kill the process. The fix may be to switch to ::send(..., MSG_NOSIGNAL) on Linux,
+  // while other platforms have different requirements. 
+  // https://linear.app/hornet-node/issue/HOR-53/prevent-sigpipe-from-killing-the-process-unexpectedly
+
   ssize_t n = write(fd_, data.data(), data.size());
   if (n < 0) {
     const int error = errno;

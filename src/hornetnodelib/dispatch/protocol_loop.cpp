@@ -91,6 +91,11 @@ net::PeerManager::PollResult ProtocolLoop::PollReadWrite() {
   // robustly secure against malicious peers.
   // https://linear.app/hornet-node/issue/HOR-39/per-peer-inbox-queues
 
+  // TODO: Note that if our connection queues are currently empty and there's no work to be done
+  // we will enter the poll with a timeout of kMaxPollTimeoutMs, and if another thread broadcasts an
+  // outbound message to our outbox during our blocking period, we will not wake up to service that
+  // newly arriving work item. We will only discover the work when the poll times out.
+
   auto ready = peers_.PollReadWrite(timeout_ms, [](const net::Peer& peer) {
     return peer.GetConnection().QueuedWriteBufferCount() > 0;
   });
