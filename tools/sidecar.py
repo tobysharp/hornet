@@ -1,154 +1,119 @@
 #!/usr/bin/env python3
-# Hornet demo sidecar (lean): SSE server + TCP JSONL client + UDP metrics + static /assets/
-import asyncio, json, os, signal, sys
-from aiohttp import web
+import asyncio, json, contextlib
+from collections import deque
+from pathlib import Path
+from aiohttp import web, ClientConnectionError
 
-TCP_JSON_HOST, TCP_JSON_PORT = "127.0.0.1", 8650
-UDP_METRICS_HOST, UDP_METRICS_PORT = "127.0.0.1", 9999
-HTTP_HOST, HTTP_PORT = "127.0.0.1", 8645
+TCP_PORT = 8646
+HTTP_PORT = 8645
+EVENTS = ["console", "reliable", "metrics", "clear"]
+EV_CONSOLE, EV_RELIABLE, EV_METRICS, EV_CLEAR = range(4)
+BASE_DIR = Path(__file__).resolve().parent
 
-SUBS: set[web.StreamResponse] = set()
+replay = deque(maxlen=512)
+last_metrics: str | None = None
+subscribers: set[asyncio.Queue[str]] = set()
 
-async def broadcast_async(event: str, payload):
-    if not SUBS: return
-    data = json.dumps(payload, separators=(",", ":"))
-    msg = f"event: {event}\ndata: {data}\n\n".encode("utf-8")
-    dead = []
-    for resp in list(SUBS):
+def sse_frame(idx: int, obj: dict) -> str:
+    return f"event: {EVENTS[idx]}\ndata: {json.dumps(obj, separators=(',',':'))}\n\n"
+
+def event_index_for(p: dict) -> int:
+    t = str(p.get("type", "")).lower()
+    if t == "log":    return EV_CONSOLE
+    if t == "event":  return EV_RELIABLE
+    if t == "update": return EV_METRICS
+    if t == "clear":  return EV_CLEAR
+    return EV_CONSOLE  # default -> console
+
+async def index_handler(_: web.Request) -> web.StreamResponse:
+    return web.FileResponse(BASE_DIR / "live_status.html")
+
+async def fanout(event_idx: int, obj: dict):
+    frame = sse_frame(event_idx, obj)
+    if event_idx in (EV_CONSOLE, EV_RELIABLE):
+        replay.append(frame)
+    else:
+        global last_metrics
+        last_metrics = frame
+    for q in tuple(subscribers):
         try:
-            await resp.write(msg)
-        except Exception:
-            dead.append(resp)
-    for d in dead:
-        SUBS.discard(d)
-
-class UdpMetrics(asyncio.DatagramProtocol):
-    def datagram_received(self, data, addr):
-        try:
-            s = data.decode("utf-8", "ignore").strip()
-            if not s: return
-            obj = json.loads(s)
-            asyncio.create_task(broadcast_async("metrics", obj))
-        except Exception:
+            q.put_nowait(frame)
+        except asyncio.QueueFull:
             pass
 
-async def udp_metrics_server(loop) -> bool:
-    try:
-        await loop.create_datagram_endpoint(lambda: UdpMetrics(),
-                                            local_addr=(UDP_METRICS_HOST, UDP_METRICS_PORT))
-        return True
-    except OSError as e:
-        print(f"[sidecar] unable to bind UDP metrics {UDP_METRICS_HOST}:{UDP_METRICS_PORT} ({e}); continuing without UDP",
-              file=sys.stderr, flush=True)
-        return False
-
-async def tcp_jsonl_client():
-    while True:
-        try:
-            reader, writer = await asyncio.open_connection(TCP_JSON_HOST, TCP_JSON_PORT)
-            while True:
-                line = await reader.readline()
-                if not line: break
-                s = line.decode("utf-8","ignore").strip()
-                if not s: continue
-                try:
-                    obj = json.loads(s)
-                except Exception:
-                    await broadcast_async("console", {"msg": s})
-                    continue
-                t = obj.get("t")
-                if t == "console":
-                    await broadcast_async("console", {"msg": obj.get("msg","")})
-                elif t == "reliable":
-                    await broadcast_async("reliable", obj)
-                elif t == "metrics":
-                    await broadcast_async("metrics", obj)
-                else:
-                    await broadcast_async("console", {"msg": s})
-            writer.close(); await writer.wait_closed()
-        except (ConnectionRefusedError, OSError):
-            await asyncio.sleep(0.5)
-        except asyncio.CancelledError:
-            return
-        await asyncio.sleep(0.5)
-
-async def index_handler(request: web.Request):
-    base = os.path.dirname(os.path.abspath(__file__))
-    html_path = os.path.join(base, "live_status.html")
-    if not os.path.exists(html_path):
-        html_path = os.path.abspath("live_status.html")
-    return web.FileResponse(html_path)
-
-async def sse_handler(request: web.Request):
-    resp = web.StreamResponse(status=200, reason="OK", headers={
+async def sse(_: web.Request) -> web.StreamResponse:
+    resp = web.StreamResponse(status=200, headers={
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
         "X-Accel-Buffering": "no",
-        "Access-Control-Allow-Origin": "*",
     })
-    await resp.prepare(request)
-    SUBS.add(resp)
+    await resp.prepare(_)
+
+    async def write(frame: str) -> bool:
+        try:
+            await resp.write(frame.encode())
+            return True
+        except (ClientConnectionError, ConnectionResetError, BrokenPipeError, RuntimeError):
+            return False
+
+    # Priming + initial state
+    if not await write(": open\n\n"):
+        return resp
+    for f in replay:
+        if not await write(f): return resp
+    if last_metrics is not None:
+        if not await write(last_metrics): return resp
+
+    q: asyncio.Queue[str] = asyncio.Queue(maxsize=1024)
+    subscribers.add(q)
     try:
-        await resp.write(b": ok\n\n")
         while True:
-            await asyncio.sleep(3600)
+            frame = await q.get()
+            if not await write(frame):  # client went away
+                break
     except asyncio.CancelledError:
         pass
     finally:
-        SUBS.discard(resp)
+        subscribers.discard(q)
+        with contextlib.suppress(Exception):
+            await resp.write_eof()
     return resp
 
-async def pause_api(request: web.Request):  return web.Response(text="OK")
-async def resume_api(request: web.Request): return web.Response(text="OK")
-async def pid_api(request: web.Request):    return web.json_response({"pid": os.getpid()})
+async def tcp_handler(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+    try:
+        # Clear all dashboards on new Hornet TCP session
+        await fanout(EV_CLEAR, {})
+        while not reader.at_eof():
+            line = await reader.readline()
+            if not line:
+                break
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            await fanout(event_index_for(obj), obj)
+    finally:
+        writer.close()
+        await writer.wait_closed()
 
 async def main():
-    loop = asyncio.get_running_loop()
-    tasks = [asyncio.create_task(tcp_jsonl_client())]
-    udp_ok = await udp_metrics_server(loop)
-
     app = web.Application()
+    app.router.add_get("/stream", sse)
     app.router.add_get("/", index_handler)
-    app.router.add_get("/stream", sse_handler)
-    app.router.add_post("/api/pause", pause_api)
-    app.router.add_post("/api/resume", resume_api)
-    app.router.add_get("/api/pid", pid_api)
+    app.router.add_static("/assets/", BASE_DIR, name="assets")
 
-    # serve static assets (banner image, etc.) from this folder under /assets/
-    base = os.path.dirname(os.path.abspath(__file__))
-    app.router.add_static("/assets/", base, show_index=False)
+    runner = web.AppRunner(app); await runner.setup()
+    site = web.TCPSite(runner, "127.0.0.1", HTTP_PORT); await site.start()
+    print(f"[HTTP] SSE at http://127.0.0.1:{HTTP_PORT}/stream", flush=True)
 
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, HTTP_HOST, HTTP_PORT)
-    try:
-        await site.start()
-    except OSError as e:
-        print(f"[sidecar] unable to bind HTTP {HTTP_HOST}:{HTTP_PORT} ({e}); exiting",
-              file=sys.stderr, flush=True)
-        await runner.cleanup()
-        for t in tasks: t.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-        return
-
-    udp_info = (f"UDP {UDP_METRICS_HOST}:{UDP_METRICS_PORT}" if udp_ok else "UDP metrics disabled")
-    print(f"[sidecar] HUD http://{HTTP_HOST}:{HTTP_PORT}/  |  TCP JSONL {TCP_JSON_HOST}:{TCP_JSON_PORT}  |  {udp_info}", file=sys.stderr)
-
-    stop = loop.create_future()
-    def _trip():
-        if not stop.done():
-            stop.set_result(True)
-    try:
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            loop.add_signal_handler(sig, _trip)
-    except NotImplementedError:
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            signal.signal(sig, lambda s, f: _trip())
-    await stop
-    for t in tasks: t.cancel()
-    await asyncio.gather(*tasks, return_exceptions=True)
-    await runner.cleanup()
+    server = await asyncio.start_server(tcp_handler, "127.0.0.1", TCP_PORT)
+    print(f"[TCP] listening on 127.0.0.1:{TCP_PORT}", flush=True)
+    async with server:
+        await server.serve_forever()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
