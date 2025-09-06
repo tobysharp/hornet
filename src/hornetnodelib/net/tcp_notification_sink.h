@@ -94,11 +94,11 @@ class TcpNotificationSink {
   static std::string_view ToString(util::NotificationType type) {
     switch (type) {
       case util::NotificationType::Log:
-        return "Log";
+        return "log";
       case util::NotificationType::Discrete:
-        return "Event";
+        return "event";
       case util::NotificationType::Continuous:
-        return "Update";
+        return "update";
     }
   }
 
