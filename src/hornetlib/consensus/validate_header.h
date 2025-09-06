@@ -21,13 +21,14 @@ inline constexpr int kTimestampTolerance = 2 * 60 * 60;
 }  // namespace constants
 
 namespace detail {
-inline bool IsVersionValidAtHeight(int version, int height) {
+inline bool IsVersionValidAtHeight(int32_t version, int height) {
   constexpr std::array<BIP, 4> kVersionExpiryToBIP = {
-      static_cast<BIP>(-1),  // v0 invalid from genesis, never queried.
-      BIP34, BIP66, BIP65    // v1, v2, v3 retired with BIP34, BIP66, BIP65.
+      BIP34, BIP34,   // v0, v1 retired with BIP34.
+      BIP66, BIP65    // v2, v3 retired with BIP66, BIP65.
   };
-  if (version <= 0 || version >= std::ssize(kVersionExpiryToBIP)) return false;
-  return !IsBIPEnabledAtHeight(kVersionExpiryToBIP[version], height);
+  if (version >= std::ssize(kVersionExpiryToBIP)) return true;
+  const int index = std::max(0, version);
+  return !IsBIPEnabledAtHeight(kVersionExpiryToBIP[index], height);
 }
 }  // namespace detail
 
@@ -39,12 +40,14 @@ using HeaderResult = std::variant<model::HeaderContext, HeaderError>;
   const int height = parent.height + 1;
 
   // Verify previous hash
-  if (parent.hash != header.GetPreviousBlockHash()) return HeaderError::ParentNotFound;
+  if (parent.hash != header.GetPreviousBlockHash()) 
+    return HeaderError::ParentNotFound;
 
   // Verify PoW target is valid and is achieved by the header's hash.
   const auto hash = header.ComputeHash();
   const auto target = header.GetCompactTarget().Expand();
-  if (!(hash <= target)) return HeaderError::InvalidProofOfWork;
+  if (!(hash <= target)) 
+    return HeaderError::InvalidProofOfWork;
 
   // Verify PoW target obeys the difficulty adjustment rules.
   protocol::CompactTarget expected_bits = parent.data.GetCompactTarget();
@@ -57,10 +60,12 @@ using HeaderResult = std::variant<model::HeaderContext, HeaderError>;
     expected_bits = ComputeCompactTarget(height, parent.data.GetCompactTarget(), period_start_time,
                                          period_end_time);
   }
-  if (expected_bits != header.GetCompactTarget()) return HeaderError::BadDifficultyTransition;
+  if (expected_bits != header.GetCompactTarget()) 
+    return HeaderError::BadDifficultyTransition;
 
   // Verify median of recent timestamps.
-  if (header.GetTimestamp() <= view.MedianTimePast()) return HeaderError::BadTimestamp;
+  if (header.GetTimestamp() <= view.MedianTimePast()) 
+    return HeaderError::BadTimestamp;
 
   // Verify that the timestamp isn't too far in the future.
   const auto now = std::chrono::system_clock::now().time_since_epoch();
@@ -69,7 +74,8 @@ using HeaderResult = std::variant<model::HeaderContext, HeaderError>;
     return HeaderError::BadTimestamp;
 
   // Verify that the version number is allowed at this height.
-  if (!detail::IsVersionValidAtHeight(header.GetVersion(), height)) return HeaderError::BadVersion;
+  if (!detail::IsVersionValidAtHeight(header.GetVersion(), height)) 
+    return HeaderError::BadVersion;
 
   return parent.Extend(header, hash);
 }
