@@ -10,8 +10,6 @@ EVENTS = ["console", "reliable", "metrics", "clear"]
 EV_CONSOLE, EV_RELIABLE, EV_METRICS, EV_CLEAR = range(4)
 BASE_DIR = Path(__file__).resolve().parent
 
-replay = deque(maxlen=512)
-last_metrics: str | None = None
 subscribers: set[asyncio.Queue[str]] = set()
 
 def sse_frame(idx: int, obj: dict) -> str:
@@ -30,11 +28,6 @@ async def index_handler(_: web.Request) -> web.StreamResponse:
 
 async def fanout(event_idx: int, obj: dict):
     frame = sse_frame(event_idx, obj)
-    if event_idx in (EV_CONSOLE, EV_RELIABLE):
-        replay.append(frame)
-    else:
-        global last_metrics
-        last_metrics = frame
     for q in tuple(subscribers):
         try:
             q.put_nowait(frame)
@@ -60,10 +53,6 @@ async def sse(_: web.Request) -> web.StreamResponse:
     # Priming + initial state
     if not await write(": open\n\n"):
         return resp
-    for f in replay:
-        if not await write(f): return resp
-    if last_metrics is not None:
-        if not await write(last_metrics): return resp
 
     q: asyncio.Queue[str] = asyncio.Queue(maxsize=1024)
     subscribers.add(q)
