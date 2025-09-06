@@ -15,6 +15,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "hornetlib/util/throw.h"
 #include "hornetnodelib/net/socket.h"
 
 namespace hornet::node::net {
@@ -134,17 +135,21 @@ std::optional<int> Socket::Write(std::span<const uint8_t> data) const {
 }
 
 std::optional<int> Socket::Read(std::span<uint8_t> buffer) const {
+  static constexpr int kMaxRetries = 10;
   if (fd_ < 0) {
     throw std::runtime_error("Read on closed socket.");
   }
-  ssize_t n = read(fd_, buffer.data(), buffer.size());
-  if (n < 0) {
-    const int error = errno;
-    if ((error == EAGAIN) || (error == EWOULDBLOCK))
-      return {};  // Non-blocking mode without data.
-    throw std::runtime_error("Socket read failed");
+  int e = 0;
+  for (int i = 0; i < kMaxRetries; ++i) {
+    ssize_t n = read(fd_, buffer.data(), buffer.size());
+    if (n > 0) return n;
+    if (n == 0) return {};  // EOF, drop connection cleanly
+    e = errno;
+    if (e == EINTR) continue;  // Retry
+    if (e == EAGAIN || e == EWOULDBLOCK) return 0;  // No data, try later
+    if (e == ECONNRESET || e == ETIMEDOUT || e == ENOTCONN || e == EIO) return {};  // Treat as EOF.
   }
-  return n;
+  util::ThrowRuntimeError("Socket read failed: ", std::strerror(e), " (errno ", e, ")");
 }
 
 }  // namespace hornet::node::net
