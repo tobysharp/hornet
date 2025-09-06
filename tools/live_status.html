@@ -1,220 +1,57 @@
 <!doctype html>
-<!-- HORNUI v2025-08-31-a -->
 <meta charset="utf-8">
 <title>Hornet Initial Block Download</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root {
-    --bg: #0b0c0f;
-    --panel: #12151a;
-    --ink: #e7ecf3;
-    --muted: #9aa8b6;
-    --accent: #3aa3ff;
-    --ok: #00d68f;
-    --err: #ff5c77;
+    --bg:#0b0c0f; --panel:#12151a; --ink:#e7ecf3; --muted:#9aa8b6;
+    --accent:#3aa3ff; --ok:#00d68f; --err:#ff5c77;
+  }
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
+
+  header{display:flex;gap:10px;align-items:center;padding:12px 16px;border-bottom:1px solid #1b1f27;background:#0e1116;position:sticky;top:0;z-index:5}
+  header h3{margin:0;font-weight:600}
+  .badge{display:inline-block;border:1px solid #223249;background:#0f1826;color:#cfe7ff;border-radius:999px;padding:2px 10px;margin-right:8px;font-size:12px}
+  .btn{background:#122034;color:var(--ink);border:1px solid #223249;border-radius:8px;padding:6px 10px;cursor:pointer}
+  .btn[disabled]{opacity:.5;cursor:not-allowed}
+  .banner{width:100%;height:200px;background:url('/assets/hornet.png') center/cover no-repeat;border-bottom:1px solid #1b1f27}
+
+  main{display:grid;grid-template-columns:360px 1fr;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid #1b2130;border-radius:12px;padding:12px}
+  .kv{display:grid;grid-template-columns:160px 1fr;gap:8px}
+  .kv>div{display:flex;align-items:center}
+  .progress{height:8px;background:#0f141c;border:1px solid #1b2230;border-radius:6px;overflow:hidden}
+  .bar{height:100%;background:var(--accent);width:0%}
+  .kv .progress{width:100%}
+
+  #console{
+    font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    height:65vh; overflow:auto; overflow-x:auto; white-space:pre;
+    background:#0f141c; border:1px solid #1b2230; border-radius:8px; padding:8px;
+    contain:content;
+  }
+  #events{display:flex;flex-direction:column;gap:6px;max-height:30vh;overflow:auto}
+  .event{font:12px;display:flex;gap:8px;align-items:center}
+  .pill{border-radius:6px;padding:2px 6px;border:1px solid #223249;background:#0f1826;color:#cfe7ff}
+  .pill.ok{border-color:#0b3e2e;background:#0a1a16;color:#98ffd8}
+  .pill.err{border-color:#5c1f2a;background:#220a0f;color:#ff8da1}
+  .muted{color:var(--muted)}
+  .num{font-variant-numeric:tabular-nums;text-align:right}
+  .kv>div.num{justify-content:flex-end}
+  .stale{opacity:.65}
+
+  /* Console line coloring */
+  #console .log-line{display:block;position:relative;}
+  .log-debug{color:#969696}.log-info{color:#e7ecf3}.log-warn{color:#ffd166}.log-error{color:#ff5c77}
+
+  /* Single-line “latest” marker (no animations). Exactly one line has this at any time. */
+  #console .log-line.latest::before{
+    content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--accent);
   }
 
-  html,
-  body {
-    margin: 0;
-    height: 100%;
-    background: var(--bg);
-    color: var(--ink);
-    font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial
-  }
-
-  header {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    padding: 12px 16px;
-    border-bottom: 1px solid #1b1f27;
-    background: #0e1116;
-    position: sticky;
-    top: 0;
-    z-index: 5
-  }
-
-  header h3 {
-    margin: 0;
-    font-weight: 600
-  }
-
-  .badge {
-    display: inline-block;
-    border: 1px solid #223249;
-    background: #0f1826;
-    color: #cfe7ff;
-    border-radius: 999px;
-    padding: 2px 10px;
-    margin-right: 8px;
-    font-size: 12px
-  }
-
-  .btn {
-    background: #122034;
-    color: var(--ink);
-    border: 1px solid #223249;
-    border-radius: 8px;
-    padding: 6px 10px;
-    cursor: pointer
-  }
-
-  .btn[disabled] {
-    opacity: .5;
-    cursor: not-allowed
-  }
-
-  .banner {
-    width: 100%;
-    height: 200px;
-    background: url('/assets/hornet.png') center/cover no-repeat;
-    border-bottom: 1px solid #1b1f27
-  }
-
-  main {
-    display: grid;
-    grid-template-columns: 360px 1fr;
-    gap: 16px;
-    padding: 16px
-  }
-
-  .card {
-    background: var(--panel);
-    border: 1px solid #1b2130;
-    border-radius: 12px;
-    padding: 12px
-  }
-
-  .kv {
-    display: grid;
-    grid-template-columns: 160px 1fr;
-    gap: 8px
-  }
-
-  .kv>div {
-    display: flex;
-    align-items: center
-  }
-
-  .progress {
-    height: 8px;
-    background: #0f141c;
-    border: 1px solid #1b2230;
-    border-radius: 6px;
-    overflow: hidden
-  }
-
-  .bar {
-    height: 100%;
-    background: var(--accent);
-    width: 0%
-  }
-
-  .kv .progress {
-    width: 100%;
-  }
-
-  #console {
-    font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    height: 65vh;
-    overflow: auto;
-    overflow-x: auto;
-    white-space: pre;
-    background: #0f141c;
-    border: 1px solid #1b2230;
-    border-radius: 8px;
-    padding: 8px
-  }
-
-  #events {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    max-height: 30vh;
-    overflow: auto
-  }
-
-  .event {
-    font: 12px;
-    display: flex;
-    gap: 8px;
-    align-items: center
-  }
-
-  .pill {
-    border-radius: 6px;
-    padding: 2px 6px;
-    border: 1px solid #223249;
-    background: #0f1826;
-    color: #cfe7ff
-  }
-
-  .pill.ok {
-    border-color: #0b3e2e;
-    background: #0a1a16;
-    color: #98ffd8
-  }
-
-  .pill.err {
-    border-color: #5c1f2a;
-    background: #220a0f;
-    color: #ff8da1
-  }
-
-  .muted {
-    color: #9aa8b6
-  }
-
-  .num {
-    font-variant-numeric: tabular-nums;
-    text-align: right;
-  }
-
-  /* Right-align number cells inside the kv grid (each cell is a flex container) */
-  .kv>div.num {
-    justify-content: flex-end;
-  }
-
-  .stale {
-    opacity: 0.65
-  }
-
-  /* Console line coloring + recent highlight */
-  .log-line {
-    display: block
-  }
-
-  .log-debug {
-    color: #c9c9ca
-  }
-
-  .log-info {
-    color: #e7ecf3
-  }
-
-  .log-warn {
-    color: #ffd166
-  }
-
-  .log-error {
-    color: #ff5c77
-  }
-
-  .recent {
-    animation: flash 1.2s ease-out
-  }
-
-  @keyframes flash {
-    0% {
-      background: rgba(58, 163, 255, 0.25)
-    }
-
-    100% {
-      background: transparent
-    }
-  }
+  /* Keep your global .recent for other widgets if you want; it won’t be used for console lines */
 </style>
+
 <div class="banner"></div>
 <header>
   <h3>Hornet Initial Block Download</h3>
@@ -225,6 +62,7 @@
   <span style="flex:1"></span>
   <button id="btnUiPause" class="btn">Freeze</button>
 </header>
+
 <main>
   <div class="card">
     <div class="kv">
@@ -233,244 +71,209 @@
       <div id="label_blocks">Blocks validated</div>
       <div id="blocks_validated" class="num">—</div>
       <div id="label_progress">Sync Progress</div>
-      <div style="flex:1">
-        <div class="progress">
-          <div id="bar" class="bar"></div>
-        </div>
-      </div>
+      <div style="flex:1"><div class="progress"><div id="bar" class="bar"></div></div></div>
     </div>
     <div style="margin-top:10px">
       <div class="muted" style="margin-bottom:6px">Recent Events</div>
       <div id="events"></div>
     </div>
   </div>
+
   <div class="card">
     <div id="console"></div>
   </div>
 </main>
+
 <script>
-  // Unified ordering toggle
-  const TOP_NEWEST = true;//false; // true => newest at top; false => newest at bottom
+  const TOP_NEWEST = true; // newest at top?
+  const PHASE = {0:'Headers',1:'Blocks',2:'Done'};
 
-  const PHASE = { 0: 'Headers', 1: 'Blocks', 2: 'Done' };
   const es = new EventSource('/stream');
-  const statusEl = document.getElementById('status');
-  const phaseEl = document.getElementById('phase');
-  const rateEl = document.getElementById('rate');
-  const peersEl = document.getElementById('peers');
-  const hEl = document.getElementById('headers_total');
-  const bEl = document.getElementById('blocks_validated');
-  const barEl = document.getElementById('bar');
-  const consoleEl = document.getElementById('console');
-  const eventsEl = document.getElementById('events');
-  const labelHeaders = document.getElementById('label_headers');
-  const labelBlocks = document.getElementById('label_blocks');
-  const labelProgress = document.getElementById('label_progress');
+  const statusEl=document.getElementById('status');
+  const phaseEl=document.getElementById('phase');
+  const rateEl=document.getElementById('rate');
+  const peersEl=document.getElementById('peers');
+  const hEl=document.getElementById('headers_total');
+  const bEl=document.getElementById('blocks_validated');
+  const barEl=document.getElementById('bar');
+  const consoleEl=document.getElementById('console');
+  const eventsEl=document.getElementById('events');
+  const labelHeaders=document.getElementById('label_headers');
+  const labelBlocks=document.getElementById('label_blocks');
+  const labelProgress=document.getElementById('label_progress');
 
-  // ----- UI pause (drop updates when true) -----
-  let uiPaused = false;
-  const btnUiPause = document.getElementById('btnUiPause');
-  btnUiPause.onclick = () => {
-    uiPaused = !uiPaused;
-    btnUiPause.textContent = uiPaused ? 'Unfreeze' : 'Freeze';
-    if (uiPaused) {
-      applyStalenessForPacket(-1);
-      phaseEl.classList.add('stale');
-      barEl.classList.add('stale');
-      labelHeaders.classList.add('stale');
-      labelBlocks.classList.add('stale');
-      labelProgress.classList.add('stale');
-    }
+  // Freeze
+  let uiPaused=false;
+  btnUiPause.onclick=()=>{uiPaused=!uiPaused;btnUiPause.textContent=uiPaused?'Unfreeze':'Freeze';
+    if(uiPaused){applyStalenessForPacket(-1);[phaseEl,barEl,labelHeaders,labelBlocks,labelProgress].forEach(el=>el.classList.add('stale'));}};
+
+  // Helpers
+  function fmtInt(n){return (typeof n==='number')?n.toLocaleString():n;}
+  function clamp(x,lo,hi){return Math.max(lo,Math.min(hi,x));}
+  function formatLogPrefix(level,time_us){
+    if(!Number.isFinite(time_us)) return '';
+    const ms=Math.floor(time_us/1000),d=new Date(ms);
+    const pad=(n,w=2)=>String(n).padStart(w,'0');
+    const hh=pad(d.getHours()),mm=pad(d.getMinutes()),ss=pad(d.getSeconds());
+    const subsecs=pad(Math.floor((time_us%1_000_000)/100),4);
+    const lvl=(level??'').toUpperCase(); const padLvl=lvl+(lvl.length<5?' ':'');
+    return `[${padLvl} ${hh}:${mm}:${ss}.${subsecs}] `;
+  }
+  function classifyLine(line){
+    if(line.includes('ERROR'))return'log-error';
+    if(line.includes('WARN')) return'log-warn';
+    if(line.includes('DEBUG'))return'log-debug';
+    return'log-info';
+  }
+
+  // Staleness tracking
+  const PILL_FIELDS={
+    phase:{el:phaseEl,fmt:(x)=>`Phase: ${PHASE[x]??x}`},
+    headers_rate_hz:{el:rateEl,fmt:(x)=>`Headers/sec: ${x.toFixed?x.toFixed(1):x}`},
+    peers:{el:peersEl,fmt:(x)=>`Peers: ${x}`},
   };
-
-  // ----- Helpers -----
-  function fmtInt(n) { return (typeof n === 'number') ? n.toLocaleString() : n; }
-  function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
-  function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-  function formatLogPrefix(level, time_us) {
-    if (!Number.isFinite(time_us)) return '';
-    const ms = Math.floor(time_us / 1000);
-    const date = new Date(ms);
-
-    const pad = (n, d = 2) => String(n).padStart(d, '0');
-
-    const hours = pad(date.getHours());
-    const minutes = pad(date.getMinutes());
-    const seconds = pad(date.getSeconds());
-
-    const subsecs = pad(Math.floor((time_us % 1_000_000) / 100), 4);  // .xxxx
-
-    const lvl = (level ?? '').toUpperCase();
-    const padLvl = lvl + (lvl.length < 5 ? ' ' : '');
-
-    return `[${padLvl} ${hours}:${minutes}:${seconds}.${subsecs}] `;
-  }
-
-  // ----- Staleness tracking -----
-  const PILL_FIELDS = {
-    phase: { el: phaseEl, fmt: (x) => `Phase: ${PHASE[x] ?? x}` },
-    headers_rate_hz: { el: rateEl, fmt: (x) => `Headers/sec: ${x.toFixed ? x.toFixed(1) : x}` },
-    peers: { el: peersEl, fmt: (x) => `Peers: ${x}` },
+  const CARD_FIELDS={
+    headers_validated:{el:hEl,labelEl:labelHeaders,fmt:fmtInt},
+    headers_total:{el:hEl,labelEl:labelHeaders,fmt:fmtInt},
+    blocks_validated:{el:bEl,labelEl:labelBlocks,fmt:fmtInt},
+    progress_bar:{el:barEl,labelEl:labelProgress},
   };
-  const CARD_FIELDS = {
-    headers_validated: { el: hEl, labelEl: labelHeaders, fmt: fmtInt },
-    headers_total: { el: hEl, labelEl: labelHeaders, fmt: fmtInt }, // alias
-    blocks_validated: { el: bEl, labelEl: labelBlocks, fmt: fmtInt },
-    progress_bar: { el: barEl, labelEl: labelProgress },
-  };
-  let lastPacketSeen = 0;
-  const fieldSeenAt = new WeakMap(); // el -> packet index
+  let lastPacketSeen=0;
+  const fieldSeenAt=new WeakMap();
+  function setMetric(key,val,packetId){
+    const rec=PILL_FIELDS[key]||CARD_FIELDS[key]; if(!rec) return;
+    const el=rec.el,fmt=rec.fmt||String;
+    if(val!=null){
+      if(el===barEl){el.classList.remove('stale');}
+      else{el.textContent=fmt(val);el.classList.remove('stale');}
+      if(rec.labelEl){rec.labelEl.classList.remove('stale');fieldSeenAt.set(rec.labelEl,packetId);}
+      fieldSeenAt.set(el,packetId);
+    }
+  }
+  function applyStalenessForPacket(packetId){
+    const recs=[...Object.values(PILL_FIELDS),...Object.values(CARD_FIELDS)];
+    const uniqEls=new Set(recs.flatMap(r=>[r.el,r.labelEl].filter(Boolean)));
+    uniqEls.forEach(el=>{const seen=fieldSeenAt.get(el); if(seen!==packetId) el.classList.add('stale');});
+  }
 
-  function setMetric(key, val, packetId) {
-    const rec = PILL_FIELDS[key] || CARD_FIELDS[key]; if (!rec) return;
-    const el = rec.el, fmt = rec.fmt || String;
-    if (val != null) {
-      if (el === barEl) {
-        el.classList.remove('stale');
-      } else {
-        el.textContent = fmt(val);
-        el.classList.remove('stale');
-      }
-      if (rec.labelEl) {
-        rec.labelEl.classList.remove('stale');
-        fieldSeenAt.set(rec.labelEl, packetId);
-      }
-      fieldSeenAt.set(el, packetId);
+  // Console: minimal DOM ring + single “latest” marker (no animations/timers)
+  const CONSOLE_MAX_LINES=2000;
+  const BACKLOG_CAP=800; // drop-old safeguard under firehose
+  const pendingLines=[];
+  let rafQueued=false;
+  let latestEl=null;
+
+  function appendConsole(line){
+    // backpressure: keep only the most recent BACKLOG_CAP lines queued
+    if(pendingLines.length>=BACKLOG_CAP) pendingLines.splice(0,pendingLines.length-BACKLOG_CAP+1);
+    pendingLines.push(line);
+    if(!rafQueued){rafQueued=true;requestAnimationFrame(flushConsole);}
+  }
+
+  function flushConsole(){
+    rafQueued=false;
+    if(!pendingLines.length) return;
+
+    const frag=document.createDocumentFragment();
+    for(let i=0;i<pendingLines.length;++i){
+      const line=pendingLines[i];
+      const el=document.createElement('span');
+      el.className='log-line '+classifyLine(line);
+      el.textContent=line;
+      frag.appendChild(el);
+    }
+    const count=pendingLines.length;
+    pendingLines.length=0;
+
+    if(TOP_NEWEST) consoleEl.insertBefore(frag,consoleEl.firstChild);
+    else           consoleEl.appendChild(frag);
+
+    // Trim
+    while(consoleEl.children.length>CONSOLE_MAX_LINES){
+      if(TOP_NEWEST) consoleEl.removeChild(consoleEl.lastChild);
+      else           consoleEl.removeChild(consoleEl.firstChild);
+    }
+
+    // Update single “latest” marker (exactly one line highlighted)
+    if(latestEl) latestEl.classList.remove('latest');
+    latestEl = TOP_NEWEST ? consoleEl.firstElementChild : consoleEl.lastElementChild;
+    if(latestEl) latestEl.classList.add('latest');
+
+    // Scroll: only auto-scroll when user is already at the flow end
+    if(TOP_NEWEST){
+      // If user is at/near top, keep pinned
+      const nearTop = consoleEl.scrollTop <= 8;
+      if(nearTop) consoleEl.scrollTop = 0;
+    }else{
+      const nearBottom = (consoleEl.scrollHeight - consoleEl.clientHeight - consoleEl.scrollTop) < 8;
+      if(nearBottom) consoleEl.scrollTop = consoleEl.scrollHeight;
     }
   }
 
-  function applyStalenessForPacket(packetId) {
-    const recs = [...Object.values(PILL_FIELDS), ...Object.values(CARD_FIELDS)];
-    const uniqEls = new Set(recs.flatMap(r => [r.el, r.labelEl].filter(Boolean)));
-    uniqEls.forEach(el => {
-      const seen = fieldSeenAt.get(el);
-      if (seen !== packetId) el.classList.add('stale');
-    });
-  }
+  // SSE
+  es.onopen = ()=>{statusEl.textContent='SSE: connected';};
+  es.onerror= ()=>{statusEl.textContent='SSE: reconnecting…';};
 
-  // ----- Console buffer + coloring -----
-  const CONSOLE_MAX_LINES = 2000;
-  const CONSOLE_REWRITE_INTERVAL = 50;
-  let consoleLines = [];
-  let sinceRewrite = 0;
-
-  function classifyLine(line) {
-    if (line.includes('ERROR')) return 'log-error';
-    if (line.includes('WARN')) return 'log-warn';
-    if (line.includes('DEBUG')) return 'log-debug';
-    return 'log-info';
-  }
-
-  function appendConsole(line) {
-    const cls = classifyLine(line);
-    const base = '<span class="log-line ' + cls + '">' + escapeHtml(line) + '</span>';
-
-    if (TOP_NEWEST) {
-      consoleLines.unshift(base);
-      if (consoleLines.length > CONSOLE_MAX_LINES) consoleLines.pop();
-      const recentHTML = '<span class="log-line ' + cls + ' recent">' + escapeHtml(line) + '</span>';
-      consoleEl.insertAdjacentHTML('afterbegin', recentHTML);
-      consoleEl.scrollTop = 0;
-      const node = consoleEl.firstElementChild;
-      if (node) setTimeout(function () { node.classList.remove('recent'); }, 800);
-    } else {
-      consoleLines.push(base);
-      if (consoleLines.length > CONSOLE_MAX_LINES) consoleLines.shift();
-      const recentHTML = '<span class="log-line ' + cls + ' recent">' + escapeHtml(line) + '</span>';
-      consoleEl.insertAdjacentHTML('beforeend', recentHTML);
-      consoleEl.scrollTop = consoleEl.scrollHeight;
-      const node = consoleEl.lastElementChild;
-      if (node) setTimeout(function () { node.classList.remove('recent'); }, 800);
-    }
-
-    if (++sinceRewrite >= CONSOLE_REWRITE_INTERVAL) {
-      consoleEl.innerHTML = consoleLines.join('');
-      sinceRewrite = 0;
-    }
-  }
-
-  // ----- SSE handlers -----
-  es.onopen = function () { statusEl.textContent = 'SSE: connected'; };
-  es.onerror = function () { statusEl.textContent = 'SSE: reconnecting…'; };
-
-  es.addEventListener('metrics', function (e) {
-    if (uiPaused) return;
-    try {
-      const m = JSON.parse(e.data);
-      lastPacketSeen++;
-
-      const headersVal = (m.headers_validated ?? m.headers_total);
-
-      for (const [k, v] of Object.entries(m)) {
-        setMetric(k, v, lastPacketSeen);
+  es.addEventListener('metrics',(e)=>{
+    if(uiPaused) return;
+    try{
+      const m=JSON.parse(e.data); lastPacketSeen++;
+      const headersVal=(m.headers_validated??m.headers_total);
+      for(const [k,v] of Object.entries(m)) setMetric(k,v,lastPacketSeen);
+      const hv=Number(headersVal), bv=Number(m.blocks_validated);
+      if(Number.isFinite(hv)&&Number.isFinite(bv)&&hv>0){
+        const pct=Math.round(clamp(bv/Math.max(hv,1),0,1)*100);
+        barEl.style.width=pct+'%'; setMetric('progress_bar',true,lastPacketSeen);
       }
-
-      const hv = Number(headersVal);
-      const bv = Number(m.blocks_validated);
-      if (Number.isFinite(hv) && Number.isFinite(bv) && hv > 0) {
-        const pct = Math.round(clamp(bv / Math.max(hv, 1), 0, 1) * 100);
-        barEl.style.width = pct + '%';
-        setMetric('progress_bar', true, lastPacketSeen);
-      }
-
       applyStalenessForPacket(lastPacketSeen);
-    } catch { }
+    }catch{}
   });
 
-  es.addEventListener('console', function (e) {
-    if (uiPaused) return;
-    try {
-      const j = JSON.parse(e.data);
-      const level = j.level ?? 'INFO';
-      const time_us = j.time_us ?? 0;
-      const text = (j.msg ?? j.message ?? JSON.stringify(j));
-      const prefix = formatLogPrefix(level, time_us);
-      appendConsole(prefix + text);
-    } catch { }
+  es.addEventListener('console',(e)=>{
+    if(uiPaused) return;
+    try{
+      const j=JSON.parse(e.data);
+      const level=j.level??'INFO';
+      const time_us=j.time_us??0;
+      const text=(j.msg??j.message??JSON.stringify(j));
+      const prefix=formatLogPrefix(level,time_us);
+      appendConsole(prefix+text);
+    }catch{}
   });
 
-  es.addEventListener('reliable', function (e) {
-    if (uiPaused) return;
-    try {
-      const r = JSON.parse(e.data);
-      const row = document.createElement('div');
-      row.className = 'event recent';
-      const kindIdx = Number.isFinite(r.kind) ? (r.kind | 0) : 2; // default to info
-      const kind = ['Error', 'Warning', 'Info', 'State'][kindIdx] || String(kindIdx);
+  es.addEventListener('reliable',(e)=>{
+    if(uiPaused) return;
+    try{
+      const r=JSON.parse(e.data);
+      const row=document.createElement('div');
+      row.className='event'; // no .recent here (avoid global flash)
+      const kindIdx=Number.isFinite(r.kind)?(r.kind|0):2;
+      const kind=['Error','Warning','Info','State'][kindIdx]||String(kindIdx);
+      const pill=document.createElement('span');
+      pill.className='pill '+(kindIdx===0?'err':(kindIdx===2?'ok':''));
+      pill.textContent=kind;
+      const msg=document.createElement('span');
+      msg.textContent=(r.msg??r.message??r.path??JSON.stringify(r));
+      row.append(pill,msg);
 
-      const pill = document.createElement('span');
-      pill.className = 'pill ' + (kindIdx === 0 ? 'err' : (rkIndIdx === 2 ? 'ok' : ''));
-      pill.textContent = kind;
-      const msg = document.createElement('span');
-      msg.textContent = (r.msg ?? r.message ?? r.path ?? JSON.stringify(r));
-
-      row.appendChild(pill);
-      row.appendChild(msg);
-      if (TOP_NEWEST) {
+      if(TOP_NEWEST){
         eventsEl.prepend(row);
-        while (eventsEl.children.length > 50) eventsEl.removeChild(eventsEl.lastChild);
-        eventsEl.scrollTop = 0;
-      } else {
-        eventsEl.appendChild(row);
-        while (eventsEl.children.length > 50) eventsEl.removeChild(eventsEl.firstChild);
-        eventsEl.scrollTop = eventsEl.scrollHeight;
+        while(eventsEl.children.length>50) eventsEl.removeChild(eventsEl.lastChild);
+        eventsEl.scrollTop=0;
+      }else{
+        eventsEl.append(row);
+        while(eventsEl.children.length>50) eventsEl.removeChild(eventsEl.firstChild);
+        const nearBottom=(eventsEl.scrollHeight-eventsEl.clientHeight-eventsEl.scrollTop)<8;
+        if(nearBottom) eventsEl.scrollTop=eventsEl.scrollHeight;
       }
-      setTimeout(function () { row.classList.remove('recent'); }, 800);
-    } catch { }
+    }catch{}
   });
 
-  es.addEventListener('clear', function (e) {
-    consoleLines = [];
-    consoleEl.innerHTML = '';
-    eventsEl.innerHTML = '';
-    fieldSeenAt.clear();
-    lastPacketSeen = 0;
-
-    // Optional: mark UI as stale
+  es.addEventListener('clear',()=>{
+    consoleEl.innerHTML=''; eventsEl.innerHTML='';
+    latestEl=null; fieldSeenAt.clear(); lastPacketSeen=0;
     applyStalenessForPacket(-1);
-    phaseEl.classList.add('stale');
-    barEl.classList.add('stale');
-    statusEl.textContent = 'SSE: disconnected';
+    [phaseEl,barEl].forEach(el=>el.classList.add('stale'));
+    statusEl.textContent='SSE: disconnected';
   });
-
 </script>
