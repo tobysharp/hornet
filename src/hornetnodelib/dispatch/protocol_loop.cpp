@@ -159,9 +159,9 @@ void ProtocolLoop::NotifyLoop() {
   for (const auto& peer : read) {
     // Reads bytes from a peer's socket to its internal memory buffer.
     // Limit the number of bytes read per peer per frame to avoid memory pressure from bursty peers.
-    const size_t bytes = peer->GetConnection().ReadToBuffer(kMaxReadBytesPerFrame);
+    const ssize_t bytes = peer->GetConnection().ReadToBuffer(kMaxReadBytesPerFrame);
 
-    if (bytes == 0) {  // The socket was closed.
+    if (bytes < 0) {  // The socket was closed.
       peer->Drop();
       continue;
     }

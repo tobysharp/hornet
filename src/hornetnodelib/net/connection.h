@@ -72,6 +72,11 @@ class Connection {
     buffer_.insert(buffer_.end(), std::max(n, bytes_available), 0);
     const auto read_bytes = sock_.Read({buffer_.data() + initial_size, n});
     if (!read_bytes) {
+      // EOF -- close connection.
+      buffer_.resize(initial_size);
+      sock_.Close();
+      return -1;
+    } else if (*read_bytes <= 0) {
       // Non-blocking mode without available data. Very surprising, but not
       // an error. Worth logging since data was signaled via POLLIN and FIONREAD.
       buffer_.resize(initial_size);
