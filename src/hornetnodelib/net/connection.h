@@ -55,7 +55,7 @@ class Connection {
   // Reads up to n bytes from the socket into this class's internal buffer,
   // growing it as necessary. In order to guarantee non-blocking behavior,
   // ensure this method is called after poll() signals POLLIN.
-  size_t ReadToBuffer(size_t n) {
+  ssize_t ReadToBuffer(size_t n) {
     if (!sock_.IsOpen()) return 0;
 
     // Detect how many bytes are available to read. Fast, non-blocking.
@@ -78,14 +78,15 @@ class Connection {
     buffer_.insert(buffer_.end(), std::max(n, bytes_available), 0);
     const auto read_bytes = sock_.Read({buffer_.data() + initial_size, n});
     if (!read_bytes) {
+      // EOF -- close connection.
+      buffer_.resize(initial_size);
+      sock_.Close();
+      return -1;
+    } else if (*read_bytes <= 0) {
       // Non-blocking mode without available data. Very surprising, but not
       // an error. Worth logging since data was signaled via POLLIN and FIONREAD.
       buffer_.resize(initial_size);
-      return 0;
-    } else if (*read_bytes == 0) {
-      buffer_.resize(initial_size);
-      sock_.Close();
-      return 0;
+      return 0;   
     }
     buffer_.resize(initial_size + *read_bytes);
     // The mutex can be released here.

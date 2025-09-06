@@ -48,9 +48,10 @@ class PeerManager {
 
   template <typename Select = SelectAll>
   [[nodiscard]] PollResult PollReadWrite(int timeout_ms = 0, Select select_write = Select{}) {
+    static constexpr int kMaxRetries = 10;
     std::vector<pollfd> poll_fds;
     std::unordered_map<int, SharedPeer> fd_to_peer;
-
+    
     for (const auto& peer : registry_.Snapshot()) {
       const Socket& socket = peer->GetConnection().GetSocket();
       if (socket.IsOpen()) {
@@ -64,12 +65,20 @@ class PeerManager {
 
     PollResult result;
     result.empty = poll_fds.empty();
-    int rc = poll(poll_fds.data(), poll_fds.size(), timeout_ms);
+    int rc = 0;
+    for (int i = 0; i < kMaxRetries; ++i) {
+      rc = ::poll(poll_fds.data(), poll_fds.size(), timeout_ms);
+      if (rc >= 0) break;
+      if (errno == EINTR) continue;
+      return result;
+    }
 
     if (rc > 0) {
       for (const auto& pfd : poll_fds) {
-        if (pfd.revents & (POLLIN | POLLOUT)) {
-          const SharedPeer& peer = fd_to_peer[pfd.fd];
+        const SharedPeer& peer = fd_to_peer[pfd.fd];
+        if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL | POLLRDHUP)) {
+          peer->Drop();  // Disconnect errored peer cleanly.
+        } else {
           if (pfd.revents & POLLIN) result.read.push_back(peer);
           if (pfd.revents & POLLOUT) result.write.push_back(peer);
         }
