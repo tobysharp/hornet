@@ -1,3 +1,4 @@
 add_subdirectory(hornetlib)
 add_subdirectory(hornetnodelib)
+add_subdirectory(integration)
 add_subdirectory(testutil)

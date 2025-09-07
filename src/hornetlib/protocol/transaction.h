@@ -200,7 +200,7 @@ struct TransactionDetail {
     writer.WriteLE4(version);
 
     // Optional witness flag
-    if (IsWitness()) writer.WriteLE2(0x0100);
+    if (IsWitness() && include_witness) writer.WriteLE2(0x0100);
 
     // Inputs
     writer.WriteVarInt(inputs.Size());
@@ -226,7 +226,7 @@ struct TransactionDetail {
   }
 
   void Deserialize(encoding::Reader& reader, TransactionData& data) {
-    no_witness_size_bytes = 0;
+    int witness_size_bytes = 0;
     const auto start = reader.GetPos();
     // Version
     reader.ReadLE4(version);
@@ -239,6 +239,7 @@ struct TransactionDetail {
       byte = reader.ReadByte();  // Second byte should be 0x01
       if (byte != 1) util::ThrowRuntimeError("Unexpected witness flag byte.");
       witness = true;
+      witness_size_bytes += 2;
     } else {
       // Rewind the byte we peeked
       reader.Seek(reader.GetPos() - 1);
@@ -264,15 +265,16 @@ struct TransactionDetail {
         }
       }
       const int witness_bytes = reader.GetPos() - witness_start;
-      data.AddWitnessBytes(witness_bytes);
-      no_witness_size_bytes -= witness_bytes;
+      witness_size_bytes += witness_bytes;
     }
 
     // Lock time
     reader.ReadLE4(lock_time);
     
     // Set number of serialized bytes, used during transaction validation.
-    no_witness_size_bytes += reader.GetPos() - start;
+    const int total_bytes = reader.GetPos() - start;
+    no_witness_size_bytes = total_bytes - witness_size_bytes;
+    data.AddWitnessBytes(witness_size_bytes);
   }
 };
 
@@ -487,6 +489,12 @@ class TransactionIteratorT {
   using DetailIterator = std::conditional_t<kIsConst, DetailCollection::const_iterator, DetailCollection::iterator>;
   using DetailT = std::conditional_t<kIsConst, std::add_const_t<typename DetailIterator::value_type>, typename DetailIterator::value_type>;
   using View = TransactionViewT<TransactionDataT, DetailT>;
+
+  using value_type = View;
+  using difference_type = ptrdiff_t;
+  using pointer = View*;
+  using reference = View&;
+  using iterator_category = std::forward_iterator_tag;
 
   TransactionIteratorT(TransactionDataT& data, DetailIterator begin) : data_(data), it_(begin) {}
   TransactionIteratorT(const TransactionIteratorT&) = default;

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <iterator>
+
 namespace hornet::util {
 
 template <typename Iterator, typename End = Iterator>
@@ -14,7 +16,7 @@ class IteratorRange {
     return end_;
   }
   size_t size() const {
-    return static_cast<size_t>(std::max(0, end_ - begin_));
+    return static_cast<size_t>(std::max<ssize_t>(0, std::distance(begin_, end_)));
   }
  private:
   Iterator begin_; 
