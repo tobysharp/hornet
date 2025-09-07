@@ -26,6 +26,16 @@ class TcpNotificationSink {
 
   void operator()(util::NotificationPayload item) {
     static constexpr int kMaxQueueSize = 1 << 10;  // 1,024
+
+    // Duplicate console warnings and errors to stderr.
+    if (item.type == util::NotificationType::Log) {
+      const auto* level = item.map.Find<std::string>("level");
+      if (level != nullptr && (*level == "WARN" || *level == "ERROR")) {
+        if (const auto* msg = item.map.Find<std::string>("msg"))
+          std::cerr << *msg << std::endl;
+      }
+    }
+
     // Try push to payload queue. Follow policy if full (probably drop oldest).
     if (!abort_) {
       if (queue_.Size() >= kMaxQueueSize) {
@@ -46,7 +56,7 @@ class TcpNotificationSink {
 
     std::string output;
     output.reserve(1 << 14);  // 16 KB
-    while (!abort_) {
+    while (!abort_ || !queue_.Empty()) {
       // Format any items on our queue ready for streaming
       for (output.clear(); auto item = queue_.TryPop();)
         output = FormatJson(*item, std::move(output));
