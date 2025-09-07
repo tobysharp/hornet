@@ -40,7 +40,8 @@
       "request": "launch",
       "program": "${workspaceFolder}/build/clang20-debug/hornetnode",
       "args": [
-        "--connect=127.0.0.1:8333"
+        "--connect=127.0.0.1:8333",
+        "--notifytcp=8646"
       ],
       "cwd": "${workspaceFolder}/build",
       "stopAtEntry": false
