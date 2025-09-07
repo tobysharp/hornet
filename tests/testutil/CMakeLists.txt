@@ -4,11 +4,11 @@ add_library(testutil STATIC
 )
 target_include_directories(testutil PUBLIC ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/tests)
 
-add_executable(testutil_net_tests
+add_executable(testutil_tests
   net/bitcoind_peer_test.cpp
 )
 
-target_link_libraries(testutil_net_tests
+target_link_libraries(testutil_tests
   PRIVATE
     testutil
     hornetlib

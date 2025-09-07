@@ -57,24 +57,23 @@ inline int GetSigOpCount(std::span<const uint8_t> script) {
 
 // Performs non-contextual block validation, aligned with Core's CheckBlock function.
 [[nodiscard]] inline BlockError ValidateBlockStructure(const protocol::Block& block) {
+  // Verify that there is at least one transaction.
+  if (block.GetTransactionCount() < 1) return BlockError::BadTransactionCount;
+
   // Verify the Merkle root is correct.
-  if (ComputeMerkleRoot(block) != block.Header().GetMerkleRoot())
+  const auto merkle_root = ComputeMerkleRoot(block);
+  if (!merkle_root.unique || merkle_root.hash != block.Header().GetMerkleRoot())
     return BlockError::BadMerkleRoot;
 
   // Verify that the block respects size limits.
-  if (block.GetWeightUnits() > constants::kMaximumWeightUnits)
-    return BlockError::BadSize;
-
-  // Verify that there is at least one transaction.
-  if (block.GetTransactionCount() < 1)
-    return BlockError::BadTransactionCount;
+  if (block.GetWeightUnits() > constants::kMaximumWeightUnits) return BlockError::BadSize;
 
   // Verify that the only coin base transaction is the first one.
   for (int i = 0; i < block.GetTransactionCount(); ++i)
     if (block.Transaction(i).IsCoinBase() != (i == 0))
       return BlockError::BadCoinBase;
 
-  // Verify the transactions are all valid with no duplicates.
+  // Verify the transactions are all valid with no duplicate inputs.
   int signature_ops = 0;
   for (const auto& tx : block.Transactions()) {
     if (const auto tx_error = ValidateTransaction(tx); tx_error != TransactionError::None) {
