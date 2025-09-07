@@ -11,6 +11,7 @@
 #include <poll.h>
 #include <sys/socket.h>
 
+#include "hornetlib/util/log.h"
 #include "hornetlib/util/shared_span.h"
 #include "hornetnodelib/net/socket.h"
 
@@ -24,6 +25,13 @@ class Connection {
         blocking_{blocking},
         sock_(Socket::Connect(host, port, blocking)) {}
 
+  ~Connection() {
+    ContinueWrite();  // Attempt to flush
+    if (QueuedWriteBufferCount() > 0) {
+      LogWarn() << "Connection fd=" << sock_.GetFD() << " destroyed with unsent queued data.";
+    }
+  }
+
   // Writes at least some of the buffer directly to the socket.
   // In order to guarantee non-blocking behavior, ensure this method is
   // called after poll() sgnals POLLOUT.
@@ -36,9 +44,11 @@ class Connection {
     if (!write_bytes) {
       // Non-blocking mode without available data. Very surprising, but not
       // an error. Worth logging since data was signaled via POLLIN and FIONREAD.
+      LogWarn() << "Socket (fd " << sock_.GetFD() << ") Write failed with full pipe. Continuing.";
       return 0;
     } else if (*write_bytes == 0) {
       // Successful write of zero bytes -- close the socket.
+      LogWarn() << "Socket (fd " << sock_.GetFD() << ") Write sent zero bytes of data. Closing now.";
       sock_.Close();
     }
     return *write_bytes;
@@ -80,6 +90,7 @@ class Connection {
     if (!read_bytes) {
       // Non-blocking mode without available data. Very surprising, but not
       // an error. Worth logging since data was signaled via POLLIN and FIONREAD.
+      LogWarn() << "Socket (fd " << sock_.GetFD() << ") Read returned zero bytes of data. Continuing.";
       buffer_.resize(initial_size);
       return 0;
     } else if (*read_bytes == 0) {
