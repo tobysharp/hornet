@@ -31,8 +31,8 @@ TEST(MerkleRootTest, OneTransactionIsItsOwnRoot) {
   block.AddTransaction(tx);
 
   const Hash expected_root = tx.GetHash();
-  const Hash computed_root = ComputeMerkleRoot(block);
-  EXPECT_EQ(computed_root, expected_root);
+  const auto computed_root = ComputeMerkleRoot(block);
+  EXPECT_EQ(computed_root.hash, expected_root);
 }
 
 TEST(MerkleRootTest, TwoTransactions) {
@@ -62,8 +62,8 @@ TEST(MerkleRootTest, TwoTransactions) {
   block.AddTransaction(tx2);
 
   Hash expected_root = crypto::DoubleSha256(HashPair{tx1.GetHash(), tx2.GetHash()});
-  Hash computed_root = ComputeMerkleRoot(block);
-  EXPECT_EQ(computed_root, expected_root);
+  auto computed_root = ComputeMerkleRoot(block);
+  EXPECT_EQ(computed_root.hash, expected_root);
 }
 
 TEST(MerkleRootTest, ThreeTransactionsPadLast) {
@@ -92,8 +92,8 @@ TEST(MerkleRootTest, ThreeTransactionsPadLast) {
   Hash l1a = crypto::DoubleSha256(HashPair{hashes[0], hashes[1]});
   Hash l1b = crypto::DoubleSha256(HashPair{hashes[2], hashes[2]});
   Hash expected_root = crypto::DoubleSha256(HashPair{l1a, l1b});
-  Hash computed_root = ComputeMerkleRoot(block);
-  EXPECT_EQ(computed_root, expected_root);
+  auto computed_root = ComputeMerkleRoot(block);
+  EXPECT_EQ(computed_root.hash, expected_root);
 }
 
 }  // namespace

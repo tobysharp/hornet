@@ -76,7 +76,7 @@ TEST(ValidatorTest, DetectsNonFirstCoinbase) {
 
   // Set correct merkle root so that the only error is BadCoinBase
   BlockHeader header = block.Header();
-  header.SetMerkleRoot(ComputeMerkleRoot(block));
+  header.SetMerkleRoot(ComputeMerkleRoot(block).hash);
   block.SetHeader(header);
 
   EXPECT_EQ(ValidateBlockStructure(RoundTrip(block)), BlockError::BadCoinBase);
@@ -96,7 +96,7 @@ TEST(ValidatorTest, RejectsBlockWithExcessiveWeight) {
   block.AddTransaction(tx);
 
   BlockHeader header = block.Header();
-  header.SetMerkleRoot(ComputeMerkleRoot(block));
+  header.SetMerkleRoot(ComputeMerkleRoot(block).hash);
   block.SetHeader(header);
 
   const auto block2 = RoundTrip(block);
@@ -128,7 +128,7 @@ TEST(ValidatorTest, RejectsBlockWithInvalidTransaction) {
   block.AddTransaction(tx);
 
   BlockHeader header;
-  header.SetMerkleRoot(ComputeMerkleRoot(block));
+  header.SetMerkleRoot(ComputeMerkleRoot(block).hash);
   block.SetHeader(header);
 
   EXPECT_EQ(ValidateBlockStructure(RoundTrip(block)), BlockError::BadTransaction);
