@@ -161,13 +161,12 @@ inline void BlockSync::StartSync(net::WeakPeer peer) {
 }
 
 inline void BlockSync::OnBlock(net::SharedPeer peer, const protocol::message::Block& message) {
-  Assert(request_active_.test());
   const data::Key expected = request_;
-  // LogDebug() << "Block height " << expected.height << " arrived.";
-
-  // Start by freeing up one request slot
-  request_active_.clear(std::memory_order::release);
-
+  if (!request_active_.test() || expected.height < 0) {
+    LogWarn() << "Ignoring unsolicited or cancelled block from peer " << peer->GetId() << ".";
+    return;
+  }
+  
   // Note the block is shared rather than copied, for performance.
   const std::shared_ptr<const protocol::Block> block = message.GetBlock();
 
@@ -184,7 +183,9 @@ inline void BlockSync::OnBlock(net::SharedPeer peer, const protocol::message::Bl
   Item item{peer, expected, block};
   queue_bytes_ += SizeInBytes(item);
   queue_.Push(std::move(item));
-  // LogDebug() << "Queue length " << queue_.Size() << ", size " << queue_bytes_ << " bytes.";
+
+  // Now we have queued the block, free up one request slot for another download.
+  request_active_.clear(std::memory_order::release);
 
   // Consider requesting the next block immediately, if we have space in the queue.
   RequestNextBlock(peer);
