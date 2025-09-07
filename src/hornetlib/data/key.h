@@ -10,8 +10,8 @@ namespace hornet::data {
 
 // A stable locator for looking up headers/blocks across chain re-orgs.
 struct Key {
-  int height;
-  protocol::Hash hash;
+  int height = -1;
+  protocol::Hash hash = {};
 };
 
 }  // namespae hornet::data
