@@ -1,3 +1,7 @@
+// Copyright 2025 Toby Sharp
+//
+// This file is part of the Hornet Node project. All rights reserved.
+// For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
 #include <cstdint>
@@ -35,9 +39,10 @@ class NotificationMap {
   void Insert(std::string_view key, NotificationValue value) {
     map_.emplace_back(std::pair{std::move(key), std::move(value)});
   }
-  const NotificationValue* Find(std::string_view key) const {
+  template <typename T>
+  const T* Find(std::string_view key) const {
     for (const auto& [k, v] : map_)
-        if (k == key) return &v;
+        if (k == key) return &std::get<T>(v);
     return nullptr;
   }
 
@@ -76,6 +81,10 @@ class DefaultLogSink {
   void SetOutputFile(const std::string& filename);
   void EnableStdout(bool enabled);
   void operator()(NotificationPayload payload);
+
+  static void Log(NotificationPayload payload) {
+    Instance()(payload);
+  }
 
  private:
   DefaultLogSink() = default;

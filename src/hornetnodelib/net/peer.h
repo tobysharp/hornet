@@ -10,6 +10,7 @@
 
 #include "hornetlib/protocol/capabilities.h"
 #include "hornetlib/protocol/handshake.h"
+#include "hornetlib/util/log.h"
 #include "hornetnodelib/net/connection.h"
 #include "hornetnodelib/net/constants.h"
 
@@ -70,6 +71,7 @@ class Peer {
   }
 
   void Drop() {
+    LogWarn() << "Dropping peer " << id_ << ".";
     conn_.Drop();
   }
 

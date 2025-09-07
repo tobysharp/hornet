@@ -29,9 +29,9 @@ void DefaultLogSink::operator()(NotificationPayload payload) {
     return;
 
   std::lock_guard lock(mutex_);
-  const std::string& level = std::get<std::string>(*payload.map.Find("level"));
-  const std::string& message = std::get<std::string>(*payload.map.Find("msg"));
-  const int64_t time_us = std::get<int64_t>(*payload.map.Find("time_us"));
+  const std::string& level = *payload.map.Find<std::string>("level");
+  const std::string& message = *payload.map.Find<std::string>("msg");
+  const int64_t time_us = *payload.map.Find<int64_t>("time_us");
   const std::string full = Prefix(level, time_us) + message + "\n";
 
   if (to_stdout_) std::cout << full;
@@ -48,9 +48,7 @@ std::string DefaultLogSink::Prefix(const std::string& level, int64_t time_us) co
 }
 
 namespace {
-NotificationSink notification_sink = [](NotificationPayload payload) {
-  DefaultLogSink::Instance()(std::move(payload));
-};
+NotificationSink notification_sink = &DefaultLogSink::Log;
 }  // namespace
 
 void Notify(NotificationType type, std::string path, NotificationMap values) {
