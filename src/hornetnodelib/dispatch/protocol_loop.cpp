@@ -104,10 +104,8 @@ net::PeerManager::PollResult ProtocolLoop::PollReadWrite() {
   // When we awake, if there are new peers connected, we will start servicing them in the next iteration.
   // This is expected to be an edge case (no connected peers). But if the latency of this sleep becomes
   // an issue, we can add a condition variable so new peers force immediate wake-up from this sleep.
-  if (ready.empty) {
-    LogDebug() << "ProtocolLoop::PollReadWrite has nothing to poll.";
+  if (ready.empty)
     std::this_thread::sleep_for(std::chrono::milliseconds{timeout_ms});
-  }
 
   // Create a fast, non-cryptographic pseudo-random generator seeded with current time.
   static thread_local std::mt19937 rng{
