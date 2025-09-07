@@ -68,8 +68,11 @@ class PeerManager {
 
     if (rc > 0) {
       for (const auto& pfd : poll_fds) {
-        if (pfd.revents & (POLLIN | POLLOUT)) {
-          const SharedPeer& peer = fd_to_peer[pfd.fd];
+        const SharedPeer& peer = fd_to_peer[pfd.fd];
+        if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL | POLLRDHUP)) {
+          LogWarn() << "Peer id " << peer->GetId() << " dropping due to poll revents = " << pfd.revents << ".";
+          peer->Drop();  // Disconnect errored peer cleanly.
+        } else {
           if (pfd.revents & POLLIN) result.read.push_back(peer);
           if (pfd.revents & POLLOUT) result.write.push_back(peer);
         }
