@@ -36,6 +36,9 @@ class CommandLineParser {
   // Prints help text manually. Normally invoked automatically from Parse() on --help.
   void PrintHelp(std::ostream& out = std::cout, const std::string& header = "Options:") const;
 
+  const std::string& Name() const { return app_name_; }
+  const std::string& Version() const { return version_; }
+  
  private:
   class OptionBase {
    public:
@@ -62,7 +65,7 @@ class CommandLineParser {
     }
 
     virtual void Print(std::ostream& out) const override {
-      out << "  " << name_ << " (default: " << default_ << ")\n    " << help_ << "\n";
+      out << "   --" << name_ << " (default: " << default_ << ")\n    " << help_ << "\n";
     }
 
    private:
@@ -149,7 +152,7 @@ inline bool CommandLineParser::Parse(int argc, char** argv) {
 inline void CommandLineParser::PrintHelp(std::ostream& out, const std::string& header) const {
   out << header << "\n";
   out << "  --help, -h\n    Show this help message\n";
-  out << "  --version\n    Show version information\n";
+  out << "  --version\n    Show version information\n\n";
   for (const auto& [_, opt] : options_) {
     opt->Print(out);
   }
