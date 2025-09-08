@@ -44,7 +44,7 @@ struct OutPoint {
   }
 };
 
-using ScriptArray = util::SubArray<uint8_t, uint16_t>;
+using ScriptArray = util::SubArray<uint8_t>;
 using Component = ScriptArray;
 using Witness = util::SubArray<Component>;
 
@@ -131,7 +131,7 @@ struct Input {
 
   void Deserialize(encoding::Reader& reader, TransactionData& data) {
     previous_output.Deserialize(reader);
-    data.ResizeScriptBytes(signature_script, reader.ReadVarInt<uint16_t>());
+    data.ResizeScriptBytes(signature_script, reader.ReadVarInt<int>());
     reader.ReadBytes(signature_script.Span(data.scripts));
     reader.ReadLE4(sequence);
   }
@@ -149,7 +149,7 @@ struct Output {
 
   void Deserialize(encoding::Reader& reader, TransactionData& data) {
     reader.ReadLE8(value);
-    data.ResizeScriptBytes(pk_script, reader.ReadVarInt<uint16_t>());
+    data.ResizeScriptBytes(pk_script, reader.ReadVarInt<int>());
     reader.ReadBytes(pk_script.Span(data.scripts));
   }
 };
@@ -214,7 +214,7 @@ struct TransactionDetail {
     if (IsWitness() && include_witness) {
       for (const Witness& witness : witnesses.Span(data.witnesses)) {
         writer.WriteVarInt(witness.Size());
-        for (const ScriptArray& component : witness.Span(data.components)) {
+        for (const Component& component : witness.Span(data.components)) {
           writer.WriteVarInt(component.Size());
           writer.WriteBytes(component.Span(data.scripts));
         }
@@ -259,8 +259,8 @@ struct TransactionDetail {
       data.ResizeWitnesses(witnesses, inputs.Size());
       for (Witness& witness : witnesses.Span(data.witnesses)) {
         data.ResizeComponents(witness, reader.ReadVarInt<int>());
-        for (ScriptArray& component : witness.Span(data.components)) {
-          data.ResizeScriptBytes(component, reader.ReadVarInt<uint16_t>());
+        for (Component& component : witness.Span(data.components)) {
+          data.ResizeComponentBytes(component, reader.ReadVarInt<int>());
           reader.ReadBytes(component.Span(data.scripts));
         }
       }
@@ -432,9 +432,9 @@ class TransactionViewT {
 
  protected:
   void SetScript(ScriptArray& script_array, std::span<const uint8_t> script) {
-    if (script.size() > std::numeric_limits<uint16_t>::max())
+    if (std::ssize(script) > std::numeric_limits<int>::max())
       util::ThrowOutOfRange("Script size ", script.size(), " too large.");
-    data_.ResizeScriptBytes(script_array, static_cast<uint16_t>(script.size()));
+    data_.ResizeScriptBytes(script_array, static_cast<int>(std::ssize(script)));
     std::copy(script.begin(), script.end(), script_array.Span(data_.scripts).begin());
   }
 
