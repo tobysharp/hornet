@@ -59,8 +59,8 @@ void NotifyLog(NotificationMap values) {
   Notify(NotificationType::Log, {}, std::move(values));
 }
 
-void NotifyEvent(std::string path, NotificationMap values) {
-  Notify(NotificationType::Discrete, std::move(path), std::move(values));
+void NotifyEvent(std::string path, std::string message, EventType type) {
+  Notify(NotificationType::Discrete, std::move(path), {{"kind", int(type)}, {"msg",std::move(message)}});
 }
 
 void NotifyMetric(std::string path, NotificationMap values) {
