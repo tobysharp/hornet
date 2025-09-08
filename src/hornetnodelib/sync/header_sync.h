@@ -15,6 +15,7 @@
 #include "hornetlib/protocol/hash.h"
 #include "hornetlib/protocol/message/getheaders.h"
 #include "hornetlib/protocol/message/headers.h"
+#include "hornetlib/util/notify.h"
 #include "hornetlib/util/thread_safe_queue.h"
 #include "hornetnodelib/net/peer.h"
 #include "hornetnodelib/sync/sync_handler.h"
@@ -165,6 +166,8 @@ inline void HeaderSync::Process() {
         view->SetTip(parent = timechain_.AddHeader(parent, context));
       }
     }
+
+    util::NotifyMetric("sync/headers", {{"headers_validated",timechain_.ReadHeaders()->ChainLength()}});
 
     // Notify if the sync is complete.
     if (!IsFullBatch(item->batch)) {
