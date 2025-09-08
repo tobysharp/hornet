@@ -1,0 +1,29 @@
+{
+  "name": "hornetdsl",
+  "displayName": "Hornet DSL Syntax",
+  "description": "Syntax highlighting for Hornet Consensus DSL",
+  "version": "0.1.0",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.50.0"
+  },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "hornetdsl",
+        "aliases": ["Hornet DSL", "hornetdsl"],
+        "extensions": [".hornet"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "hornetdsl",
+        "scopeName": "source.hornetdsl",
+        "path": "./syntaxes/hornetdsl.tmLanguage.json"
+      }
+    ]
+  }
+}
+
