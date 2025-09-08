@@ -13,9 +13,10 @@
 #include "hornetlib/protocol/message/getheaders.h"
 #include "hornetlib/protocol/message/headers.h"
 #include "hornetlib/protocol/message/verack.h"
-#include "hornetnodelib/net/peer_registry.h"
+#include "hornetlib/util/notify.h"
 #include "hornetnodelib/dispatch/broadcaster.h"
 #include "hornetnodelib/dispatch/event_handler.h"
+#include "hornetnodelib/net/peer_registry.h"
 #include "hornetnodelib/sync/block_sync.h"
 #include "hornetnodelib/sync/header_sync.h"
 #include "hornetnodelib/sync/sync_handler.h"
@@ -32,7 +33,10 @@ class SyncManager : public dispatch::EventHandler {
         timechain_(timechain) {}
   SyncManager() = delete;
 
-  virtual void OnHandshakeComplete(net::SharedPeer peer) override  {
+  virtual void OnHandshakeComplete(net::SharedPeer peer) override {
+    std::string notify = "Peer " + std::to_string(peer->GetId()) + " handshake completed 🤝";
+    hornet::util::NotifyEvent("peers/handshake", notify, util::EventType::Info);
+
     {
       const net::SharedPeer sync = sync_.lock();
       if (sync && !sync->IsDropped()) return;  // We already have a sync peer
@@ -93,8 +97,14 @@ class SyncManager : public dispatch::EventHandler {
     //
     // Since we are deferring the implementation of multiple peers, we will return here
     // later to implement the above logic. For now, we just move on to block sync.
-    LogInfo() << "Header sync complete for peer " << weak.lock()->GetId() 
-              << ", tip height " << timechain_.ReadHeaders()->ChainTip()->height;
+    if (auto peer = weak.lock()) {
+      std::string notify = "Peer " + std::to_string(peer->GetId()) + " synced " +
+                           std::format("{:L}", timechain_.ReadHeaders()->ChainLength()) +
+                           " headers 🔃";
+      hornet::util::NotifyEvent("sync/headers", notify, util::EventType::Info);
+      LogInfo() << "Header sync complete for peer " << peer->GetId() << ", tip height "
+                << timechain_.ReadHeaders()->ChainTip()->height;
+    }
     block_sync_.StartSync(weak);
   }
 

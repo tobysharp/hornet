@@ -53,7 +53,9 @@ class NotificationMap {
   std::vector<Entry> map_;
 };
 
-void NotifyEvent(std::string path, NotificationMap values);
+enum class EventType { Error = 0, Warning = 1, Info = 2, State = 3, None };
+
+void NotifyEvent(std::string path, std::string message, EventType type = EventType::Info);
 void NotifyMetric(std::string path, NotificationMap values);
 void NotifyLog(NotificationMap values);
 
