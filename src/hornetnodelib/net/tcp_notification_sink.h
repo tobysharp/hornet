@@ -25,7 +25,7 @@ class TcpNotificationSink {
   }
 
   void operator()(util::NotificationPayload item) {
-    static constexpr int kMaxQueueSize = 1 << 10;  // 1,024
+    static constexpr int kMaxQueueSize = 1 << 12;  // 4,096
 
     // Duplicate console warnings and errors to stderr.
     if (item.type == util::NotificationType::Log) {
@@ -52,7 +52,7 @@ class TcpNotificationSink {
     // This timeout represents the maximum time (in milliseconds) that we could be blocked while
     // the queue is filling up and we're not servicing it.
     // TODO: Use read/write pipe FDs as waitable events for the abort and non-empty queue flags.
-    static constexpr int kMaxPollTimeoutMs = 50;
+    static constexpr int kMaxPollTimeoutMs = 25;
 
     std::string output;
     output.reserve(1 << 14);  // 16 KB
