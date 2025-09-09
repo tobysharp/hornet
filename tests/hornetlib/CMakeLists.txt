@@ -26,6 +26,7 @@ add_executable(hornetlib_tests
    protocol/parser_test.cpp
    protocol/script/parser_test.cpp
    protocol/script/runtime/push_ops_test.cpp
+   protocol/script/script_demo_test.cpp
    protocol/script/script_processor_test.cpp
    protocol/script/script_view_test.cpp
    protocol/script/script_writer_test.cpp

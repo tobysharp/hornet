@@ -4,7 +4,9 @@ add_library(hornetlib STATIC
    protocol/message_factory.cpp
    protocol/message_handler.cpp
    protocol/script/runtime/engine.cpp
-   protocol/script/runtime/stack_ops.cpp
+   protocol/script/runtime/ops/arithmetic.cpp
+   protocol/script/runtime/ops/bitwise.cpp
+   protocol/script/runtime/ops/stack.cpp
    protocol/script/processor.cpp
    util/notify.cpp
 )

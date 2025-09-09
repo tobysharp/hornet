@@ -10,7 +10,9 @@
 
 namespace hornet::protocol::script::runtime {
 
-void RegisterPushHandlers(Dispatcher& table);  // In stack_ops.cpp
+void RegisterArithmeticHandlers(Dispatcher& table);  // In ops/arithmetic.cpp
+void RegisterBitwiseHandlers(Dispatcher& table);     // In ops/bitwise.cpp
+void RegisterStackHandlers(Dispatcher& table);        // In ops/stack.cpp
 
 namespace detail {
 // A placeholder handler for opcodes that haven't yet been implemented.
@@ -23,7 +25,9 @@ Handler GetHandler(Version version, lang::Op opcode) {
     auto BuildDispatcher = [](Version) {
       Dispatcher handlers;
       std::fill(handlers.begin(), handlers.end(), &OnUnknown);
-      RegisterPushHandlers(handlers);
+      RegisterArithmeticHandlers(handlers);
+      RegisterBitwiseHandlers(handlers);
+      RegisterStackHandlers(handlers);
       // TODO: Fill in other handler entries, depending on version.
       return handlers;
     };    
