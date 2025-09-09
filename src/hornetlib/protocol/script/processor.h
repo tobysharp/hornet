@@ -13,36 +13,40 @@
 #include "hornetlib/protocol/script/parser.h"
 #include "hornetlib/protocol/script/runtime/engine.h"
 #include "hornetlib/protocol/script/runtime/stack.h"
+#include "hornetlib/util/expected.h"
 #include "hornetlib/util/subarray.h"
 
 namespace hornet::protocol::script {
 
 class Processor {
  public:
-  enum class RunResult { True, False, Error };
-  enum class StepResult { Stepped, FinishedTrue, FinishedFalse, Error };
-
   explicit Processor(std::span<const uint8_t> script,
                      bool require_minimal = true,  // Becomes execution policy
                      int height = 0                // Becomes environment context
                      );
 
-  RunResult Run();
-  StepResult Step();
-  std::optional<lang::Error> LastError() const {
-    return error_;
-  }
-  bool IsFinished() const {
-    return !parser_.Peek();
-  }
   void Reset(std::span<const uint8_t> script, int height);
+
+  // Runs until completion and returns the Boolean interpretation of the top-of-stack (or error).                     
+  util::Expected<bool, lang::Error> Run();
+
+  // Executes the next instruction and returns true iff it's possible to Step() again (or error).
+  util::Expected<bool, lang::Error> Step();
+
+  bool IsFinished() const { return !parser_.Peek(); }
+
+  bool PeekBool() const { return !stack_.Empty() && stack_.TopAsBool(); }
 
   // Try to interpret the top-of-stack as a 32-bit signed integer, if valid.
   std::optional<int32_t> TryPeekInt() const;
+
   std::optional<lang::Bytes> TryPeek() const {
     if (stack_.Empty()) return std::nullopt;
     return stack_.Top();
   }
+
+  std::optional<lang::Error> LastError() const { return error_; }
+
   const Parser& Parser() const {
     return parser_;
   }
@@ -56,7 +60,6 @@ class Processor {
   runtime::Stack stack_;
   std::optional<runtime::Machine> machine_;
   std::optional<lang::Error> error_;
-  int non_push_op_count_ = 0;
 };
 
 }  // namespace hornet::protocol::script

@@ -2,8 +2,8 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "hornetlib/protocol/script/lang/minimal.h"
 #include "hornetlib/protocol/script/lang/types.h"
+#include "hornetlib/protocol/script/runtime/decode.h"
 #include "hornetlib/protocol/script/runtime/engine.h"
 #include "hornetlib/protocol/script/runtime/throw.h"
 #include "hornetlib/util/unroll.h"
@@ -64,7 +64,7 @@ static void OnDrop(const Context& context) {
   context.Stack().Pop();
 }
 
-void RegisterPushHandlers(Dispatcher& table) {
+void RegisterStackHandlers(Dispatcher& table) {
   table[Op::PushEmpty] = &OnPushEmpty;
   for (auto op = Op::PushSize1; op <= Op::PushData4; ++op) table[op] = &OnPushData;
   table[Op::PushConstNegative1] = &OnPushConst<-1>;

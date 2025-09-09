@@ -35,43 +35,39 @@ std::optional<int32_t> Processor::TryPeekInt() const {
 }
 
 // Step execution forward by one instruction.
-Processor::StepResult Processor::Step() {
-  if (error_) return StepResult::Error;  // Execution already faulted, must reset.
+util::Expected<bool, lang::Error> Processor::Step() {
+  if (error_) return *error_;  // Execution already faulted, must reset.
 
   try {
     if (const auto instruction = parser_.Next()) Execute(*instruction);
-    if (IsFinished())
-      return !stack_.Empty() && stack_.TopAsBool() ? StepResult::FinishedTrue
-                                                   : StepResult::FinishedFalse;
-    return StepResult::Stepped;
+    return !IsFinished();
   } catch (const runtime::Exception& e) {
     error_ = e.GetError();
     LogWarn() << "Script execution error code " << int(*error_) << ": " << e.what();
-    return StepResult::Error;
+    return *error_;
   }
 }
 
 void Processor::Reset(std::span<const uint8_t> script, int height) {
   parser_ = {script};
   error_.reset();
-  non_push_op_count_ = 0;
   stack_.Clear();
   env_ = { height };
   machine_.emplace(runtime::Machine{.stack = stack_, .script = script, .policy = policy_});
 }
 
 // Run the script to the end and return its Boolean result.
-Processor::RunResult Processor::Run() {
-  if (error_) return RunResult::Error;  // Execution already faulted, must reset.
+util::Expected<bool, lang::Error> Processor::Run() {
+  if (error_) return *error_;  // Execution already faulted, must reset.
 
   try {
     while (const auto instruction = parser_.Next()) Execute(*instruction);
   } catch (const runtime::Exception& e) {
     error_ = e.GetError();
     LogWarn() << "Script execution error code " << int(*error_) << ": " << e.what();
-    return RunResult::Error;
+    return *error_;
   }
-  return !stack_.Empty() && stack_.TopAsBool() ? RunResult::True : RunResult::False;
+  return PeekBool();
 }
 
 void Processor::Execute(const lang::Instruction& instruction) {
