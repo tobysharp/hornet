@@ -15,7 +15,7 @@ TEST(ScriptTest, RunSimpleScript) {
     const auto script = Writer{}.PushInt(21).
                                  PushInt(21).
                                  Then(Op::Add).
-                                 PushInt(43).
+                                 PushInt(42).
                                  Then(Op::Equal).Release();
 
     // Execute the script using the stack-based virtual machine.
