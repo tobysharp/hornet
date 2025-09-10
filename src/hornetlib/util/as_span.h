@@ -31,4 +31,9 @@ inline std::span<uint8_t> AsByteSpan(std::span<T> input) {
   return {reinterpret_cast<uint8_t*>(input.data()), input.size_bytes()};
 }
 
+template <typename T, typename U>
+inline constexpr bool operator ==(std::span<T> a, std::span<U> b) {
+  return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin());
+}
+
 }  // namespace hornet::util

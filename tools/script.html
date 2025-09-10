@@ -1,0 +1,722 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Hornet Script Trace</title>
+<!--
+JSON schema (concise):
+
+{
+  "meta": {
+    "sv": "SegWitV0",
+    "script_hex": "0101010293806351680068",     // optional; purely for display
+    "flags": {
+      "minimal_num_required": true,
+      "cleanstack_required": true,
+      "nulldummy_required": false,
+      "nullfail_required": true
+    }
+  },
+  "script_bytes": ["01","01","01","02","93","80","63","51","68","00","68"],
+  "steps": [
+    {
+      "pc": 0,
+      "opcode_byte": 1,        // numeric 0x01..0xff; no textual opcode required
+      "byte_start": 0,         // inclusive
+      "byte_end": 1,           // exclusive
+      "stack_before": [],      // arrays of hex strings (each a stack item)
+      "stack_after": ["01"],
+      "alt": [],
+      "ifstack": [],
+      "opcount": 0,
+      "sigchecks": 0,
+      "error": null,
+      "finished": false
+    }
+    ...
+  ]
+}
+-->
+<style>
+    :root {
+        --gap: 12px;
+        --pad: 12px;
+        --bg: #0b0c0f;
+        --panel: #12151a;
+        --ink: #e7ecf3;
+        --muted: #9aa8b6;
+        --accent: #3aa3ff;
+        --accent2: #00d68f;
+        --err: #ff5c77;
+        --hl: #243548;
+    }
+
+    html,
+    body {
+        margin: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--ink);
+        font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial
+    }
+
+    header {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        padding: 12px 16px;
+        border-bottom: 1px solid #1b1f27;
+        background: #0e1116;
+        position: sticky;
+        top: 0;
+        z-index: 10
+    }
+
+    header h3 {
+        margin: 0;
+        font-weight: 600
+    }
+
+    header .sep {
+        opacity: .3
+    }
+
+    main {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 16px;
+        padding: 16px
+    }
+
+    .rowgrid {
+        display: grid;
+        grid-template-columns: minmax(420px, 1fr) 380px;
+        gap: 16px
+    }
+
+    .card {
+        background: var(--panel);
+        border: 1px solid #1b2130;
+        border-radius: 12px;
+        padding: 12px
+    }
+
+    code {
+        background: #0f141c;
+        padding: 2px 6px;
+        border-radius: 6px
+    }
+
+    button,
+    select,
+    input[type=file] {
+        background: #122034;
+        color: var(--ink);
+        border: 1px solid #223249;
+        border-radius: 8px;
+        padding: 6px 10px
+    }
+
+    button:disabled {
+        opacity: .45
+    }
+
+    /* Script byte grid */
+    .scriptWrap {
+        display: flex;
+        gap: 10px;
+        flex-direction: column
+    }
+
+    .kv {
+        display: grid;
+        grid-template-columns: 130px 1fr;
+        gap: 8px
+    }
+
+    .flagline {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px
+    }
+
+    .flag {
+        border-radius: 999px;
+        padding: 2px 10px;
+        border: 1px solid #223249;
+        background: #0f1826;
+        color: #cfe7ff;
+        font-size: 12px
+    }
+
+    .grid {
+        display: grid;
+        gap: 2px;
+        background: #0c121b;
+        padding: 8px;
+        border-radius: 10px;
+        border: 1px solid #1b2230;
+        overflow: auto;
+        max-height: 50vh
+    }
+
+    .grid[data-cols="16"] {
+        grid-template-columns: repeat(16, minmax(28px, 1fr))
+    }
+
+    .cell {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        height: 28px;
+        border-radius: 6px;
+        border: 1px solid transparent;
+        color: #cbd6e2
+    }
+
+    .cell.hl {
+        background: linear-gradient(180deg, #18304b, #132033);
+        border-color: #2b4f7a;
+        color: #e8f2ff;
+        box-shadow: 0 0 0 1px #2b4f7a inset
+    }
+
+    .cell.cur {
+        background: linear-gradient(180deg, #1b3b60, #14324f);
+        border-color: #3aa3ff;
+        color: #fff;
+        box-shadow: 0 0 0 1px #3aa3ff inset
+    }
+
+    /* Side info */
+    .side {
+        display: flex;
+        flex-direction: column;
+        gap: 12px
+    }
+
+    .row {
+        display: grid;
+        grid-template-columns: 110px 1fr;
+        gap: 8px;
+        margin: 4px 0
+    }
+
+    .danger {
+        color: var(--err)
+    }
+
+    .ok {
+        color: var(--accent2)
+    }
+
+    /* Stacks panel (full width under script) */
+    .stacks {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px
+    }
+
+    .stackTitle {
+        font-weight: 600;
+        margin-bottom: 6px
+    }
+
+    .stack {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+        min-height: 120px
+    }
+
+    .item {
+        background: linear-gradient(180deg, #141b24, #111821);
+        border: 1px solid #1e2b3b;
+        border-radius: 10px;
+        padding: 8px
+    }
+
+    .itemHeader {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px
+    }
+
+    .itemHeader .tag {
+        font-size: 12px;
+        color: #a8b5c3;
+        background: #0e1824;
+        border: 1px solid #1c2735;
+        border-radius: 6px;
+        padding: 2px 6px
+    }
+
+    .hex {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        word-break: break-all;
+        background: #0f141c;
+        border: 1px solid #1b2230;
+        border-radius: 8px;
+        padding: 6px
+    }
+
+    .metaLine {
+        color: #b7c3d3;
+        font-size: 12px;
+        margin-top: 6px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap
+    }
+
+    .badge {
+        border-radius: 999px;
+        padding: 2px 8px;
+        border: 1px solid #223249;
+        background: #0f1826;
+        color: #cfe7ff
+    }
+
+    .badge.warn {
+        border-color: #4f3a00;
+        background: #1b1300;
+        color: #ffd36e
+    }
+
+    .badge.err {
+        border-color: #5c1f2a;
+        background: #220a0f;
+        color: #ff8da1
+    }
+
+    .badge.ok {
+        border-color: #0b3e2e;
+        background: #0a1a16;
+        color: #98ffd8
+    }
+
+    .banner {
+        width:100%;
+        height:200px;
+        background:url('hornet.png') center/cover no-repeat;
+    }
+</style>
+
+<div class="banner">
+</div>
+
+<header>
+    <h3>Hornet Script Trace</h3>
+    <input type="file" id="file" accept=".json">
+    <span class="sep">|</span>
+    <!-- <label>Bytes/row:
+        <select id="cols">
+            <option value="16" selected>16</option>
+            <option value="32">32</option>
+        </select>
+    </label> -->
+    <button id="prev" disabled>&larr; Prev</button>
+    <button id="next" disabled>Next &rarr;</button>
+    <span id="pos" style="margin-left:auto;color:#9fb0c3"></span>
+</header>
+
+<main>
+    <div class="rowgrid">
+        <div class="card">
+            <div class="scriptWrap">
+                <div id="meta" class="kv" style="margin-bottom:8px"></div>
+                <div class="flagline" id="flags"></div>
+                <div id="grid" class="grid" data-cols="16" aria-label="Script bytes grid"></div>
+            </div>
+        </div>
+
+        <div class="side">
+            <div class="card">
+                <div class="row">
+                    <div>SigVersion</div>
+                    <div><code id="Version">—</code></div>
+                </div>
+                <div class="row">
+                    <div>Opcode</div>
+                    <div><code id="opcode">—</code></div>
+                </div>
+                <div class="row">
+                    <div>Offset</div>
+                    <div><code id="pc">—</code></div>
+                </div>
+                <div class="row">
+                    <div>Opcount</div>
+                    <div><code id="opcount">0</code></div>
+                </div>
+                <div class="row">
+                    <div>SigChecks</div>
+                    <div><code id="sigchecks">0</code></div>
+                </div>
+                <div class="row">
+                    <div>Status</div>
+                    <div id="status">—</div>
+                </div>
+                <div class="row">
+                    <div>Truthy (top)</div>
+                    <div><code id="truthy">—</code></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="stacks">
+            <div>
+                <div class="stackTitle">Stack BEFORE</div>
+                <div id="stack_before" class="stack" role="list"></div>
+            </div>
+            <div>
+                <div class="stackTitle">Stack AFTER</div>
+                <div id="stack_after" class="stack" role="list"></div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+    /* ---- Core state ---- */
+    let trace = null, i = 0, scriptBytes = [];
+    const el = id => document.getElementById(id);
+    const grid = el('grid'), pos = el('pos'), versionEl = el('Version'), opcodeEl = el('opcode'), pcEl = el('pc');
+    const opcountEl = el('opcount'), sigchecksEl = el('sigchecks'), statusEl = el('status');
+    const file = el('file'), prev = el('prev'), next = el('next'), meta = el('meta'), flagsEl = el('flags');
+    const stackBeforeEl = el('stack_before'), stackAfterEl = el('stack_after');
+    const truthyEl = el('truthy');
+
+    // ---- Opcode resolver matching your enum Op ----
+    const OP_NAMES = {
+        0x00: 'PushConst0',            // (= PushEmpty / PushFalse)
+        0x4c: 'PushData1',
+        0x4d: 'PushData2',
+        0x4e: 'PushData4',
+        0x4f: 'PushConstNegative1',
+        0x50: 'OP_RESERVED',           // not in your enum, but keeps display sane
+        0x51: 'PushConst1',
+        0x52: 'PushConst2',
+        0x53: 'PushConst3',
+        0x54: 'PushConst4',
+        0x55: 'PushConst5',
+        0x56: 'PushConst6',
+        0x57: 'PushConst7',
+        0x58: 'PushConst8',
+        0x59: 'PushConst9',
+        0x5a: 'PushConst10',
+        0x5b: 'PushConst11',
+        0x5c: 'PushConst12',
+        0x5d: 'PushConst13',
+        0x5e: 'PushConst14',
+        0x5f: 'PushConst15',
+        0x60: 'PushConst16',
+
+        // Stack ops you listed
+        0x75: 'Drop',                  // (= Pop)
+        0x76: 'Duplicate',
+        0x87: 'Equal',
+
+        0x93: 'Add',
+
+        // Signature ops you listed
+        0xac: 'CheckSig',
+        0xad: 'CheckSigVerify',
+        0xae: 'CheckMultiSig',
+        0xaf: 'CheckMultiSigVerify',
+    };
+
+    /**
+     * Resolve opcode display name from the first byte and the known span length.
+     * - 0x01..0x4b  => PushSizeN (N = opcode byte)
+     * - 0x4c        => PushData1
+     * - 0x4d        => PushData2
+     * - 0x4e        => PushData4
+     * - 0x4f        => PushConstNegative1
+     * - 0x51..0x60  => PushConstK (K = opcode-0x50)
+     * - otherwise   => table or OP_UNKNOWN(0xXX)
+     */
+    function opcodeName(byte, spanLen) {
+        if (byte >= 0x01 && byte <= 0x4b) {
+            // For display, show PushSizeN; parenthesis shows actual data span seen
+            const N = byte;
+            const actual = Math.max(0, (spanLen ?? (N + 1)) - 1);
+            const note = (actual !== N) ? ` (len=${actual}, op=${N})` : '';
+            return `PushSize${N}${note}`;
+        }
+        if (byte === 0x4c) return 'PushData1';
+        if (byte === 0x4d) return 'PushData2';
+        if (byte === 0x4e) return 'PushData4';
+        if (byte === 0x4f) return 'PushConstNegative1';
+        if (byte >= 0x51 && byte <= 0x60) return `PushConst${byte - 0x50}`;
+
+        return OP_NAMES[byte] || `OP_UNKNOWN(0x${byte.toString(16).padStart(2, '0')})`;
+    }
+
+    // Optional: only if you emit numeric error codes
+    const ERROR_NAME = {
+        0: 'NonMinimalNumber',
+        1: 'NonMinimalPush',
+        2: 'NumberOverflow',
+        3: 'StackItemOverflow',
+        4: 'StackOverflow',
+        5: 'StackUnderflow',
+        6: 'OpCountExcessive',
+    };
+    function errorLabel(err) {
+        if (err == null) return null;
+        return ERROR_NAME[err] || `Error(${err})`;
+    }
+
+    // ---- Script execution versions ----
+    const VERSION_NAME = {
+    0: 'Legacy',
+    1: 'SegwitV0',
+    2: 'Tapscript'
+    };
+
+    /* ---- File handling ---- */
+    file.onchange = async e => {
+        const text = await e.target.files[0].text();
+        trace = JSON.parse(text);
+        i = 0;
+        scriptBytes = (trace.script_bytes && Array.isArray(trace.script_bytes)) ? trace.script_bytes : hexToBytes(trace.meta?.script_hex || "");
+        buildGrid();
+        renderMetaAndFlags();
+        prev.disabled = true;
+        next.disabled = (trace.steps?.length || 0) > 1 ? false : true;
+        render();
+    };
+
+    // cols.onchange = () => grid.setAttribute('data-cols', cols.value);
+
+    prev.onclick = () => {
+        if (!trace) return;
+        if (i > 0) { i--; render(); }
+        updateNav();
+    };
+    next.onclick = () => {
+        if (!trace) return;
+        if (i < trace.steps.length - 1) { i++; render(); }
+        updateNav();
+    };
+    function updateNav() {
+        prev.disabled = (i <= 0);
+        next.disabled = (!trace || i >= trace.steps.length - 1);
+    }
+
+    /* ---- Grid rendering ---- */
+    function buildGrid() {
+        grid.innerHTML = '';
+        const perRow = 16;
+        for (let idx = 0; idx < scriptBytes.length; idx++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell';
+            cell.dataset.idx = idx;
+            cell.textContent = scriptBytes[idx].toUpperCase();
+            grid.appendChild(cell);
+        }
+    }
+    function highlightRange(start, end) { // [start,end)
+        const cells = grid.children;
+        for (let k = 0; k < cells.length; k++) cells[k].classList.remove('hl', 'cur');
+        for (let j = start; j < end && j < cells.length; j++) cells[j].classList.add('hl');
+        if (start < cells.length) cells[start].classList.add('cur');
+        if (start < cells.length) cells[start].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+
+    /* ---- Meta + flags ---- */
+    function renderMetaAndFlags() {
+        meta.innerHTML = `
+    <div>Bytes</div><div><code>${scriptBytes.length}</code></div>
+    ${trace.meta?.script_hex ? `<div>Script (hex)</div><div><code>${trace.meta.script_hex}</code></div>` : ''}
+  `;
+        const f = trace.meta?.flags || {};
+        const flagChips = [];
+        if ('minimal_num_required' in f) flagChips.push(`minimal_num_required=${f.minimal_num_required}`);
+        if ('cleanstack_required' in f) flagChips.push(`cleanstack_required=${f.cleanstack_required}`);
+        if ('nulldummy_required' in f) flagChips.push(`nulldummy_required=${f.nulldummy_required}`);
+        if ('nullfail_required' in f) flagChips.push(`nullfail_required=${f.nullfail_required}`);
+        flagsEl.innerHTML = flagChips.map(s => `<span class="flag">${s}</span>`).join(' ');
+    }
+
+    /* ---- Per-step render ---- */
+    function render() {
+        if (!trace) return;
+        const s = trace.steps[i];
+        pos.textContent = `Step ${i + 1} / ${trace.steps.length}`;
+
+        const vnum = trace.meta?.version;
+        versionEl.textContent = (vnum in VERSION_NAME) ? VERSION_NAME[vnum] : '-';
+        const spanLen = Math.max(1, (s.byte_end ?? (s.byte_start + 1)) - (s.byte_start ?? 0));
+        const opbyte = (('opcode_byte' in s) && s.opcode_byte != null)
+            ? Number(s.opcode_byte)
+            : parseInt(scriptBytes[clamp(+safe(s, 'byte_start', 0), 0, scriptBytes.length - 1)] || '00', 16);
+        opcodeEl.textContent = opcodeName(opbyte, spanLen);
+        pcEl.textContent = s.pc ?? '—';
+        opcountEl.textContent = s.opcount ?? 0;
+        sigchecksEl.textContent = s.sigchecks ?? 0;
+        const errLab = errorLabel(s.error);
+        statusEl.innerHTML = errLab ? `<span class="danger">${errLab}</span>` : (s.finished ? '<span class="ok">finished</span>' : 'running');
+
+        // Highlight
+        const start = clamp(+safe(s, 'byte_start', 0), 0, scriptBytes.length);
+        const end = clamp(+safe(s, 'byte_end', start + 1), start, scriptBytes.length);
+        highlightRange(start, end);
+
+        // Stacks
+        renderStack(stackBeforeEl, stackBeforeAt(i));
+        renderStack(stackAfterEl, s.stack_after || []);
+
+        // Truthiness of TOP of 'after' stack (if present)
+        {
+            const after = s.stack_after || [];
+            let truth = false;
+            if (after.length > 0) {
+                const topBytes = hexToByteArray(after[after.length - 1]);
+                truth = truthyBytes(topBytes);
+            }
+            truthyEl.innerHTML = truth
+                ? '<span class="badge ok">true</span>'
+                : '<span class="badge err">false</span>';
+        }
+
+        updateNav();
+    }
+
+    /* ---- Stack rendering (shared) ---- */
+    function renderStack(container, itemsHex) {
+        container.innerHTML = '';
+        for (let idx = itemsHex.length - 1; idx >= 0; idx--) {
+            const hex = (itemsHex[idx] || '').toLowerCase();
+            const bytes = hexToByteArray(hex);
+            const { ok, value, reason } = decodeScriptNum(bytes);
+            const minimal = isMinimalScriptNum(bytes);
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'item';
+            wrapper.setAttribute('role', 'listitem');
+
+            const header = document.createElement('div');
+            header.className = 'itemHeader';
+            const title = document.createElement('div');
+            title.innerHTML = `<span class="tag">#${itemsHex.length - idx} ${idx === itemsHex.length - 1 ? '(TOS)' : ''}</span>`;
+            const badges = document.createElement('div');
+            const b1 = document.createElement('span');
+            b1.className = 'badge ' + (ok ? 'ok' : 'warn');
+            b1.textContent = ok ? `int: ${value}` : `int: n/a${reason ? ` (${reason})` : ''}`;
+            const b2 = document.createElement('span');
+            b2.className = 'badge ' + (minimal ? 'ok' : (bytes.length === 0 ? 'ok' : 'err'));
+            b2.textContent = minimal ? 'minimal' : (bytes.length === 0 ? 'minimal (zero)' : 'non-minimal');
+            badges.appendChild(b1); badges.appendChild(b2);
+
+            header.appendChild(title); header.appendChild(badges);
+
+            const hexDiv = document.createElement('div');
+            hexDiv.className = 'hex';
+            hexDiv.textContent = groupHex(hex);
+
+            const metaLine = document.createElement('div');
+            metaLine.className = 'metaLine';
+            metaLine.innerHTML = `<span class="badge">len: ${bytes.length} byte${bytes.length === 1 ? '' : 's'}</span>`;
+
+            wrapper.appendChild(header);
+            wrapper.appendChild(hexDiv);
+            wrapper.appendChild(metaLine);
+            container.appendChild(wrapper);
+        }
+    }
+
+    /* ---- Helpers ---- */
+    function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+    function safe(o, k, def) { return (o && k in o) ? o[k] : def; }
+
+    function hexToBytes(hex) {
+        const out = [];
+        const s = (hex || '').replace(/\s+/g, '').toLowerCase();
+        for (let i = 0; i < s.length; i += 2) {
+            const h = s.slice(i, i + 2);
+            if (h.length === 2) out.push(h);
+        }
+        return out;
+    }
+    function hexToByteArray(hex) {
+        const s = (hex || '').replace(/\s+/g, '').toLowerCase();
+        const out = [];
+        for (let i = 0; i < s.length; i += 2) {
+            const h = s.slice(i, i + 2);
+            if (h.length === 2) out.push(parseInt(h, 16));
+        }
+        return out;
+    }
+    function groupHex(hex) { return (hex || '').replace(/(..)/g, '$1 ').trim(); }
+
+    /* ---- ScriptNum minimality + decode ---- */
+    function isMinimalScriptNum(bytes) {
+        const n = bytes.length;
+        if (n === 0) return true; // minimal zero
+        const last = bytes[n - 1];
+        if ((last & 0x7f) === 0) {
+            if (n === 1) return false; // single 0x00 is non-minimal for numbers
+            const secondLast = bytes[n - 2];
+            if ((secondLast & 0x80) === 0) return false;
+        }
+        if (isNegativeZero(bytes)) return false;
+        return true;
+    }
+    function isNegativeZero(bytes) {
+        const n = bytes.length; if (n === 0) return false;
+        if (bytes[n - 1] !== 0x80) return false;
+        for (let i = 0; i < n - 1; i++) if (bytes[i] !== 0x00) return false;
+        return true;
+    }
+    function decodeScriptNum(bytes) {
+        if (bytes.length > 8) return { ok: false, value: null, reason: ">8 bytes" };
+        if (bytes.length === 0) return { ok: true, value: 0 };
+        let result = 0n;
+        for (let i = 0; i < bytes.length; i++) result |= BigInt(bytes[i]) << (8n * BigInt(i));
+        const last = bytes[bytes.length - 1];
+        const neg = (last & 0x80) !== 0;
+        if (neg) {
+            const clearedLast = last & 0x7f;
+            let mag = (result & ~((0xffn) << (8n * BigInt(bytes.length - 1)))) | (BigInt(clearedLast) << (8n * BigInt(bytes.length - 1)));
+            result = -mag;
+        }
+        const minJS = -9007199254740991n, maxJS = 9007199254740991n;
+        if (result < minJS || result > maxJS) return { ok: true, value: result.toString() + "n" };
+        return { ok: true, value: Number(result) };
+    }
+
+    /* Truthiness helper */
+    function truthyBytes(bytes) {
+        if (bytes.length === 0) return false;
+        // Negative zero is false
+        if (isNegativeZero(bytes)) return false;
+        for (let k = 0; k < bytes.length; k++) {
+            if (bytes[k] !== 0) return true;
+        }
+        return false;
+    }
+
+    function stackBeforeAt(idx) {
+        if (!trace || !trace.steps) return [];
+        const s = trace.steps[idx];
+        // If author provided stack_before explicitly, honor it.
+        if (s && Array.isArray(s.stack_before)) return s.stack_before;
+        // Otherwise derive: first step => empty; else previous step's stack_after.
+        if (idx === 0) return [];
+        const prev = trace.steps[idx - 1];
+        return (prev && Array.isArray(prev.stack_after)) ? prev.stack_after : [];
+    }
+
+    /* ---- Keyboard nav ---- */
+    document.addEventListener('keydown', (e) => {
+        if (!trace) return;
+        if (e.key === 'ArrowRight' || e.key === ' ') { if (i < trace.steps.length - 1) { i++; render(); } }
+        if (e.key === 'ArrowLeft') { if (i > 0) { i--; render(); } }
+        updateNav();
+    });
+</script>

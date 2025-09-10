@@ -55,6 +55,10 @@ class Writer {
     return *this << opcode;
   }
 
+  std::vector<uint8_t> Release() {
+    return std::move(bytes_);
+  }
+
  private:
   // Writes a raw unsigned integer in little-endian encoding to the instruction stream.
   template <std::unsigned_integral T>

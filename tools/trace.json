@@ -1,0 +1,67 @@
+{
+  "meta": {
+    "version": 1,
+    "script_hex": "0115011593012a87",
+    "flags": {
+      "minimal_num_required": true
+    }
+  },
+  "script_bytes": ["01", "15", "01", "15", "93", "01", "2a", "87"],
+  "steps": [
+    {
+      "pc": 0,
+      "byte_start": 0,
+      "byte_end": 2,
+      "opcode_byte": 1,
+      "stack_after": ["15"],
+      "opcount": 0,
+      "sigchecks": 0,
+      "error": null,
+      "finished": false
+    },
+    {
+      "pc": 2,
+      "byte_start": 2,
+      "byte_end": 4,
+      "opcode_byte": 1,
+      "stack_after": ["15", "15"],
+      "opcount": 0,
+      "sigchecks": 0,
+      "error": null,
+      "finished": false
+    },
+    {
+      "pc": 4,
+      "byte_start": 4,
+      "byte_end": 5,
+      "opcode_byte": 147,
+      "stack_after": ["2a"],
+      "opcount": 1,
+      "sigchecks": 0,
+      "error": null,
+      "finished": false
+    },
+    {
+      "pc": 5,
+      "byte_start": 5,
+      "byte_end": 7,
+      "opcode_byte": 1,
+      "stack_after": ["2a", "2a"],
+      "opcount": 1,
+      "sigchecks": 0,
+      "error": null,
+      "finished": false
+    },
+    {
+      "pc": 7,
+      "byte_start": 7,
+      "byte_end": 8,
+      "opcode_byte": 135,
+      "stack_after": ["01"],
+      "opcount": 2,
+      "sigchecks": 0,
+      "error": null,
+      "finished": true
+    }
+  ]
+}

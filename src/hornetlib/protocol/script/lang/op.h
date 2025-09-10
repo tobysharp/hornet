@@ -43,6 +43,12 @@ enum class Op : uint8_t {
   Pop = Drop,
   Duplicate = 0x76,
 
+  // Bitwise operations.
+  Equal = 0x87,
+
+  // Arithmetic operations.
+  Add = 0x93,
+
   // Check signature opcodes.
   CheckSig = 0xac,
   CheckSigVerify = 0xad,
