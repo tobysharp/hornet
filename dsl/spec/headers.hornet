@@ -101,8 +101,8 @@ bool IsVersionRetired(int height, int version) {
     2: 66,
     3: 65,
   };
-  return version < 1 || 
-        (version_expiry.contains(version) && height >= BIP_activations[version_expiry[version]]);
+  int key = max(1, version);
+  return (version_expiry.contains(key) && height >= BIP_activations[version_expiry[key]]);
 }
 
 array<uint32> LastNTimestamps(BlockHeader tip, int count) {
