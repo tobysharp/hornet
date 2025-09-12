@@ -30,6 +30,8 @@ Hornet Node is in active development and not yet ready for general use. See the 
 
 Here are a few examples of how the design principles translate into features.
 
+### Consensus domain-specific language (DSL)
+
 ### Timechain chain-tree data structure
 
 ### Metadata sidecars
