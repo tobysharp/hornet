@@ -1,0 +1,177 @@
+<!DOCTYPE html><html><head><title></title><meta charset="utf-8"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.2.0/github-markdown-dark.min.css"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"><style>body {
+  padding: 40px 20px; /* top/bottom 40px, left/right 20px */
+}
+/*# sourceURL=style.css*/</style><style>pre code.hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 1em
+}
+code.hljs {
+  padding: 3px 5px
+}
+/*!
+  Theme: GitHub Dark
+  Description: Dark theme as seen on github.com
+  Author: github.com
+  Maintainer: @Hirse
+  Updated: 2021-05-15
+
+  Outdated base version: https://github.com/primer/github-syntax-dark
+  Current colors taken from GitHub's CSS
+*/
+.hljs {
+  color: #c9d1d9;
+  background: #0d1117
+}
+.hljs-doctag,
+.hljs-keyword,
+.hljs-meta .hljs-keyword,
+.hljs-template-tag,
+.hljs-template-variable,
+.hljs-type,
+.hljs-variable.language_ {
+  /* prettylights-syntax-keyword */
+  color: #ff7b72
+}
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.class_.inherited__,
+.hljs-title.function_ {
+  /* prettylights-syntax-entity */
+  color: #d2a8ff
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-literal,
+.hljs-meta,
+.hljs-number,
+.hljs-operator,
+.hljs-variable,
+.hljs-selector-attr,
+.hljs-selector-class,
+.hljs-selector-id {
+  /* prettylights-syntax-constant */
+  color: #79c0ff
+}
+.hljs-regexp,
+.hljs-string,
+.hljs-meta .hljs-string {
+  /* prettylights-syntax-string */
+  color: #a5d6ff
+}
+.hljs-built_in,
+.hljs-symbol {
+  /* prettylights-syntax-variable */
+  color: #ffa657
+}
+.hljs-comment,
+.hljs-code,
+.hljs-formula {
+  /* prettylights-syntax-comment */
+  color: #8b949e
+}
+.hljs-name,
+.hljs-quote,
+.hljs-selector-tag,
+.hljs-selector-pseudo {
+  /* prettylights-syntax-entity-tag */
+  color: #7ee787
+}
+.hljs-subst {
+  /* prettylights-syntax-storage-modifier-import */
+  color: #c9d1d9
+}
+.hljs-section {
+  /* prettylights-syntax-markup-heading */
+  color: #1f6feb;
+  font-weight: bold
+}
+.hljs-bullet {
+  /* prettylights-syntax-markup-list */
+  color: #f2cc60
+}
+.hljs-emphasis {
+  /* prettylights-syntax-markup-italic */
+  color: #c9d1d9;
+  font-style: italic
+}
+.hljs-strong {
+  /* prettylights-syntax-markup-bold */
+  color: #c9d1d9;
+  font-weight: bold
+}
+.hljs-addition {
+  /* prettylights-syntax-markup-inserted */
+  color: #aff5b4;
+  background-color: #033a16
+}
+.hljs-deletion {
+  /* prettylights-syntax-markup-deleted */
+  color: #ffdcd7;
+  background-color: #67060c
+}
+.hljs-char.escape_,
+.hljs-link,
+.hljs-params,
+.hljs-property,
+.hljs-punctuation,
+.hljs-tag {
+  /* purposely ignored */
+  
+}/*# sourceURL=/home/toby/.npm-global/lib/node_modules/md-to-pdf/node_modules/highlight.js/styles/github-dark.css*/</style></head>
+	<body class="markdown-body">
+		<h1 id="hornet-node">Hornet Node</h1>
+<h2 id="motivation">Motivation</h2>
+<blockquote>
+<h2 id="bitcoin-is-an-extraordinarily-elegant-protocol-i-wanted-to-use-my-30-years-of-experience-writing-realtime-production-software-to-express-it-in-the-most-elegant-modern-efficient-code-possible"><em>"Bitcoin is an extraordinarily elegant protocol. I wanted to use my 30 years' of experience writing realtime production software to express it in the most elegant, modern, efficient code possible."</em></h2>
+</blockquote>
+<p>Hornet Node is a consensus-compatible Bitcoin client designed from the ground up to be elegant, modular, rigorous, efficient, and modern. It is not copied or forked from any prior starting point, and it has no external dependencies. It stands alone.</p>
+<h2 id="goals">Goals</h2>
+<h2 id="status">Status</h2>
+<p>Hornet Node is in active development and not yet ready for general use. See the Milestones below for demos and future releases.</p>
+<h2 id="design">Design</h2>
+<ul>
+<li>Conciseness (e.g. no sprawling functions)</li>
+<li>Separation of concerns (e.g. metadata sidecars)</li>
+<li>Efficient data structures (e.g. for timechain and UTXOs)</li>
+<li>Contiguous memory layout (e.g. no jagged arrays)</li>
+<li>Modular layer cake (e.g. protocol / consensus separate from data / networking)</li>
+<li>Strictly one-way dependencies between modules</li>
+<li>Use of modern C++ for clarity (e.g. lambda functions, variadic templates, ...)</li>
+</ul>
+<h2 id="contributions">Contributions</h2>
+<p>Here are a few examples of how the design principles translate into features.</p>
+<h3 id="timechain-chain-tree-data-structure">Timechain chain-tree data structure</h3>
+<h3 id="metadata-sidecars">Metadata sidecars</h3>
+<h3 id="flat-arrays">Flat arrays</h3>
+<h3 id="polymorphic-message-dispatch">Polymorphic message dispatch</h3>
+<h3 id="interactive-web-ui">Interactive web UI</h3>
+<h3 id="utxo-cache">UTXO cache</h3>
+<h2 id="examples">Examples</h2>
+<p><a href="examples.md">Examples</a></p>
+<h2 id="author">Author</h2>
+<p>Hi, I'm Toby Sharp and I'm the author of Hornet Node.</p>
+<p>I'm a mathematician with 30 years' <a href="www.linkedin.com/in/tobylsharp">experience</a> developing commercial realtime software systems in C++ at the intersection of research and products. Most recently, I was Principal Software Scientist at Microsoft (2005-2022) and now Lead Software Architect at Google (2022-) for Android XR. </p>
+<p>I've <a href="https://scholar.google.com/citations?user=OOcllDwAAAAJ">published</a> 20+ papers at leading computer vision conferences and journals on novel high-performance algorithms, and had the honor of receiving a few significant <a href="https://www.linkedin.com/in/tobylsharp/details/honors/">awards</a> for my contributions, especially for low-level performance in novel machine learning algorithms.</p>
+<p>I've also had the privilege of designing and coding several major computer vision components in realtime large-scale products including <a href="https://azure.microsoft.com/en-us/products/kinect-dk#content-card-list-oc3409">Microsoft Kinect Body Tracking SDK</a>, <a href="https://www.microsoft.com/en-us/research/wp-content/uploads/2016/11/ismar_2011.pdf">Microsoft Kinect Fusion</a> SDK, <a href="https://learn.microsoft.com/en-us/windows/mixed-reality/discover/mixed-reality">Microsoft HoloLens 2 Hand Tracking</a>, and Google's forthcoming <a href="https://www.android.com/xr/">Android XR</a> products. During the past few years I have developed state-of-the-art <a href="https://arxiv.org/pdf/2204.02776">model fitting</a> libraries for mapping 60Hz camera images of hands and faces to parametric kinematic deformable models.</p>
+<p>In my industry I have a reputation for clean, robust, and highly optimized code.</p>
+<p>For Hornet Node I wanted to apply everything I've learned and teach about software design and apply that to the world's most important software technology — Bitcoin.</p>
+<h2 id="faqs">FAQs</h2>
+<h3 id="who-is-funding-hornet-development">Who is funding Hornet development?</h3>
+<p>Nobody is funding Hornet Node. I have been developing it in my spare time as a personal passion project, drawing inspiration from Satoshi Nakomoto who gave an incredibly valuable technology to the world and took nothing in return.</p>
+<h3 id="what-problems-does-hornet-node-solve">What problem(s) does Hornet Node solve?</h3>
+<h3 id="how-will-you-guarantee-consensus-correctness">How will you guarantee consensus correctness?</h3>
+<h3 id="how-will-you-drive-adoption">How will you drive adoption?</h3>
+<p>I'm focused on contribution rather than adoption, although in my experience good quality software tends to gain market share over time. If there are specific issues blocking adoption I will try to address them in a timely manner.</p>
+<h3 id="whats-hornet-nodes-policy-on-spam-and-filters">What's Hornet Node's policy on spam and filters?</h3>
+<p>There will be user-configurable settings for your choice of node policy.</p>
+<h3 id="how-does-hornet-node-compare-to-bitcoin-core--knots">How does Hornet Node compare to Bitcoin Core / Knots?</h3>
+<h3 id="where-is-the-source-code">Where is the source code?</h3>
+<p>So far the source code has not yet been made public. My O-1 US visa only covers my work for my employer and not additional work whether paid or unpaid. Therefore I will need a change to my visa terms before I can publish source code.</p>
+<h3 id="why-should-anyone-run-hornet-node">Why should anyone run Hornet Node?</h3>
+<h2 id="contact">Contact</h2>
+<p><a href="mailto:toby@hornetnode.com">toby@hornetnode.com</a></p>
+
+	
+
+</body></html>

@@ -1,0 +1,392 @@
+<!DOCTYPE html><html><head><title></title><meta charset="utf-8"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.2.0/github-markdown-dark.min.css"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"><style>body {
+  padding: 40px 20px; /* top/bottom 40px, left/right 20px */
+}
+/*# sourceURL=style.css*/</style><style>pre code.hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 1em
+}
+code.hljs {
+  padding: 3px 5px
+}
+/*!
+  Theme: GitHub Dark
+  Description: Dark theme as seen on github.com
+  Author: github.com
+  Maintainer: @Hirse
+  Updated: 2021-05-15
+
+  Outdated base version: https://github.com/primer/github-syntax-dark
+  Current colors taken from GitHub's CSS
+*/
+.hljs {
+  color: #c9d1d9;
+  background: #0d1117
+}
+.hljs-doctag,
+.hljs-keyword,
+.hljs-meta .hljs-keyword,
+.hljs-template-tag,
+.hljs-template-variable,
+.hljs-type,
+.hljs-variable.language_ {
+  /* prettylights-syntax-keyword */
+  color: #ff7b72
+}
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.class_.inherited__,
+.hljs-title.function_ {
+  /* prettylights-syntax-entity */
+  color: #d2a8ff
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-literal,
+.hljs-meta,
+.hljs-number,
+.hljs-operator,
+.hljs-variable,
+.hljs-selector-attr,
+.hljs-selector-class,
+.hljs-selector-id {
+  /* prettylights-syntax-constant */
+  color: #79c0ff
+}
+.hljs-regexp,
+.hljs-string,
+.hljs-meta .hljs-string {
+  /* prettylights-syntax-string */
+  color: #a5d6ff
+}
+.hljs-built_in,
+.hljs-symbol {
+  /* prettylights-syntax-variable */
+  color: #ffa657
+}
+.hljs-comment,
+.hljs-code,
+.hljs-formula {
+  /* prettylights-syntax-comment */
+  color: #8b949e
+}
+.hljs-name,
+.hljs-quote,
+.hljs-selector-tag,
+.hljs-selector-pseudo {
+  /* prettylights-syntax-entity-tag */
+  color: #7ee787
+}
+.hljs-subst {
+  /* prettylights-syntax-storage-modifier-import */
+  color: #c9d1d9
+}
+.hljs-section {
+  /* prettylights-syntax-markup-heading */
+  color: #1f6feb;
+  font-weight: bold
+}
+.hljs-bullet {
+  /* prettylights-syntax-markup-list */
+  color: #f2cc60
+}
+.hljs-emphasis {
+  /* prettylights-syntax-markup-italic */
+  color: #c9d1d9;
+  font-style: italic
+}
+.hljs-strong {
+  /* prettylights-syntax-markup-bold */
+  color: #c9d1d9;
+  font-weight: bold
+}
+.hljs-addition {
+  /* prettylights-syntax-markup-inserted */
+  color: #aff5b4;
+  background-color: #033a16
+}
+.hljs-deletion {
+  /* prettylights-syntax-markup-deleted */
+  color: #ffdcd7;
+  background-color: #67060c
+}
+.hljs-char.escape_,
+.hljs-link,
+.hljs-params,
+.hljs-property,
+.hljs-punctuation,
+.hljs-tag {
+  /* purposely ignored */
+  
+}/*# sourceURL=/home/toby/.npm-global/lib/node_modules/md-to-pdf/node_modules/highlight.js/styles/github-dark.css*/</style></head>
+	<body class="markdown-body">
+		<h1 id="code-examples">Code Examples</h1>
+<p>Here we show several code snippets from the Hornet codebase to give a feel for the style, design, and effectiveness of the code. Each example illustrates some of Hornet's <a href="index.md#design">design principles</a>.</p>
+<hr>
+<h2 id="bitcoin-script-assembly-and-execution">Bitcoin Script assembly and execution</h2>
+<p>This unit test builds a very simple script and executes it using Hornet's virtual machine.</p>
+<pre><code class="hljs C++"><span class="hljs-built_in">TEST</span>(ScriptTest, RunSimpleScript) {
+    <span class="hljs-comment">// Build a Bitcoin script to evaluate the expression (21 + 21) == 42.</span>
+    <span class="hljs-type">const</span> <span class="hljs-keyword">auto</span> script = Writer{}.<span class="hljs-built_in">PushInt</span>(<span class="hljs-number">21</span>).
+                                 <span class="hljs-built_in">PushInt</span>(<span class="hljs-number">21</span>).
+                                 <span class="hljs-built_in">Then</span>(Op::Add).
+                                 <span class="hljs-built_in">PushInt</span>(<span class="hljs-number">42</span>).
+                                 <span class="hljs-built_in">Then</span>(Op::Equal).<span class="hljs-built_in">Release</span>();
+
+    <span class="hljs-comment">// Execute the script using the stack-based virtual machine.</span>
+    <span class="hljs-type">const</span> <span class="hljs-keyword">auto</span> result = Processor{script}.<span class="hljs-built_in">Run</span>();
+
+    <span class="hljs-comment">// Assert that the script execution completed without error.</span>
+    <span class="hljs-built_in">ASSERT_TRUE</span>(result);
+    
+    <span class="hljs-comment">// Check the result of execution is 'true'.</span>
+    <span class="hljs-built_in">EXPECT_EQ</span>(*result, <span class="hljs-literal">true</span>);
+}
+</code></pre>
+<blockquote>
+<p><em><strong>Design principles: Conciseness and clarity.</strong></em> </p>
+</blockquote>
+<hr>
+<h2 id="script-opcode-handlers">Script opcode handlers</h2>
+<p>Inside the script runtime, the handler for the <code>OP_ADD</code> instruction is written like this:</p>
+<pre><code class="hljs C++"><span class="hljs-comment">// Op::Add</span>
+<span class="hljs-function"><span class="hljs-type">static</span> <span class="hljs-type">void</span> <span class="hljs-title">OnAdd</span><span class="hljs-params">(<span class="hljs-type">const</span> Context&amp; context)</span> </span>{
+  <span class="hljs-built_in">BinaryInt32</span>(context, [](<span class="hljs-type">int64_t</span> a, <span class="hljs-type">int64_t</span> b) { <span class="hljs-keyword">return</span> a + b; });
+}
+</code></pre>
+<blockquote>
+<p><em><strong>Design principles: Separation of concerns.</strong></em></p>
+</blockquote>
+<p>Instructions are dispatched to handlers using statically built function pointer tables. No big switch statement on the opcode, just a fast lookup.</p>
+<hr>
+<h2 id="counting-sigops-with-script-views">Counting sigops with script views</h2>
+<p>In this function we count the number of pubkeys in a script. We factor out the parsing of the script as a separate concern, and have our <code>script::View</code> implement an <code>Instructions()</code> method that returns a forward-iterable collection over the instructions in the script. We can then trivially visit each instruction to categorize it by its opcode.</p>
+<pre><code class="hljs C++"><span class="hljs-function"><span class="hljs-keyword">inline</span> <span class="hljs-type">int</span> <span class="hljs-title">GetSigOpCount</span><span class="hljs-params">(std::span&lt;<span class="hljs-type">const</span> <span class="hljs-type">uint8_t</span>&gt; script)</span> </span>{
+  <span class="hljs-keyword">using</span> protocol::script::lang::Op;
+
+  <span class="hljs-type">int</span> count = <span class="hljs-number">0</span>;
+  <span class="hljs-type">const</span> protocol::script::View view{script};
+  <span class="hljs-keyword">for</span> (<span class="hljs-type">const</span> <span class="hljs-keyword">auto</span>&amp; instruction : view.<span class="hljs-built_in">Instructions</span>()) {
+    <span class="hljs-type">const</span> <span class="hljs-keyword">auto</span> op = instruction.opcode;
+    <span class="hljs-keyword">if</span> (op == Op::CheckSig || op == Op::CheckSigVerify)
+      ++count;
+    <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (op == Op::CheckMultiSig || op == Op::CheckMultiSigVerify)
+      count += constants::kMaxPubKeysPerMultiSig;  <span class="hljs-comment">// = 20</span>
+  }
+  <span class="hljs-keyword">return</span> count;
+}
+</code></pre>
+<blockquote>
+<p><em><strong>Design principles: Separation of concerns.</strong></em></p>
+</blockquote>
+<hr>
+<h2 id="protocol-message-loop">Protocol message loop</h2>
+<p>This is how the main message pump looks for the wire protocol. Messages are popped from per-peer queues and dispatched to polymorphic message handlers. No switch statements on message type.</p>
+<pre><code class="hljs C++"><span class="hljs-comment">// Process queued inbound messages until the timeout expires.</span>
+<span class="hljs-comment">// Using a sensible timeout prevents starvation of other duties for this thread.</span>
+<span class="hljs-function"><span class="hljs-type">void</span> <span class="hljs-title">ProtocolLoop::ProcessMessages</span><span class="hljs-params">(<span class="hljs-type">const</span> util::Timeout&amp; timeout)</span> </span>{
+  <span class="hljs-comment">// Create a snapshot of peers and shuffle order for fairness:</span>
+  <span class="hljs-comment">// A noisy peer may dominate this frame, but shuffling prevents systemic bias.</span>
+  <span class="hljs-type">const</span> <span class="hljs-keyword">auto</span> peers = peers_.<span class="hljs-built_in">Snapshot</span>(<span class="hljs-comment">/*shuffle=*/</span><span class="hljs-literal">true</span>);
+
+  <span class="hljs-comment">// Iterate over per-peer message inbox queues.</span>
+  <span class="hljs-keyword">for</span> (<span class="hljs-type">const</span> <span class="hljs-keyword">auto</span> peer : peers) {
+    <span class="hljs-keyword">if</span> (peer-&gt;<span class="hljs-built_in">IsDropped</span>() || !timeout) <span class="hljs-keyword">continue</span>;
+    <span class="hljs-keyword">auto</span>&amp; inbox = inboxes_[peer-&gt;<span class="hljs-built_in">GetId</span>()];
+
+    <span class="hljs-comment">// Per-peer fault isolation so that one bad peer doesn't affect others.</span>
+    <span class="hljs-keyword">try</span> {
+      <span class="hljs-keyword">while</span> (timeout &amp;&amp; !inbox.<span class="hljs-built_in">empty</span>()) {
+        <span class="hljs-keyword">auto</span> message = std::<span class="hljs-built_in">move</span>(inbox.<span class="hljs-built_in">front</span>()); inbox.<span class="hljs-built_in">pop</span>();
+        <span class="hljs-keyword">for</span> (EventHandler* handler : event_handlers_)
+          message-&gt;<span class="hljs-built_in">Notify</span>(*handler);  <span class="hljs-comment">// Double-dispatch via visitor pattern.</span>
+      }
+    } <span class="hljs-built_in">catch</span> (<span class="hljs-type">const</span> std::exception&amp; e) {
+      <span class="hljs-comment">// Treat all unhandled exceptions as protocol violations and drop the peer.</span>
+      peer-&gt;<span class="hljs-built_in">Drop</span>();
+    }
+  }
+}
+</code></pre>
+<blockquote>
+<p><em><strong>Design principles: Robustness, modularity, polymorphism.</strong></em></p>
+</blockquote>
+<p>An example message handler looks like this:</p>
+<pre><code class="hljs C++"><span class="hljs-function"><span class="hljs-type">void</span> <span class="hljs-title">PeerNegotiator::OnMessage</span><span class="hljs-params">(<span class="hljs-type">const</span> protocol::message::Ping&amp; ping)</span> </span>{
+  <span class="hljs-built_in">Reply</span>&lt;protocol::message::Pong&gt;(ping, ping.<span class="hljs-built_in">GetNonce</span>());
+}
+</code></pre>
+<hr>
+<h2 id="handshake-state-machine">Handshake state machine</h2>
+<p>A finite state machine (FSM) is used to encapsulate and simplify the logic for peer handshakes without littering the message handlers with complex <code>if</code> statements and introducing potential for bugs. The handlers defer the logic to the <code>Handshake</code> object and act on whatever action it instructs.</p>
+<pre><code class="hljs C++"><span class="hljs-comment">// Advances the Handshake state machine and performs any necessary resulting actions.</span>
+<span class="hljs-function"><span class="hljs-type">void</span> <span class="hljs-title">PeerNegotiator::AdvanceHandshake</span><span class="hljs-params">(net::SharedPeer peer,
+                                 protocol::Handshake::Transition transition)</span> </span>{
+  <span class="hljs-keyword">auto</span>&amp; handshake = peer-&gt;<span class="hljs-built_in">GetHandshake</span>();
+
+  <span class="hljs-comment">// Run the state machine forward until we complete or must wait for new input.</span>
+  <span class="hljs-keyword">auto</span> action = handshake.<span class="hljs-built_in">AdvanceState</span>(transition);
+  <span class="hljs-keyword">while</span> (action.next != protocol::Handshake::Transition::None) {
+    <span class="hljs-built_in">Send</span>(peer, protocol::MessageFactory::<span class="hljs-built_in">Default</span>().<span class="hljs-built_in">Create</span>(action.command));
+    action = handshake.<span class="hljs-built_in">AdvanceState</span>(action.next);
+  }
+
+  <span class="hljs-comment">// Once the handshake is complete, send our preference notifications.</span>
+  <span class="hljs-keyword">if</span> (handshake.<span class="hljs-built_in">IsComplete</span>()) <span class="hljs-built_in">SendPeerPreferences</span>(peer);
+}
+
+<span class="hljs-function"><span class="hljs-type">void</span> <span class="hljs-title">PeerNegotiator::OnMessage</span><span class="hljs-params">(<span class="hljs-type">const</span> protocol::message::Verack&amp; verack)</span> </span>{
+  <span class="hljs-built_in">AdvanceHandshake</span>(<span class="hljs-built_in">GetPeer</span>(verack), protocol::Handshake::Transition::ReceiveVerack);
+}
+</code></pre>
+<blockquote>
+<p><em><strong>Design principles: Encapsulation.</strong></em></p>
+</blockquote>
+<hr>
+<h2 id="header-consensus-validation-with-ancestry-view">Header consensus validation with ancestry view</h2>
+<p>This example shows the worker thread loop for header download and validation. </p>
+<p>We want consensus logic to be canonical and isolated from implementation details, but we need the consensus layer to be able to retrieve timechain-specific data like the median of the past eleven blocks' timestamps. To resolve this layering conflict, we create an abstract interface at the consensus level to represent the concepts used by consensus logic.</p>
+<pre><code class="hljs C++"><span class="hljs-keyword">namespace</span> hornet::consensus {
+
+<span class="hljs-keyword">namespace</span> constants {
+<span class="hljs-keyword">inline</span> <span class="hljs-keyword">constexpr</span> <span class="hljs-type">int</span> kBlocksForMedianTime = <span class="hljs-number">11</span>;
+}  <span class="hljs-comment">// namespace constants</span>
+
+<span class="hljs-comment">// Represents a read-only view onto the ancestors of a candidate block header.</span>
+<span class="hljs-comment">// Height 0 corresponds to genesis. The highest accessible height is the parent</span>
+<span class="hljs-comment">// of the header currently being validated.</span>
+<span class="hljs-keyword">class</span> <span class="hljs-title class_">HeaderAncestryView</span> {
+ <span class="hljs-keyword">public</span>:
+  <span class="hljs-keyword">virtual</span> ~<span class="hljs-built_in">HeaderAncestryView</span>() = <span class="hljs-keyword">default</span>;
+
+  <span class="hljs-comment">// Returns the length of the current chain.</span>
+  <span class="hljs-function"><span class="hljs-keyword">virtual</span> <span class="hljs-type">int</span> <span class="hljs-title">Length</span><span class="hljs-params">()</span> <span class="hljs-type">const</span> </span>= <span class="hljs-number">0</span>;
+
+  <span class="hljs-comment">// Returns the timestamp of an ancestor at the given height.</span>
+  <span class="hljs-function"><span class="hljs-keyword">virtual</span> <span class="hljs-type">uint32_t</span> <span class="hljs-title">TimestampAt</span><span class="hljs-params">(<span class="hljs-type">int</span> height)</span> <span class="hljs-type">const</span> </span>= <span class="hljs-number">0</span>;
+
+  <span class="hljs-comment">// Returns the last `count` ancestor timestamps ending at the current tip,</span>
+  <span class="hljs-comment">// ordered from oldest to newest. Does not include the candidate for validation.</span>
+  <span class="hljs-comment">// May return fewer than `count` items if not all exist.</span>
+  <span class="hljs-function"><span class="hljs-keyword">virtual</span> std::vector&lt;<span class="hljs-type">uint32_t</span>&gt; <span class="hljs-title">LastNTimestamps</span><span class="hljs-params">(<span class="hljs-type">int</span> count)</span> <span class="hljs-type">const</span> </span>= <span class="hljs-number">0</span>;
+
+  <span class="hljs-function"><span class="hljs-type">uint32_t</span> <span class="hljs-title">MedianTimePast</span><span class="hljs-params">()</span> <span class="hljs-type">const</span> </span>{
+    <span class="hljs-type">const</span> <span class="hljs-keyword">auto</span> timestamps = <span class="hljs-built_in">LastNTimestamps</span>(constants::kBlocksForMedianTime);
+    <span class="hljs-built_in">Assert</span>(!timestamps.<span class="hljs-built_in">empty</span>());  <span class="hljs-comment">// Impossible: would imply trying to validate the genesis.</span>
+    <span class="hljs-keyword">return</span> timestamps[timestamps.<span class="hljs-built_in">size</span>() / <span class="hljs-number">2</span>];
+  }
+};
+
+}  <span class="hljs-comment">// namespace hornet::consensus</span>
+</code></pre>
+<blockquote>
+<p><em><strong>Design principles: One-way dependencies between modules. A lower layer (<code>consensus</code>) may not depend on a higher layer (<code>data</code>).</strong></em></p>
+</blockquote>
+<p>Then in the <code>data</code> layer, we implement this interface in a lightweight adapter that references our <code>HeaderTimechain</code> data structure. Now we can have our header timechain create one of these adapters when we call <code>GetValidationView</code> as seen below. This is the worker thread loop for header download and validation.</p>
+<pre><code class="hljs C++"><span class="hljs-comment">// Validates queued headers, and adds them to the headers timechain.</span>
+<span class="hljs-function"><span class="hljs-keyword">inline</span> <span class="hljs-type">void</span> <span class="hljs-title">HeaderSync::Process</span><span class="hljs-params">()</span> </span>{
+
+  <span class="hljs-keyword">for</span> (std::optional&lt;Item&gt; item; (item = queue_.<span class="hljs-built_in">WaitPop</span>());) {
+    <span class="hljs-keyword">if</span> (!item-&gt;batch.<span class="hljs-built_in">empty</span>()) {
+      <span class="hljs-comment">// As soon as we pop from the queue, request new headers if appropriate.</span>
+      <span class="hljs-built_in">RequestHeadersFrom</span>(item-&gt;weak_peer);
+
+
+      <span class="hljs-comment">// Locates the parent of this header in the timechain.</span>
+      <span class="hljs-keyword">auto</span> headers = timechain_.<span class="hljs-built_in">ReadHeaders</span>();
+      <span class="hljs-keyword">auto</span> parent = headers-&gt;<span class="hljs-built_in">Search</span>(item-&gt;batch[<span class="hljs-number">0</span>].<span class="hljs-built_in">GetPreviousBlockHash</span>());
+      <span class="hljs-keyword">if</span> (!parent) {
+        <span class="hljs-built_in">HandleError</span>(*item, item-&gt;batch[<span class="hljs-number">0</span>], consensus::HeaderError::ParentNotFound);
+        <span class="hljs-keyword">continue</span>;
+      }
+
+
+      <span class="hljs-comment">// Creates an implementation-independent view onto the timechain history for the validator.</span>
+      <span class="hljs-type">const</span> std::unique_ptr&lt;data::HeaderTimechain::ValidationView&gt; view =
+          headers-&gt;<span class="hljs-built_in">GetValidationView</span>(parent);
+
+      <span class="hljs-keyword">for</span> (<span class="hljs-type">const</span> <span class="hljs-keyword">auto</span>&amp; header : item-&gt;batch) {
+        <span class="hljs-comment">// Validates the header against consensus rules.</span>
+        <span class="hljs-type">const</span> <span class="hljs-keyword">auto</span> validated = consensus::<span class="hljs-built_in">ValidateDownloadedHeader</span>(*parent, header, *view);
+
+        <span class="hljs-comment">// Handles consensus failures, breaking out of this batch.</span>
+        <span class="hljs-keyword">if</span> (<span class="hljs-type">const</span> <span class="hljs-keyword">auto</span>* error = std::<span class="hljs-built_in">get_if</span>&lt;consensus::HeaderError&gt;(&amp;validated)) {
+          <span class="hljs-comment">// Notifies caller of consensus failure and discards future batches from the same peer.</span>
+          <span class="hljs-built_in">HandleError</span>(*item, header, *error);
+          <span class="hljs-keyword">break</span>;
+        }
+
+        <span class="hljs-comment">// Adds the validated header to the headers timechain.</span>
+        <span class="hljs-type">const</span> <span class="hljs-keyword">auto</span>&amp; context = std::<span class="hljs-built_in">get</span>&lt;model::HeaderContext&gt;(validated);
+        view-&gt;<span class="hljs-built_in">SetTip</span>(parent = timechain_.<span class="hljs-built_in">AddHeader</span>(parent, context));
+      }
+    }
+
+
+    <span class="hljs-comment">// Update live metrics</span>
+    util::<span class="hljs-built_in">NotifyMetric</span>(<span class="hljs-string">"sync/headers"</span>, {{<span class="hljs-string">"headers_validated"</span>, timechain_.<span class="hljs-built_in">ReadHeaders</span>()-&gt;<span class="hljs-built_in">ChainLength</span>()}});
+
+    <span class="hljs-comment">// Notify if the sync is complete.</span>
+    <span class="hljs-keyword">if</span> (!<span class="hljs-built_in">IsFullBatch</span>(item-&gt;batch)) {
+      handler_.<span class="hljs-built_in">OnComplete</span>(item-&gt;weak_peer);
+    }
+  }
+}
+</code></pre>
+<p>Finally, the <code>HeaderAncestryView</code> is then used inside the consensus layer for header validation, with no dependency at all on the data layer.</p>
+<pre><code class="hljs C++">[[nodiscard]] <span class="hljs-function"><span class="hljs-keyword">inline</span> HeaderResult <span class="hljs-title">ValidateDownloadedHeader</span><span class="hljs-params">(<span class="hljs-type">const</span> model::HeaderContext&amp; parent,
+                                                           <span class="hljs-type">const</span> protocol::BlockHeader&amp; header,
+                                                           <span class="hljs-type">const</span> HeaderAncestryView&amp; view)</span> </span>{
+  <span class="hljs-type">const</span> <span class="hljs-type">int</span> height = parent.height + <span class="hljs-number">1</span>;
+
+  <span class="hljs-comment">// Verify previous hash</span>
+  <span class="hljs-keyword">if</span> (parent.hash != header.<span class="hljs-built_in">GetPreviousBlockHash</span>()) <span class="hljs-keyword">return</span> HeaderError::ParentNotFound;
+
+  <span class="hljs-comment">// Verify PoW target is valid and is achieved by the header's hash.</span>
+  <span class="hljs-type">const</span> <span class="hljs-keyword">auto</span> hash = header.<span class="hljs-built_in">ComputeHash</span>();
+  <span class="hljs-type">const</span> <span class="hljs-keyword">auto</span> target = header.<span class="hljs-built_in">GetCompactTarget</span>().<span class="hljs-built_in">Expand</span>();
+  <span class="hljs-keyword">if</span> (!(hash &lt;= target)) <span class="hljs-keyword">return</span> HeaderError::InvalidProofOfWork;
+
+  <span class="hljs-comment">// Verify PoW target obeys the difficulty adjustment rules.</span>
+  <span class="hljs-keyword">if</span> (header.<span class="hljs-built_in">GetCompactTarget</span>() != <span class="hljs-built_in">AdjustCompactTarget</span>(height, parent.data, view))
+    <span class="hljs-keyword">return</span> HeaderError::BadDifficultyTransition;
+
+  <span class="hljs-comment">// Verify median of recent timestamps.</span>
+  <span class="hljs-keyword">if</span> (header.<span class="hljs-built_in">GetTimestamp</span>() &lt;= view.<span class="hljs-built_in">MedianTimePast</span>()) <span class="hljs-keyword">return</span> HeaderError::BadTimestamp;
+
+  <span class="hljs-comment">// Verify that the timestamp isn't too far in the future.</span>
+  <span class="hljs-type">const</span> <span class="hljs-keyword">auto</span> now = std::chrono::system_clock::<span class="hljs-built_in">now</span>().<span class="hljs-built_in">time_since_epoch</span>();
+  <span class="hljs-keyword">if</span> (std::chrono::seconds{header.<span class="hljs-built_in">GetTimestamp</span>()} &gt;
+      now + std::chrono::seconds{constants::kTimestampTolerance})
+    <span class="hljs-keyword">return</span> HeaderError::BadTimestamp;
+
+  <span class="hljs-comment">// Verify that the version number is allowed at this height.</span>
+  <span class="hljs-keyword">if</span> (!detail::<span class="hljs-built_in">IsVersionValidAtHeight</span>(header.<span class="hljs-built_in">GetVersion</span>(), height)) <span class="hljs-keyword">return</span> HeaderError::BadVersion;
+
+  <span class="hljs-keyword">return</span> parent.<span class="hljs-built_in">Extend</span>(header, hash);
+}
+</code></pre>
+<hr>
+<h2 id="node-orchestration">Node orchestration</h2>
+<p>Hornet Node's <code>main.cpp</code> is very simple as it is a lightweight wrapper around the library components. The node behavior is encapsulated in a class <code>hornet::node::Controller</code> and is called like this. The lambda function passed into <code>Run()</code> determines when the message loop should break and return.</p>
+<pre><code class="hljs C++">std::atomic&lt;<span class="hljs-type">bool</span>&gt; is_abort = <span class="hljs-literal">false</span>;
+
+Controller controller;
+controller.<span class="hljs-built_in">SetConnectAddress</span>(options.connect);
+<span class="hljs-comment">// Other runtime options</span>
+controller.<span class="hljs-built_in">Initialize</span>();
+controller.<span class="hljs-built_in">Run</span>([&amp;]() { 
+    <span class="hljs-keyword">return</span> is_abort.<span class="hljs-built_in">load</span>(); 
+});
+</code></pre>
+<blockquote>
+<p><em><strong>Design principles: modern and reuseable.</strong></em></p>
+</blockquote>
+<hr>
+<blockquote>
+<p><strong>These examples illustrate Hornet Node's design philosophy: conciseness, clarity, rigor, modularity, and efficiency.</strong></p>
+</blockquote>
+
+	
+
+</body></html>
