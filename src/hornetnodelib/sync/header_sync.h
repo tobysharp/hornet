@@ -90,7 +90,7 @@ inline bool HeaderSync::RequestHeadersFrom(net::WeakPeer weak_peer) {
   if (queue_.Size() < max_queue_items_) {
     if (!send_blocked_.test_and_set(std::memory_order_acquire)) {
       bool ok = false;
-      if (!protocol::IsNull(next_request_)) {
+      if (next_request_) {
         const auto peer = weak_peer.lock();
         const int version = peer ? peer->GetCapabilities().GetVersion() : protocol::kCurrentVersion;
         protocol::message::GetHeaders getheaders{version};

@@ -30,7 +30,7 @@ struct OutPoint {
   static OutPoint Null() { return {{}, kNullIndex}; }
 
   bool IsNull() const {
-    return protocol::IsNull(hash) && index == kNullIndex;
+    return !hash && index == kNullIndex;
   }
 
   void Serialize(encoding::Writer& writer) const {

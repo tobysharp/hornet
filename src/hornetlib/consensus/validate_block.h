@@ -9,6 +9,7 @@
 #include "hornetlib/consensus/validate_transaction.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/block_header.h"
+#include "hornetlib/protocol/hash.h"
 #include "hornetlib/protocol/script/lang/op.h"
 #include "hornetlib/protocol/script/view.h"
 #include "hornetlib/protocol/transaction.h"
