@@ -13,6 +13,7 @@
 
 #include "hornetlib/util/log.h"
 #include "hornetlib/util/shared_span.h"
+#include "hornetlib/util/timeout.h"
 #include "hornetnodelib/net/socket.h"
 
 namespace hornet::node::net {
@@ -161,31 +162,40 @@ class Connection {
     sock_.Close();
   }
 
-  // Recreates the socket after poll() signaled an error/hup/nval.
-  bool ReconnectOnError(short revents) {
-    if (revents & POLLERR) {
-      int sock_err = 0;
-      socklen_t sock_len = sizeof(sock_err);
-      ::getsockopt(sock_.GetFD(), SOL_SOCKET, SO_ERROR, &sock_err, &sock_len);
-    }
-    sock_.Close();
-    sock_ = Socket::Connect(host_, port_, blocking_);
-    return sock_.IsOpen();
-  }
-
   // If there is data to be written, polls the socket for POLLOUT and then writes the available
   // data. If there is no data to be written, effectively sleeps for the given period. This is
   // useful to avoid spin loops.
-  bool PollToWrite(int timeout_ms, bool reconnect_on_error = false) {
+  bool PollToWrite(const util::Timeout& timeout, bool reconnect_on_error = false) {
+    constexpr int kMaxRetries = 5;
     const bool has_streaming_work = QueuedWriteBufferCount() > 0;
     pollfd pfd{sock_.GetFD(), short(has_streaming_work ? POLLOUT : 0), 0};
-    const int rc = ::poll(&pfd, 1, timeout_ms);
-    if ((rc > 0 && (pfd.revents & (POLLERR | POLLHUP | POLLNVAL))) || (rc < 0 && errno != EINTR)) {
-      if (!reconnect_on_error || !ReconnectOnError(pfd.revents)) return false;  // Fatal error.
+    int rc = 0;
+
+    for (int i = 0; i < kMaxRetries && timeout; ++i) {
+      rc = ::poll(&pfd, 1, timeout);
+      if (rc >= 0 || errno != EINTR) break;
+    }
+    
+    // We prioritize certain revents flags above the return value, and treat them as errors.
+    // POLLERR: Error condition; POLLHUP: Hang up; POLLINVAL: Invalid request.
+    if (rc < 0 || (pfd.revents & (POLLERR | POLLHUP | POLLNVAL))) {
+      // Log the error.
+      int sock_err = 0, fd = sock_.GetFD();
+      socklen_t sock_len = sizeof(sock_err);
+      ::getsockopt(fd, SOL_SOCKET, SO_ERROR, &sock_err, &sock_len);
+      LogWarn() << "Socket poll error on fd=" << fd << " with rc=" << rc << ", revents=" << pfd.revents << ", SO_ERROR=" << sock_err << ".";
+      
+      // Close socket and optionally reconnect.
+      sock_.Close();
+      if (!reconnect_on_error) return false;
+      sock_ = Socket::Connect(host_, port_, blocking_);
+      LogWarn() << "Socket fd=" << fd << " attempted reconnection as fd=" << sock_.GetFD() << ".";
+
+      return sock_.IsOpen();  // If successful reconnection, try again later.
     } else if (rc > 0 && (pfd.revents & POLLOUT)) {
       ContinueWrite();
     }
-    return true;
+    return true;  // Timed out or non-writeable currently, try again later.
   }
 
   void TrimBufferedData() {

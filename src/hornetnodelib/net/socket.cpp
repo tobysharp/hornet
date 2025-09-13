@@ -23,6 +23,18 @@
 
 namespace hornet::node::net {
 
+namespace {
+inline ssize_t Send(int fd, const void* buf, size_t len) {
+#if defined(__linux__)
+  return ::send(fd, buf, len, MSG_NOSIGNAL);
+#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+  return ::send(fd, buf, len, 0);  // SO_NOSIGPIPE should be set once at socket creation.
+#else
+  return ::write(fd, buf, len);    // fallback; caller may need SIGPIPE ignored globally.
+#endif
+}
+}  // namespace
+
 Socket::Socket(int fd, bool blocking /* = true */) : fd_(fd), is_blocking_(blocking) {
   if (fd_ < 0) {
     throw std::runtime_error("Invalid socket descriptor");
@@ -96,6 +108,7 @@ void Socket::Close() {
     }
   }
 
+  LogInfo() << "Socket opened with fd=" << fd << ".";
   return Socket(fd, blocking);
 }
 
@@ -123,23 +136,19 @@ int32_t Socket::GetReadCapacity() const {
 }
   
 std::optional<int> Socket::Write(std::span<const uint8_t> data) const {
-  if (fd_ < 0) {
-    throw std::runtime_error("Write on closed socket.");
-  }
-  
-  // TODO: Apparently using ::write to a closed/reset TCP socket can raise SIGPIPE and
-  // kill the process. The fix may be to switch to ::send(..., MSG_NOSIGNAL) on Linux,
-  // while other platforms have different requirements. 
-  // https://linear.app/hornet-node/issue/HOR-53/prevent-sigpipe-from-killing-the-process-unexpectedly
+  constexpr int kMaxRetries = 5;
+  if (fd_ < 0)
+    util::ThrowRuntimeError("Write on closed socket, fd=", fd_, ".");
 
-  ssize_t n = write(fd_, data.data(), data.size());
-  if (n < 0) {
+  for (int i = 0; i < kMaxRetries; ++i) {
+    const ssize_t n = Send(fd_, data.data(), data.size());
+    if (n >= 0) return n;
     const int error = errno;
-    if ((error == EAGAIN) || (error == EWOULDBLOCK))
-      return {};  // Non-blocking mode with full pipe.
+    if (error == EINTR) continue;  // Retry immediately.
+    if (error == EAGAIN || error == EWOULDBLOCK) return {};  // Non-blocking mode with full pipe.
     util::ThrowRuntimeError("Socket write failed: ", std::strerror(error), " (errno ", error, ")");
   }
-  return n;
+  return {};  // All retries failed, try again later.
 }
 
 std::optional<int> Socket::Read(std::span<uint8_t> buffer) const {
