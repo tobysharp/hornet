@@ -12,6 +12,7 @@
 
 namespace hornet::node::net {
 
+// A notification sink which sends notifications as JSON strings over a TCP connection.
 class TcpNotificationSink {
  public:
   TcpNotificationSink(const std::string& host, uint16_t port, bool blocking = false)
@@ -51,7 +52,6 @@ class TcpNotificationSink {
   void RunWorker() {
     // This timeout represents the maximum time (in milliseconds) that we could be blocked while
     // the queue is filling up and we're not servicing it.
-    // TODO: Use read/write pipe FDs as waitable events for the abort and non-empty queue flags.
     static constexpr int kMaxPollTimeoutMs = 25;
 
     std::string output;
@@ -70,6 +70,7 @@ class TcpNotificationSink {
       if (!connection_.PollToWrite(kMaxPollTimeoutMs, true)) {
         abort_ = true;  // Fatal error. This sink will never work again.
         // TODO: Optionally throw a specific exception so the app can create a new sink.
+        // https://linear.app/hornet-node/issue/HOR-55/handle-connection-drop-in-tcpnotificationsink-worker-thread
       }
     }
   }

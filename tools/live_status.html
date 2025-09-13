@@ -308,6 +308,8 @@
     progress_bar: { el: barEl, labelEl: labelProgress },
   };
   let lastPacketSeen = 0;
+  let lastHeaders = NaN;
+  let lastBlocks = NaN;
   const fieldSeenAt = new WeakMap();
   function setMetric(key, val, packetId) {
     const rec = PILL_FIELDS[key] || CARD_FIELDS[key]; if (!rec) return;
@@ -389,20 +391,20 @@
   es.onopen = () => { statusEl.textContent = 'SSE: connected'; };
   es.onerror = () => { statusEl.textContent = 'SSE: reconnecting…'; };
 
-  es.addEventListener('metrics', (e) => {
-    if (uiPaused) return;
-    try {
-      const m = JSON.parse(e.data); lastPacketSeen++;
-      const headersVal = (m.headers_validated ?? m.headers_total);
-      for (const [k, v] of Object.entries(m)) setMetric(k, v, lastPacketSeen);
-      const hv = Number(headersVal), bv = Number(m.blocks_validated);
-      if (Number.isFinite(hv) && Number.isFinite(bv) && hv > 0) {
-        const pct = Math.round(clamp(bv / Math.max(hv, 1), 0, 1) * 100);
-        barEl.style.width = pct + '%'; setMetric('progress_bar', true, lastPacketSeen);
-      }
-      applyStalenessForPacket(lastPacketSeen);
-    } catch { }
-  });
+    es.addEventListener('metrics', (e) => {
+      if (uiPaused) return;
+      try {
+        const m = JSON.parse(e.data); lastPacketSeen++;
+        if ('headers_validated' in m) lastHeaders = Number(m.headers_validated);
+        else if ('headers_total' in m) lastHeaders = Number(m.headers_total);
+        if ('blocks_validated' in m) lastBlocks = Number(m.blocks_validated);
+        for (const [k, v] of Object.entries(m)) setMetric(k, v, lastPacketSeen);
+        if (Number.isFinite(lastHeaders) && Number.isFinite(lastBlocks) && lastHeaders > 0) {
+          const pct = Math.round(clamp(lastBlocks / Math.max(lastHeaders, 1), 0, 1) * 100);
+          barEl.style.width = pct + '%'; setMetric('progress_bar', true, lastPacketSeen);
+        }
+      } catch { }
+    });
 
   es.addEventListener('console', (e) => {
     if (uiPaused) return;

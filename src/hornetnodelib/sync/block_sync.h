@@ -209,8 +209,7 @@ inline void BlockSync::Process() {
     }
 
     // Sets the validation status flag into the metadata sidecar.
-    util::NotifyMetric("sync/blocks", {{"blocks_validated", item->id.height + 1},
-                                       {"headers_validated",timechain_.ReadHeaders()->ChainLength()}});
+    util::NotifyMetric("sync/blocks", {{"blocks_validated", item->id.height + 1}});
     LogDebug() << "Block height " << item->id.height << " validated, " << item->block->SizeBytes()
                << " bytes.";
     validation_.Set(item->id, consensus::BlockValidationStatus::StructureValid);
