@@ -6,6 +6,7 @@
 #include <thread>
 
 #include "hornetlib/util/as_span.h"
+#include "hornetlib/util/log.h"
 #include "hornetlib/util/notify.h"
 #include "hornetlib/util/thread_safe_queue.h"
 #include "hornetnodelib/net/connection.h"
@@ -26,14 +27,19 @@ class TcpNotificationSink {
   }
 
   void operator()(util::NotificationPayload item) {
+    using util::LogLevel;
     static constexpr int kMaxQueueSize = 1 << 12;  // 4,096
 
     // Duplicate console warnings and errors to stderr.
     if (item.type == util::NotificationType::Log) {
-      const auto* level = item.map.Find<std::string>("level");
-      if (level != nullptr && (*level == "WARN" || *level == "ERROR")) {
-        if (const auto* msg = item.map.Find<std::string>("msg"))
-          std::cerr << *msg << std::endl;
+      if (const auto* plevel = item.map.Find<int64_t>("level")) {
+        LogLevel level = LogLevel(*plevel);
+        if (level == LogLevel::Warn || level == LogLevel::Error) {
+          const auto* msg = item.map.Find<std::string>("msg");
+          const auto* time_us = item.map.Find<int64_t>("time");
+          if (msg && time_us)
+            std::cerr << FormatLogLine(level, *time_us, *msg) << std::endl;
+        }
       }
     }
 

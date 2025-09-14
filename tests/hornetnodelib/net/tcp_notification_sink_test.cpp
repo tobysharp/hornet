@@ -109,7 +109,7 @@ TEST(TcpNotificationSinkTest, DeliversSingleNotification) {
   payload.type = util::NotificationType::Log;
   payload.path = "sys/log";
   payload.map = {
-      {"level", std::string("info")},
+      {"level", int64_t(util::LogLevel::Info)},
       {"msg", std::string("hello")},
       {"time_us", int64_t(123)}
   };

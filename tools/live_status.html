@@ -254,6 +254,7 @@
 <script>
   const TOP_NEWEST = true; // newest at top?
   const PHASE = { 0: 'Headers', 1: 'Blocks', 2: 'Done' };
+  const LOG_LEVEL = { 0: '     ', 1: 'ERROR', 2: 'WARN ', 3: 'INFO ', 4: 'DEBUG' };
 
   const es = new EventSource('/stream');
   const statusEl = document.getElementById('status');
@@ -285,8 +286,8 @@
     const pad = (n, w = 2) => String(n).padStart(w, '0');
     const hh = pad(d.getHours()), mm = pad(d.getMinutes()), ss = pad(d.getSeconds());
     const subsecs = pad(Math.floor((time_us % 1_000_000) / 100), 4);
-    const lvl = (level ?? '').toUpperCase(); const padLvl = lvl + (lvl.length < 5 ? ' ' : '');
-    return `[${padLvl} ${hh}:${mm}:${ss}.${subsecs}] `;
+    const lvl = LOG_LEVEL[level] ?? LOG_LEVEL[3];
+    return `[${lvl} ${hh}:${mm}:${ss}.${subsecs}] `;
   }
   function classifyLine(line) {
     if (line.includes('ERROR')) return 'log-error';
@@ -410,7 +411,7 @@
     if (uiPaused) return;
     try {
       const j = JSON.parse(e.data);
-      const level = j.level ?? 'INFO';
+      const level = Number.isFinite(j.level) ? (j.level | 0) : 3;
       const time_us = j.time_us ?? 0;
       const text = (j.msg ?? j.message ?? JSON.stringify(j));
       const prefix = formatLogPrefix(level, time_us);
@@ -447,11 +448,15 @@
   });
 
   es.addEventListener('clear', () => {
-    consoleEl.innerHTML = ''; eventsEl.innerHTML = '';
-    latestEl=null; 
-    if (fieldSeenAt?.clear) fieldSeenAt.clear(); 
-    lastPacketSeen=0;
+    consoleEl.innerHTML = ''; 
+    eventsEl.innerHTML = '';
+    latestEl = null;
+    if (fieldSeenAt?.clear) fieldSeenAt.clear();
+    lastPacketSeen = 0;
+    lastHeaders = 0; lastBlocks = 0;
+    hEl.textContent = '0'; bEl.textContent = '0';
+    barEl.style.width = '0%';
     applyStalenessForPacket(-1);
-    [phaseEl, barEl].forEach(el => el.classList.add('stale'));
+    [phaseEl, barEl, hEl, bEl].forEach(el => el.classList.add('stale'));    
   });
 </script>

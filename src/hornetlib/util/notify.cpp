@@ -5,7 +5,11 @@
 #include <fstream>
 #include <iostream>
 #include <mutex>
+#include <string>
+#include <string_view>
 #include <unordered_map>
+
+#include "hornetlib/util/log.h"
 
 namespace hornet::util {
 
@@ -29,22 +33,13 @@ void DefaultLogSink::operator()(NotificationPayload payload) {
     return;
 
   std::lock_guard lock(mutex_);
-  const std::string& level = *payload.map.Find<std::string>("level");
+  const LogLevel level = LogLevel(*payload.map.Find<int64_t>("level"));
   const std::string& message = *payload.map.Find<std::string>("msg");
   const int64_t time_us = *payload.map.Find<int64_t>("time_us");
-  const std::string full = Prefix(level, time_us) + message + "\n";
+  const std::string full = FormatLogLine(level, time_us, message) + "\n";
 
   if (to_stdout_) std::cout << full;
   if (file_.is_open()) file_ << full;
-}
-
-std::string DefaultLogSink::Prefix(const std::string& level, int64_t time_us) const {
-  using namespace std::chrono;
-  const sys_time<microseconds> tp{microseconds{time_us}};
-  return "[" + std::string{level} + (level.size() < 5 ? " " : "") +
-         std::format(" {:%H:%M:%S}.{:04}", floor<seconds>(tp),
-                     (tp.time_since_epoch() % 1s).count() / 100) +
-         "] ";
 }
 
 namespace {

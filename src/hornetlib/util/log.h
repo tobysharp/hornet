@@ -39,6 +39,30 @@ namespace hornet::util {
 // The logging levels in increasing verbosity.
 enum class LogLevel { None, Error, Warn, Info, Debug };
 
+inline std::string FormatLogLine(LogLevel level, int64_t time_us, const std::string& msg) {
+  auto LevelToString = [](LogLevel level) -> std::string_view {
+    switch (level) {
+      case LogLevel::None:
+        return "     ";
+      case LogLevel::Error:
+        return "ERROR";
+      case LogLevel::Warn:
+        return "WARN ";
+      case LogLevel::Info:
+        return "INFO ";
+      case LogLevel::Debug:
+        return "DEBUG";
+    }
+  };
+  auto Time = [](int64_t time_us) -> std::string {
+    using namespace std::chrono;
+    system_clock::time_point tp{microseconds{time_us}};
+    return std::format(" {:%H:%M:%S}.{:04}", floor<seconds>(tp),
+                     (tp.time_since_epoch() % 1s).count() / 100);
+  };
+  return std::string{"["} + std::string{LevelToString(level)} + Time(time_us) + "] " + msg;
+}
+
 // The LogContext singleton represents the target of logging output and is thread-safe.
 class LogContext {
  public:
@@ -53,55 +77,15 @@ class LogContext {
     return static_cast<int>(level) <= static_cast<int>(max_level_.load(std::memory_order_relaxed));
   }
   void Emit(LogLevel level, const std::string& message) {
-    auto LevelToString = [](LogLevel level) -> const char* {
-      switch (level) {
-        case LogLevel::None:
-          return "";
-        case LogLevel::Error:
-          return "ERROR";
-        case LogLevel::Warn:
-          return "WARN";
-        case LogLevel::Info:
-          return "INFO";
-        case LogLevel::Debug:
-          return "DEBUG";
-      }
-    };
     using namespace std::chrono;
     NotifyLog(
           {{"time_us", duration_cast<microseconds>(system_clock::now().time_since_epoch()).count()},
-            {"level", LevelToString(level)},
-            {"msg", std::string{message}}});
+            {"level", int64_t(level)},
+            {"msg", message}});
     }
 
  private:
   LogContext() = default;
-  std::string Prefix(LogLevel level) const {
-    const std::string prefix = [&]() {
-      switch (level) {
-        case LogLevel::Debug:
-          return "[DEBUG";
-        case LogLevel::Info:
-          return "[INFO ";
-        case LogLevel::Warn:
-          return "[WARN ";
-        case LogLevel::Error:
-          return "[ERROR";
-        default:
-          return "";
-      }
-    }();
-    return prefix + Time() + "] ";
-  }
-
-  static std::string Time() {
-    using namespace std::chrono;
-    const auto now = system_clock::now();
-    std::string time = std::format("{:%H:%M:%S}", floor<seconds>(now));
-    const auto us = duration_cast<microseconds>(now.time_since_epoch()) % 1'000'000;
-    return time + std::format(".{:04}", us.count() / 100);
-  }
-
   std::atomic<LogLevel> max_level_ = LogLevel::HORNET_MAX_LOG_LEVEL;
 };
 
