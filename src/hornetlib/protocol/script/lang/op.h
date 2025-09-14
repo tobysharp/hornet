@@ -38,6 +38,9 @@ enum class Op : uint8_t {
   PushFalse = PushConst0,     // Pushes the immediate Boolean FALSE.
   PushTrue = PushConst1,      // Pushes the immediate Boolean TRUE.
 
+  // Control operations.
+  Return = 0x6a,
+  
   // Stack operations.
   Drop = 0x75,
   Pop = Drop,
@@ -57,6 +60,10 @@ enum class Op : uint8_t {
 };
 
 inline constexpr int kImmediateMin = -1;
+
+inline constexpr uint8_t operator +(Op op) {
+  return uint8_t(op);
+}
 
 inline constexpr uint8_t ToByte(Op op) { 
   return uint8_t(op);

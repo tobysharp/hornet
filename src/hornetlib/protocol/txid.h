@@ -10,12 +10,12 @@
 
 namespace hornet::protocol {
 
-// Computes the txid, which is the double-SHA256 hash of the serialized transaction,
-// excluding any witness data from the serialization.
-inline protocol::Hash ComputeTxid(const TransactionDetail& detail, const TransactionData& data) {
+// Computes the txid/wtxid, which is the double-SHA256 hash of the serialized transaction,
+// excluding/including any witness data during the serialization.
+inline protocol::Hash ComputeTxid(const TransactionDetail& detail, const TransactionData& data, bool include_witness) {
   // TODO: Create a HashWriter class that processes 64 bytes at a time for hashing.
   encoding::Writer writer;
-  detail.Serialize(writer, data, false);
+  detail.Serialize(writer, data, include_witness);
   const auto& buffer = writer.Buffer();
   return crypto::DoubleSha256(buffer.begin(), buffer.end());
 }

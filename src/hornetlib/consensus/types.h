@@ -30,10 +30,15 @@ enum class BlockError {
   BadSize,
   BadTransactionCount,
   BadCoinBase,
+  BadCoinBaseHeight,
   BadMerkleRoot,
   BadTransaction,
   BadSigOpCount,
-  NonFinalTransaction
+  NonFinalTransaction,
+  BadWitnessNonce,
+  BadWitnessMerkle,
+  UnexpectedWitness,
+  BadBlockWeight
 };
 
 enum class TransactionError {
