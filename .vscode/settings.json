@@ -98,12 +98,14 @@
         "shared_mutex": "cpp",
         "complex": "cpp",
         "print": "cpp",
-        "expected": "cpp"
+        "expected": "cpp",
+        "format": "cpp"
     },
     "C_Cpp.default.compilerPath": "/usr/bin/clang++-20",
     "C_Cpp.default.compileCommands": "${workspaceFolder}/build/clang20-debug/compile_commands.json",
     "C_Cpp.intelliSenseEngine": "default",
     "C_Cpp.default.configurationProvider": "ms-vcscode.cmake-tools",
+    "C_Cpp.default.cppStandard": "c++23",
 
     // This tells the CMake Tools status bar button how to launch the debugger.
     // It mimics the structure of our launch.json configuration.

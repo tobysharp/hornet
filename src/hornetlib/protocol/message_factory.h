@@ -9,9 +9,9 @@
 #include <string>
 #include <unordered_map>
 
-namespace hornet::protocol {
+#include "hornetlib/protocol/message.h"
 
-class Message;
+namespace hornet::protocol {
 
 class MessageFactory final {
  public:
