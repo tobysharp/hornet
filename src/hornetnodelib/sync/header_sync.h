@@ -15,6 +15,7 @@
 #include "hornetlib/protocol/hash.h"
 #include "hornetlib/protocol/message/getheaders.h"
 #include "hornetlib/protocol/message/headers.h"
+#include "hornetlib/util/notify.h"
 #include "hornetlib/util/thread_safe_queue.h"
 #include "hornetnodelib/net/peer.h"
 #include "hornetnodelib/sync/sync_handler.h"
@@ -89,7 +90,7 @@ inline bool HeaderSync::RequestHeadersFrom(net::WeakPeer weak_peer) {
   if (queue_.Size() < max_queue_items_) {
     if (!send_blocked_.test_and_set(std::memory_order_acquire)) {
       bool ok = false;
-      if (!protocol::IsNull(next_request_)) {
+      if (next_request_) {
         const auto peer = weak_peer.lock();
         const int version = peer ? peer->GetCapabilities().GetVersion() : protocol::kCurrentVersion;
         protocol::message::GetHeaders getheaders{version};
@@ -165,6 +166,8 @@ inline void HeaderSync::Process() {
         view->SetTip(parent = timechain_.AddHeader(parent, context));
       }
     }
+
+    util::NotifyMetric("sync/headers", {{"headers_validated",timechain_.ReadHeaders()->ChainLength()}});
 
     // Notify if the sync is complete.
     if (!IsFullBatch(item->batch)) {

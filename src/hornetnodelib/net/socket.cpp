@@ -2,15 +2,17 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include <arpa/inet.h>
 #include <cerrno>
 #include <cstring>
-#include <fcntl.h>
-#include <netdb.h>
-#include <netinet/in.h>
 #include <optional>
 #include <stdexcept>
 #include <string>
+
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -20,6 +22,18 @@
 #include "hornetnodelib/net/socket.h"
 
 namespace hornet::node::net {
+
+namespace {
+inline ssize_t Send(int fd, const void* buf, size_t len) {
+#if defined(__linux__)
+  return ::send(fd, buf, len, MSG_NOSIGNAL);
+#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+  return ::send(fd, buf, len, 0);  // SO_NOSIGPIPE should be set once at socket creation.
+#else
+  return ::write(fd, buf, len);    // fallback; caller may need SIGPIPE ignored globally.
+#endif
+}
+}  // namespace
 
 Socket::Socket(int fd, bool blocking /* = true */) : fd_(fd), is_blocking_(blocking) {
   if (fd_ < 0) {
@@ -47,6 +61,11 @@ Socket &Socket::operator=(Socket &&other) noexcept {
 
 void Socket::Close() {
   if (fd_ >= 0) {
+    ::tcp_info ti{};
+    socklen_t length = sizeof(ti);
+    ::getsockopt(fd_, IPPROTO_TCP, TCP_INFO, &ti, &length);
+    LogWarn() << "Closing socket with fd=" << fd_ << ", errno=" << errno << ", tcp_info.state=" << int(ti.tcpi_state);
+
     close(fd_);
     fd_ = -1;
   }
@@ -89,6 +108,7 @@ void Socket::Close() {
     }
   }
 
+  LogInfo() << "Socket opened with fd=" << fd << ".";
   return Socket(fd, blocking);
 }
 
@@ -116,17 +136,19 @@ int32_t Socket::GetReadCapacity() const {
 }
   
 std::optional<int> Socket::Write(std::span<const uint8_t> data) const {
-  if (fd_ < 0) {
-    throw std::runtime_error("Write on closed socket.");
-  }
-  ssize_t n = write(fd_, data.data(), data.size());
-  if (n < 0) {
+  constexpr int kMaxRetries = 5;
+  if (fd_ < 0)
+    util::ThrowRuntimeError("Write on closed socket, fd=", fd_, ".");
+
+  for (int i = 0; i < kMaxRetries; ++i) {
+    const ssize_t n = Send(fd_, data.data(), data.size());
+    if (n >= 0) return n;
     const int error = errno;
-    if ((error == EAGAIN) || (error == EWOULDBLOCK))
-      return {};  // Non-blocking mode with full pipe.
-  throw std::runtime_error("Socket write failed");
+    if (error == EINTR) continue;  // Retry immediately.
+    if (error == EAGAIN || error == EWOULDBLOCK) return {};  // Non-blocking mode with full pipe.
+    util::ThrowRuntimeError("Socket write failed: ", std::strerror(error), " (errno ", error, ")");
   }
-  return n;
+  return {};  // All retries failed, try again later.
 }
 
 std::optional<int> Socket::Read(std::span<uint8_t> buffer) const {

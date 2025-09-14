@@ -9,6 +9,7 @@
 #include <sstream>
 #include <stdexcept>
 
+#include "hornetlib/util/log.h"
 #include "hornetlib/util/assert.h"
 
 namespace hornet::util {
@@ -23,22 +24,30 @@ template <typename... Args>
 
 template <typename... Args>
 [[noreturn]] inline void ThrowRuntimeError(const Args&... args) {
-    throw std::runtime_error{ToString(args...)};
+    const auto str = ToString(args...);
+    LogError("Throwing runtime error: ", str);
+    throw std::runtime_error{str};
 }
 
 template <typename... Args>
 [[noreturn]] inline void ThrowOutOfRange(const Args&... args) {
-    throw std::out_of_range{ToString(args...)};
+    const auto str = ToString(args...);
+    LogError("Throwing out-of-range error: ", str);    
+    throw std::out_of_range{str};
 }
 
 template <typename... Args>
 [[noreturn]] inline void ThrowInvalidArgument(const Args&... args) {
-    throw std::invalid_argument{ToString(args...)};
+    const auto str = ToString(args...);
+    LogError("Throwing invalid-argument error: ", str);
+    throw std::invalid_argument{str};
 }
 
 template <typename... Args>
 [[noreturn]] inline void ThrowLogicError(const Args&... args) {
-    throw std::runtime_error{ToString(args...)};
+    const auto str = ToString(args...);
+    LogError("Throwing logic error: ", str);
+    throw std::logic_error{str};
 }
 
 }  // namespace hornet::util

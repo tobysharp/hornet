@@ -27,6 +27,8 @@
 #include <sstream>
 #include <string>
 
+#include "hornetlib/util/notify.h"
+
 // Compile with e.g. -DHORNET_MAX_LOG_LEVEL="None" to disable all logging at compile time.
 #ifndef HORNET_MAX_LOG_LEVEL
 #define HORNET_MAX_LOG_LEVEL Debug
@@ -37,6 +39,30 @@ namespace hornet::util {
 // The logging levels in increasing verbosity.
 enum class LogLevel { None, Error, Warn, Info, Debug };
 
+inline std::string FormatLogLine(LogLevel level, int64_t time_us, const std::string& msg) {
+  auto LevelToString = [](LogLevel level) -> std::string_view {
+    switch (level) {
+      case LogLevel::None:
+        return "     ";
+      case LogLevel::Error:
+        return "ERROR";
+      case LogLevel::Warn:
+        return "WARN ";
+      case LogLevel::Info:
+        return "INFO ";
+      case LogLevel::Debug:
+        return "DEBUG";
+    }
+  };
+  auto Time = [](int64_t time_us) -> std::string {
+    using namespace std::chrono;
+    system_clock::time_point tp{microseconds{time_us}};
+    return std::format(" {:%H:%M:%S}.{:04}", floor<seconds>(tp),
+                     (tp.time_since_epoch() % 1s).count() / 100);
+  };
+  return std::string{"["} + std::string{LevelToString(level)} + Time(time_us) + "] " + msg;
+}
+
 // The LogContext singleton represents the target of logging output and is thread-safe.
 class LogContext {
  public:
@@ -44,60 +70,23 @@ class LogContext {
     static LogContext instance;
     return instance;
   }
-
   void SetLevel(LogLevel level) {
     max_level_.store(level, std::memory_order_relaxed);
-  }
-  void SetOutputFile(const std::string& filename) {
-    std::lock_guard lock(mutex_);
-    file_.open(filename, std::ios::app);
-  }
-  void EnableStdout(bool enabled) {
-    to_stdout_.store(enabled, std::memory_order_relaxed);
   }
   bool IsActive(LogLevel level) const {
     return static_cast<int>(level) <= static_cast<int>(max_level_.load(std::memory_order_relaxed));
   }
-
   void Emit(LogLevel level, const std::string& message) {
-    std::lock_guard lock(mutex_);
-    const std::string full = Prefix(level) + message + "\n";
-    if (to_stdout_) std::cout << full;
-    if (file_.is_open()) file_ << full;
-  }
+    using namespace std::chrono;
+    NotifyLog(
+          {{"time_us", duration_cast<microseconds>(system_clock::now().time_since_epoch()).count()},
+            {"level", int64_t(level)},
+            {"msg", message}});
+    }
 
  private:
   LogContext() = default;
-  std::string Prefix(LogLevel level) const {
-    const std::string prefix = [&]() {
-      switch (level) {
-        case LogLevel::Debug:
-          return "[DEBUG";
-        case LogLevel::Info:
-          return "[INFO ";
-        case LogLevel::Warn:
-          return "[WARN ";
-        case LogLevel::Error:
-          return "[ERROR";
-        default:
-          return "";
-      }
-    }();
-    return prefix + Time() + "] ";
-  }
-
-  static std::string Time() {
-    using namespace std::chrono;
-    const auto now = system_clock::now();
-    std::string time = std::format("{:%H:%M:%S}", floor<seconds>(now));
-    const auto us = duration_cast<microseconds>(now.time_since_epoch()) % 1'000'000;
-    return time + std::format(".{:04}", us.count() / 100);
-  }
-
-  mutable std::mutex mutex_;
-  std::ofstream file_;
   std::atomic<LogLevel> max_level_ = LogLevel::HORNET_MAX_LOG_LEVEL;
-  std::atomic<bool> to_stdout_ = true;
 };
 
 // A move-only RAII class that enables streaming to the LogContext with simple, clean syntax.

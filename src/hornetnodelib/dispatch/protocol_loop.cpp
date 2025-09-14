@@ -91,6 +91,11 @@ net::PeerManager::PollResult ProtocolLoop::PollReadWrite() {
   // robustly secure against malicious peers.
   // https://linear.app/hornet-node/issue/HOR-39/per-peer-inbox-queues
 
+  // TODO: Note that if our connection queues are currently empty and there's no work to be done
+  // we will enter the poll with a timeout of kMaxPollTimeoutMs, and if another thread broadcasts an
+  // outbound message to our outbox during our blocking period, we will not wake up to service that
+  // newly arriving work item. We will only discover the work when the poll times out.
+
   auto ready = peers_.PollReadWrite(timeout_ms, [](const net::Peer& peer) {
     return peer.GetConnection().QueuedWriteBufferCount() > 0;
   });
@@ -99,10 +104,8 @@ net::PeerManager::PollResult ProtocolLoop::PollReadWrite() {
   // When we awake, if there are new peers connected, we will start servicing them in the next iteration.
   // This is expected to be an edge case (no connected peers). But if the latency of this sleep becomes
   // an issue, we can add a condition variable so new peers force immediate wake-up from this sleep.
-  if (ready.empty) {
-    LogDebug() << "ProtocolLoop::PollReadWrite has nothing to poll.";
+  if (ready.empty)
     std::this_thread::sleep_for(std::chrono::milliseconds{timeout_ms});
-  }
 
   // Create a fast, non-cryptographic pseudo-random generator seeded with current time.
   static thread_local std::mt19937 rng{
