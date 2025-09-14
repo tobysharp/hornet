@@ -4,6 +4,8 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
+#include <algorithm>
+
 #include "hornetlib/data/sidecar.h"
 
 namespace hornet::data {
