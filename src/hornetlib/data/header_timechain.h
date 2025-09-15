@@ -23,6 +23,9 @@ class HeaderTimechain : public ChainTree<protocol::BlockHeader, model::HeaderCon
   using Iterator = ContextIterator<false>;
   using ConstIterator = ContextIterator<true>;
   using HeaderContext = model::HeaderContext;
+  using Base = ChainTree<protocol::BlockHeader, HeaderContext>;
+  using BaseIterator = Base::Iterator;
+  using BaseConstIterator = Base::ConstIterator;
   struct AddResult;
 
   // Public methods
@@ -35,8 +38,9 @@ class HeaderTimechain : public ChainTree<protocol::BlockHeader, model::HeaderCon
   ConstIterator ChainTip() const;
   Iterator ChainTip();
   const protocol::Hash& GetChainHash(int height) const;
-  std::unique_ptr<ValidationView> GetValidationView(ConstIterator tip) const;
+  std::unique_ptr<ValidationView> GetValidationView(BaseConstIterator tip) const;
   std::optional<Locator> MakeLocator(int height, const protocol::Hash& hash) const;
+  BaseConstIterator FindStable(int height, const protocol::Hash& hash) const;
   void EraseBranch(Iterator root);
 
   // Iterate over all known headers from the genesis onward, calling the predicate for each, with arguments
@@ -45,9 +49,6 @@ class HeaderTimechain : public ChainTree<protocol::BlockHeader, model::HeaderCon
   void ForEach(Predicate predicate) const;
 
  private:
-  using Base = ChainTree<protocol::BlockHeader, HeaderContext>;
-  using BaseIterator = Base::Iterator;
-  using BaseConstIterator = Base::ConstIterator;
   struct HeaderContextPolicy {
     const HeaderTimechain* timechain_ = nullptr;
     const protocol::Hash& GetChainHash(int height) const { return timechain_->GetChainHash(height); }
@@ -142,10 +143,10 @@ struct HeaderTimechain::AddResult {
 
 class HeaderTimechain::ValidationView : public consensus::HeaderAncestryView {
  public:
-  ValidationView(const HeaderTimechain& timechain, ConstIterator tip)
+  ValidationView(const HeaderTimechain& timechain, BaseConstIterator tip)
       : timechain_(timechain), tip_(tip) {}
 
-  void SetTip(ConstIterator tip) {
+  void SetTip(BaseConstIterator tip) {
     tip_ = tip;
   }
   virtual int Length() const override;
@@ -154,7 +155,7 @@ class HeaderTimechain::ValidationView : public consensus::HeaderAncestryView {
 
  private:
   const HeaderTimechain& timechain_;
-  ConstIterator tip_;
+  BaseConstIterator tip_;
 };
 
 }  // namespace hornet::data
