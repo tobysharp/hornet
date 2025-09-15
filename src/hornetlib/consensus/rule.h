@@ -1,8 +1,11 @@
 #pragma once
 
+#include <iterator>
 #include <optional>
 
 #include "hornetlib/consensus/bips.h"
+#include "hornetlib/consensus/types.h"
+#include "hornetlib/util/assert.h"
 
 namespace hornet::consensus {
 
@@ -16,14 +19,11 @@ template <size_t N, typename Fn>
 using Ruleset = std::array<Rule<Fn>, N>;
 
 template <size_t N, typename Fn, typename... Args>
-auto ValidateRules(const Ruleset<N, Fn>& ruleset, int height, Args&&... args) 
-  -> decltype(ruleset[0].fn(std::forward<Args>(args)...))
-{
+ErrorStack ValidateRules(const Ruleset<N, Fn>& ruleset, int height, Args&&... args) {
   for (const auto& rule : ruleset) {
+    Assert(!(rule.bip && height <= 0));
     if (rule.bip && !IsBIPEnabledAtHeight(*rule.bip, height)) continue;
-
-    const auto result = rule.fn(std::forward<Args>(args)...);
-    if (!result) return result;
+    if (const ErrorStack stack = rule.fn(std::forward<Args>(args)...)) return stack;
   }
   return {};
 }
