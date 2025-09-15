@@ -27,33 +27,26 @@ struct BlockValidationContext {
   int height;
 };
 
-using BlockValidation = std::expected<void, BlockError>;
-
-template <typename T>
-inline std::expected<void, T> Fail(T err) {
-  return std::unexpected(err);
-}
-
 // Verify all transactions are finalized.
 // From BIP113 onwards, we enforce transaction locktime to be < median time past (MTP).
-[[nodiscard]] inline BlockValidation ValidateTransactionFinality(
+[[nodiscard]] inline ErrorStack ValidateTransactionFinality(
     const BlockValidationContext& context) {
   const int64_t current_locktime = IsBIPEnabledAtHeight(BIP::LockTimeMedianPast, context.height)
                                        ? context.view.MedianTimePast()
                                        : context.block.Header().GetTimestamp();
   for (const auto& tx : context.block.Transactions()) {
     if (!detail::IsTransactionFinalAt(tx, context.height, current_locktime))
-      return Fail(BlockError::NonFinalTransaction);
+      return BlockError::NonFinalTransaction;
   }
   return {};
 }
 
 // With BIP34, each coinbase signature script must begin by pushing the block height.
-/* [[BIP::HeightInCoinbase]] */ [[nodiscard]] inline BlockValidation ValidateCoinbaseHeight(
+/* [[BIP::HeightInCoinbase]] */ [[nodiscard]] inline ErrorStack ValidateCoinbaseHeight(
     const BlockValidationContext& context) {
   const auto expected = protocol::script::Writer{}.PushInt(context.height).Release();
   if (!context.block.CoinbaseSignature().StartsWith(expected))
-    return Fail(BlockError::BadCoinBaseHeight);
+    return BlockError::BadCoinBaseHeight;
   return {};
 }
 
@@ -62,7 +55,7 @@ inline std::expected<void, T> Fail(T err) {
 // that includes the Merkle root *with witness data* is stuffed into the pubkey script of one
 // of the coinbase transaction's outputs. Here we validate that the coinbase's commitment correctly
 // commits to the block's witness data.
-/* [[BIP::SegWit]] */ [[nodiscard]] inline BlockValidation ValidateWitnessCommitment(
+/* [[BIP::SegWit]] */ [[nodiscard]] inline ErrorStack ValidateWitnessCommitment(
     const BlockValidationContext& context) {
   using protocol::script::lang::Op;
   static constexpr std::array<uint8_t, 6> kWitnessCommitmentBytes = {+Op::Return, 0x24, 0xaa,
@@ -82,7 +75,7 @@ inline std::expected<void, T> Fail(T err) {
     // BIP141 requires the coinbase transaction to have a 32-byte witness field that acts as a
     // forward-compatible salt for future extensions to chain into this commitment value.
     if (coinbase.Witness(0).Size() != 1 || coinbase.WitnessScript(0, 0).size() != 32)
-      return Fail(BlockError::BadWitnessNonce);
+      return BlockError::BadWitnessNonce;
 
     // The commitment value is the double-SHA256 of the concatenated witness-enabled Merkle root,
     // and the arbitrary 32-byte salt from the coinbase witness script.
@@ -91,27 +84,27 @@ inline std::expected<void, T> Fail(T err) {
 
     // Finally, this is compared against the commitment in the appropropriate coinbase pkscript.
     if (!std::ranges::equal(hash_witness, coinbase.PkScript(output_index).subspan(6)))
-      return Fail(BlockError::BadWitnessMerkle);
+      return BlockError::BadWitnessMerkle;
   } else {
     // No valid witness commitment -- this block may not contain witness data.
     for (const auto& tx : context.block.Transactions())
-      if (tx.IsWitness()) return Fail(BlockError::UnexpectedWitness);
+      if (tx.IsWitness()) return BlockError::UnexpectedWitness;
   }
 
   return {};
 }
 
 // Verify that the block weight is within the limit.
-[[nodiscard]] inline BlockValidation ValidateBlockWeight(const BlockValidationContext& context) {
+[[nodiscard]] inline ErrorStack ValidateBlockWeight(const BlockValidationContext& context) {
   constexpr int kMaximumWeightUnits = 4'000'000;
   if (context.block.GetWeightUnits() > kMaximumWeightUnits)
-    return Fail(BlockError::BadBlockWeight);
+    return BlockError::BadBlockWeight;
   return {};
 }
 
 }  // namespace
 
-[[nodiscard]] inline BlockValidation ValidateBlockContext(const HeaderAncestryView& ancestry,
+[[nodiscard]] inline ErrorStack ValidateBlockContext(const HeaderAncestryView& ancestry,
                                                           const protocol::Block& block) {
   // Defines the set of validation rules applied to the contextual-block phase.
   // clang-format off

@@ -4,6 +4,11 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
+#include <algorithm>
+#include <expected>
+#include <variant>
+#include <vector>
+
 namespace hornet::consensus {
 
 // Represents errors that can occur during header validation.
@@ -41,6 +46,8 @@ enum class BlockError {
   BadBlockWeight
 };
 
+using BlockValidation = std::expected<void, BlockError>;
+
 enum class TransactionError {
   None = 0,
   EmptyInputs,
@@ -52,6 +59,72 @@ enum class TransactionError {
   DuplicatedInput,
   NullPreviousOutput,
   BadCoinBaseSignatureScriptSize
+};
+
+template <typename T>
+inline std::expected<void, T> Fail(T err) {
+  return std::unexpected(err);
+}
+
+class ErrorStack {
+ public:
+  using ValidationError = std::variant<HeaderError, BlockError, TransactionError>;
+
+  ErrorStack() = default;
+
+  template <typename T>
+  ErrorStack(T error) {
+    stack_.push_back(error);
+  }
+
+  template <typename T>
+  ErrorStack& Push(std::expected<void, T> result) {
+    if (!result) stack_.push_back(result.error());
+    return *this;
+  }
+
+  template <typename T>
+  ErrorStack& Push(T error) {
+    stack_.push_back(error);
+    return *this;
+  }
+
+  ErrorStack& Push(ErrorStack&& rhs) {
+    if (!rhs) {
+      stack_.insert(stack_.end(), std::make_move_iterator(rhs.stack_.begin()),
+                    std::make_move_iterator(rhs.stack_.end()));
+      rhs.stack_.clear();
+    }
+    return *this;
+  }
+
+  template <typename Func>
+  ErrorStack& AndPush(Func fn) {
+    if (stack_.empty()) return Push(fn());
+    return *this;
+  }
+
+  explicit operator bool() const {
+    return stack_.empty();
+  }
+
+  const ValidationError& Error() const {
+    return stack_.back();
+  }
+
+  bool operator ==(const ErrorStack& rhs) const {
+    return std::ranges::equal(stack_, rhs.stack_);
+  }
+
+  auto begin() const {
+    return stack_.begin();
+  }
+  auto end() const {
+    return stack_.end();
+  }
+
+ private:
+  std::vector<ValidationError> stack_;
 };
 
 }  // namespace hornet::consensus
