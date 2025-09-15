@@ -11,7 +11,8 @@
 #include <thread>
 
 #include "hornetlib/consensus/types.h"
-#include "hornetlib/consensus/validate_block.h"
+#include "hornetlib/consensus/validate_block_context.h"
+#include "hornetlib/consensus/validate_block_structure.h"
 #include "hornetlib/data/sidecar_binding.h"
 #include "hornetlib/data/timechain.h"
 #include "hornetlib/protocol/message/block.h"
@@ -211,7 +212,8 @@ inline consensus::BlockError BlockSync::ValidateItem(const Item& item) {
     // Create a validation view with the parent as the tip.
     const auto view = headers->GetValidationView(parent);
     // Call the contextual block validation.
-    error = consensus::ValidateBlockContext(*view, *item.block);
+    const auto result = consensus::ValidateBlockContext(*view, *item.block);
+    if (!result) error = result.error();
   }
   return error;
 }
