@@ -144,10 +144,8 @@ namespace {
 }  // namespace
 
 // Performs contextual block validation, aligned with Core's ContextualCheckBlock function.
-[[nodiscard]] inline BlockError ValidateBlockContext(const model::HeaderContext& parent,
-                                                     const protocol::Block& block,
-                                                     const HeaderAncestryView& view) {
-  const int height = parent.height + 1;
+[[nodiscard]] inline BlockError ValidateBlockContext(const HeaderAncestryView& view, const protocol::Block& block) {
+  const int height = view.Length();
 
   // Verify all transactions are finalized.
   // From BIP113 onwards, we enforce transaction locktime to be < median time past (MTP).
