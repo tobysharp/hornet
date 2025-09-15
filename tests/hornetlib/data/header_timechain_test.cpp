@@ -101,7 +101,7 @@ TEST(HeaderTimechainTest, ValidationViewProvidesTimestamps) {
   auto h1 = MakeChild(genesis, 2, 1, 1);
   auto it1 = tc.Add(it0, h1).it;
   auto h2 = MakeChild(h1, 3, 1, 2);
-  auto tip = tc.Add(it1, h2).it;
+  HeaderTimechain::ConstIterator tip = tc.Add(it1, h2).it;
 
   auto view = tc.GetValidationView(tip);
   EXPECT_EQ(view->TimestampAt(1), 1u);

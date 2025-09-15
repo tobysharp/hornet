@@ -2,7 +2,7 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "hornetlib/consensus/validate_block.h"
+#include "hornetlib/consensus/validate_block_structure.h"
 
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/protocol/block.h"
