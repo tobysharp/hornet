@@ -17,7 +17,7 @@ inline constexpr uint32_t kLocktimeMinimumTimestamp = 500'000'000;
 inline constexpr uint32_t kSequenceFinal = 0xFFFF'FFFF;
 }  // namespace constants
 
-[[nodiscard]] inline TransactionError ValidateTransaction(
+[[nodiscard]] inline ErrorStack ValidateTransaction(
     const protocol::TransactionConstView transaction) {
   // Verify the transaction sizes are allowed.
   if (transaction.InputCount() < 1) return TransactionError::EmptyInputs;
@@ -57,7 +57,7 @@ inline constexpr uint32_t kSequenceFinal = 0xFFFF'FFFF;
       return TransactionError::BadCoinBaseSignatureScriptSize;
   }
 
-  return TransactionError::None;
+  return {};
 }
 
 namespace detail {
