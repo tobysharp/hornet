@@ -27,6 +27,20 @@
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
+    },
+    {
+      "name": "profiling",
+      "hidden": false,
+      "generator": "Ninja",
+      "description": "Optimized build with debug info and frame pointers for profiling.",
+      "binaryDir": "${sourceDir}/build/profiling",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang-20",
+        "CMAKE_CXX_COMPILER": "clang++-20",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "OFF",
+        "CMAKE_CXX_FLAGS": "-fno-omit-frame-pointer"
+      }
     }
   ],
   "buildPresets": [
@@ -37,6 +51,10 @@
     {
       "name": "clang20-release-all",
       "configurePreset": "clang20-release"
+    },
+    {
+      "name": "profiling-all",
+      "configurePreset": "profiling"
     }
   ]
 }
