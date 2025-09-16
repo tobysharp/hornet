@@ -28,6 +28,7 @@ using ValidateBlockResult = ErrorStack<std::variant<BlockError, TransactionError
 
 namespace rules {
 
+namespace detail {
 // Determines whether the locktime should be interpreted as a block height (returns true),
 // otherwise it should be interpreted as a timestamp.
 inline bool IsLockTimeABlockHeight(uint32_t locktime) {
@@ -55,6 +56,7 @@ inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transacti
   }
   return true;
 }
+}  // namespace detail
 
 // All transactions in the block MUST be final given the block height and locktime rules.
 [[nodiscard]] inline ValidateBlockResult ValidateTransactionFinality(const BlockValidationContext& context) {
@@ -62,7 +64,7 @@ inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transacti
                                        ? context.view.MedianTimePast()
                                        : context.block.Header().GetTimestamp();
   for (const auto& tx : context.block.Transactions()) {
-    if (!IsTransactionFinalAt(tx, context.height, current_locktime))
+    if (!detail::IsTransactionFinalAt(tx, context.height, current_locktime))
       return BlockError::NonFinalTransaction;
   }
   return {};
