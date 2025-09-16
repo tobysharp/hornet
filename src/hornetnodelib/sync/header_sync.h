@@ -8,7 +8,8 @@
 #include <thread>
 #include <variant>
 
-#include "hornetlib/consensus/validate_header.h"
+#include "hornetlib/consensus/rules/validate.h"
+#include "hornetlib/consensus/types.h"
 #include "hornetlib/data/timechain.h"
 #include "hornetlib/model/header_context.h"
 #include "hornetlib/protocol/block_header.h"
@@ -152,18 +153,17 @@ inline void HeaderSync::Process() {
 
       for (const auto& header : item->batch) {
         // Validates the header against consensus rules.
-        const auto validated = consensus::ValidateDownloadedHeader(*parent, header, *view);
+        const auto validated = consensus::ValidateHeader(*parent, header, *view);
 
         // Handles consensus failures, breaking out of this batch.
-        if (const auto* error = std::get_if<consensus::HeaderError>(&validated)) {
+        if (!validated) {
           // Notifies caller of consensus failure and discards future batches from the same peer.
-          HandleError(*item, header, *error);
+          HandleError(*item, header, validated.Error());
           break;
         }
 
         // Adds the validated header to the headers timechain.
-        const auto& context = std::get<model::HeaderContext>(validated);
-        view->SetTip(parent = timechain_.AddHeader(parent, context));
+        view->SetTip(parent = timechain_.AddHeader(parent, parent->Extend(header)));
       }
     }
 
