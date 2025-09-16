@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <expected>
+#include <optional>
 #include <variant>
 #include <vector>
 
@@ -66,25 +67,32 @@ inline std::expected<void, T> Fail(T err) {
   return std::unexpected(err);
 }
 
+using ValidationError = std::variant<HeaderError, BlockError, TransactionError>;
+
+template <typename Err>
 class ErrorStack {
  public:
-  using ValidationError = std::variant<HeaderError, BlockError, TransactionError>;
-
   ErrorStack() = default;
 
-  template <typename T>
-  ErrorStack(T error) {
+  template <typename E>
+  requires std::is_constructible_v<Err, E>
+  ErrorStack(E error) {
     stack_.push_back(error);
   }
 
-  template <typename T>
-  ErrorStack& Push(std::expected<void, T> result) {
-    if (!result) stack_.push_back(result.error());
-    return *this;
+  template <typename E>
+  requires std::is_constructible_v<Err, E>
+  ErrorStack(const ErrorStack<E>& rhs) {
+    stack_.insert(stack_.end(), rhs.begin(), rhs.end());
   }
 
-  template <typename T>
-  ErrorStack& Push(T error) {
+  operator bool() const {
+    return stack_.empty();
+  }
+
+  template <typename E>
+  requires std::is_constructible_v<Err, E>
+  ErrorStack& Push(E error) {
     stack_.push_back(error);
     return *this;
   }
@@ -98,33 +106,37 @@ class ErrorStack {
     return *this;
   }
 
+  template <typename E>
+  requires std::is_constructible_v<Err, E>
+  ErrorStack& Push(const ErrorStack<E>& rhs) {
+    stack_.insert(stack_.end(), rhs.begin(), rhs.end());
+    return *this;
+  }
+  
   template <typename Func>
   ErrorStack& AndPush(Func fn) {
     if (stack_.empty()) return Push(fn());
     return *this;
   }
 
-  explicit operator bool() const {
-    return stack_.empty();
-  }
-
-  const ValidationError& Error() const {
+  const Err& Error() const {
     return stack_.back();
   }
 
-  bool operator ==(const ErrorStack& rhs) const {
+  bool operator==(const ErrorStack& rhs) const {
     return std::ranges::equal(stack_, rhs.stack_);
   }
 
   auto begin() const {
     return stack_.begin();
   }
+
   auto end() const {
     return stack_.end();
   }
 
- private:
-  std::vector<ValidationError> stack_;
+ protected:
+  std::vector<Err> stack_;
 };
 
 }  // namespace hornet::consensus

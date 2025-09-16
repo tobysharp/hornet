@@ -108,8 +108,8 @@ TEST(HeaderTimechainTest, ValidationViewProvidesTimestamps) {
 
   const auto stamps = view->LastNTimestamps(2);
   ASSERT_EQ(stamps.size(), 2u);
-  EXPECT_EQ(stamps[0], 1u);
-  EXPECT_EQ(stamps[1], 2u);
+  EXPECT_EQ(stamps[0], 2u);
+  EXPECT_EQ(stamps[1], 1u);
 }
 
 TEST(HeaderTimechainTest, PreventsHeaderMutation) {

@@ -18,14 +18,15 @@ struct Rule {
 template <size_t N, typename Fn>
 using Ruleset = std::array<Rule<Fn>, N>;
 
-template <size_t N, typename Fn, typename... Args>
-ErrorStack ValidateRules(const Ruleset<N, Fn>& ruleset, int height, Args&&... args) {
+template <typename Error, size_t N, typename Fn, typename... Args>
+ErrorStack<Error> ValidateRules(const Ruleset<N, Fn>& ruleset, int height, Args&&... args) {
+  ErrorStack<Error> stack;
   for (const auto& rule : ruleset) {
     Assert(!(rule.bip && height <= 0));
     if (rule.bip && !IsBIPEnabledAtHeight(*rule.bip, height)) continue;
-    if (const ErrorStack stack = rule.fn(std::forward<Args>(args)...)) return stack;
+    if (!stack.Push(rule.fn(std::forward<Args>(args)...))) return stack;
   }
-  return {};
+  return stack;
 }
 
 }  // namespace hornet::consensus
