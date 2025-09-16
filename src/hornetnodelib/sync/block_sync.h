@@ -11,8 +11,7 @@
 #include <thread>
 
 #include "hornetlib/consensus/types.h"
-#include "hornetlib/consensus/validate_block_context.h"
-#include "hornetlib/consensus/validate_block_structure.h"
+#include "hornetlib/consensus/rules/validate.h"
 #include "hornetlib/data/sidecar_binding.h"
 #include "hornetlib/data/timechain.h"
 #include "hornetlib/protocol/message/block.h"
@@ -63,7 +62,7 @@ class BlockSync {
   // Gets the next block ID to request from a peer.
   std::optional<data::Key> GetNextBlockId() const;
 
-  consensus::ErrorStack ValidateItem(const Item& item);
+  consensus::ValidateBlockResult ValidateItem(const Item& item);
   void HandleError(const Item& item, consensus::BlockError error);
 
   data::Timechain& timechain_;
@@ -195,9 +194,9 @@ inline void BlockSync::OnBlock(net::SharedPeer peer, const protocol::message::Bl
   RequestNextBlock(peer);
 }
 
-inline consensus::ErrorStack BlockSync::ValidateItem(const Item& item) {
+inline consensus::ValidateBlockResult BlockSync::ValidateItem(const Item& item) {
   // Validates the block.
-  return consensus::ValidateBlockStructure(*item.block).AndPush([&] {
+  return consensus::rules::ValidateBlockStructure(*item.block).AndPush([&] {
     // Lock the header chain during the scope of contextual validation.
     const auto headers = timechain_.ReadHeaders();
     // Find the header for this block, and advance up the tree to its parent.
@@ -211,7 +210,7 @@ inline consensus::ErrorStack BlockSync::ValidateItem(const Item& item) {
     // Create a validation view with the parent as the tip.
     const auto view = headers->GetValidationView(parent);
     // Call the contextual block validation.
-    return consensus::ValidateBlockContext(*view, *item.block);
+    return consensus::rules::ValidateBlockContext(*view, *item.block);
   });
 }
 
@@ -223,7 +222,7 @@ inline void BlockSync::Process() {
     const auto request_state = RequestNextBlock(item->peer);
 
     // Validates the block.
-    consensus::ErrorStack result = ValidateItem(*item);
+    consensus::ValidateBlockResult result = ValidateItem(*item);
 
     // If validation fails, disconnect/ban the peer that provided it,
     // delete this block and any downstream blocks, and cancel any downstream block requests.
