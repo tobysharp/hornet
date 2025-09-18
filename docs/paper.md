@@ -3,7 +3,9 @@
 # Hornet Node and the Hornet DSL:
 ### *A Pure, Executable Specification for Bitcoin Consensus*
 
-## Toby Sharp, September 2025
+### Toby Sharp
+September 2025\
+toby@hornetnode.com
 
 ## 1. Abstract
 
@@ -76,7 +78,7 @@ rule ValidateBlockContext(block: Block,
 ## 2. Background
 
 ### 2.1 The Need for Client Diversity
-Bitcoin's consensus rules, first introduced in [1], are today defined only by the reference client [2]. Today the network shows ~22% of Bitcoin nodes are now Knots clients [5, 6], a derivative of Bitoin Core [2]. While a variety of clients is an inevitable sign of healthy decentralization, we currently lack a formal specification that can be robustly implemented, tested, and ideally formally proven by a client. This presents the risk that buggy clients will experience consensus splits, provoking user confusion, media FUD, and potentially hard forks. Such risks are not theoretical: in 2013, a BerkeleyDB incompatibility in Core caused a consensus split [7].
+Bitcoin's consensus rules, first introduced in [1], are today defined only by the reference client [2]. Today the network shows ~22% of Bitcoin nodes are now Knots clients [5, 6], a derivative of Bitcoin Core [2]. While a variety of clients is an inevitable sign of healthy decentralization, we currently lack a formal specification that can be robustly implemented, tested, and ideally formally proven by a client. This presents the risk that buggy clients will experience consensus splits, provoking user confusion, media FUD, and potentially hard forks. Such risks are not theoretical: in 2013, a BerkeleyDB incompatibility in Core caused a consensus split [7].
 
 ### 2.2 Protocol Ossification vs Code Evolution
 While there may be strong arguments for the ossification of the protocol, the same cannot be said for any codebase. Software must be maintained to be able to run on current hardware and operating systems, to fix bugs, and to adhere to design principles. Moreover, programming languages evolve, and each generation will have different ways to express logic. To attract talented developers of the future, the reference client should also allow for refactoring and improvement. 
@@ -277,7 +279,7 @@ inline bool IsVersionValidAtHeight(const int32_t version, const int height) {
 ```
 >**Figure 7.** *The full ruleset implementation for header consensus validation.*
 
-Let us consider `ValidateProofOfWork` in Figure 6 as an example. The comment line gives the English language plain description of the rule: *"A header's 256-bit hash value MUST NOT exceed the header's proof-of-work target."* The function first computes the SHA256^2 hash of the header, and then comparess its arithmetic value against the 256-bit-expanded compact target resulting from the difficulty rule. If the hash value exceeds the target, the rule returns `InvalidProofOfWork`, otherwise it returns success. All other rules enforce their own specific constraints.
+Let us consider `ValidateProofOfWork` in Figure 7 as an example. The comment line gives the English language plain description of the rule: *"A header's 256-bit hash value MUST NOT exceed the header's proof-of-work target."* The function first computes the SHA256^2 hash of the header, and then compares its arithmetic value against the 256-bit-expanded compact target resulting from the difficulty rule. If the hash value exceeds the target, the rule returns `InvalidProofOfWork`, otherwise it returns success. All other rules enforce their own specific constraints.
 
 Note that all variables are declared as `const` to enforce immutability. While the validation rules delegate to methods like `BlockHeader::ComputeHash()` etc., these are immutable, deterministic, side-effect-free, and bound to protocol data only, making them effectively pure in the context of consensus specification.
 
@@ -384,7 +386,7 @@ These compact C++ rulesets demonstrate that Bitcoin’s consensus can be express
 
 We have shown that Bitcoin's consensus rules can be expressed compactly and declaratively in C++. Hornet DSL takes this further: a purpose-built language that enforces purity, immutability, and composability at the syntax level, while providing natural expression with built-in knowledge of  Bitcoin concepts.
 
-Whereas C++ permits many styles, Hornet DSL constrains expression to constructs needed for pure consensus specification, making every rule's action bounded and semantically clear. The goal is an unambiguous, implementation-indepedent, compilable specification of Bitcoin consensus, suitable for automated testing, code generation, and formal verification. 
+Whereas C++ permits many styles, Hornet DSL constrains expression to constructs needed for pure consensus specification, making every rule's action bounded and semantically clear. The goal is an unambiguous, implementation-independent, compilable specification of Bitcoin consensus, suitable for automated testing, code generation, and formal verification. 
 
 Even without full formal methods, Hornet DSL's constrained and regular structure enables more effective analysis and LLM-based reasoning, compared to the highly imperative and stylistically diverse reference client.
 
@@ -433,13 +435,13 @@ rule ValidateBlockContext(block: Block,
 
 Hornet DSL is a work in progress, iteratively informed by Hornet Node's evolving declarative C++. Once complete, the DSL will be a human- and machine-readable precise specification. An early goal at that stage will be to generate C++ that matches Hornet Node's validation pipeline. We will then be able to set up cloud-scale automated testing that continuously validates Hornet DSL backends against Hornet Node and Bitcoin Core.
 
-We believe that it becomes highly plausible to use LLM-based models (with access to source code and compiler) in a test framework to continuously analyze the Hornet DSL and C++ specifications, assess their agreement with Bitcoin Core behavior, and generate differential adversarial test cases in a feedback-driven loop. This includes both differential testing [10] (comparing outputs across mutiple implementations) and adaptive test generation (where the results of one probe inform the construction of the next). 
+We believe that it becomes highly plausible to use LLM-based models (with access to source code and compiler) in a test framework to continuously analyze the Hornet DSL and C++ specifications, assess their agreement with Bitcoin Core behavior, and generate differential adversarial test cases in a feedback-driven loop. This includes both differential testing [10] (comparing outputs across multiple implementations) and adaptive test generation (where the results of one probe inform the construction of the next). 
 
 Such targeted probing provides far more effective search of the high-dimensional space of all blocks than general fuzzing [12], leading to much stronger evidence that the specification indeed matches the Bitcoin reference client. After testing one billion blocks for potential edge case bugs, we will have simulated ~20,000 years of validated consensus behavior.
 
 Of course, formal reasoning remains the goal for pure and mathematical proof. But this *semi-formal* approach may allow us to make quantifiable guarantees about consensus correctness. The space of all possible blocks is too vast to enumerate. Yet the space of all possible code paths in a structured specification like Hornet is very much smaller. With this approach, we believe we can reduce the probability of consensus bugs to an arbitrarily small value.
 
-We now return to Hornet Node to describe its other key implementaiton contributions.
+We now return to Hornet Node to describe its other key implementation contributions.
 
 
 ## 6. Implementation Details
@@ -583,9 +585,19 @@ In fact, the example shown above uses a `KeyframeSidecar<T>`, a special case of 
 
 ## 7. Future Work
 
+Hornet Node is under active development. While it currently implements header and block validation against mainnet, some aspects are not yet complete, including full script execution, UTXO set evolution, disk storage, and peer management. These will be added in the coming months.
+
+Hornet DSL is an evolving specification that will be hardened once Hornet Node achieves a pure, declarative implementation of all consensus logic. At that point, we anticipate building a compiler for Hornet DSL that transforms the specification into an executable C++ library. Other language backends could follow.
+
+In parallel, we intend to set up a cloud-based application for intelligent consensus correctness testing across clients, as outlined in section 5.4.
+
+We believe that this direction of work will lead us to something Bitcoin has never had: a formal and verifiably correct, self-contained, implementation-neutral, executable specification of Bitcoin consensus -- fully in agreement with, yet distinct from, the reference client. 
 
 ## 8. Conclusion
 
+Hornet Node demonstrates that Bitcoin's consensus rules can be expressed as a compact, executable specification, whether in idiomatic C++ or in a purpose-built domain-specific language. By separating validation logic from state, and structure from metadata, Hornet offers a clean and modular alternative to legacy implementations. Its focus on clarity, conciseness, and modern expression make it a promising platform for low-level Bitcoin education and experimentation. 
+
+While not yet feature complete, Hornet Node already serves as a working example of how Bitcoin consensus can be implemented in a way that is rigorous, readable, and performant. We hope it contributes to ongoing efforts toward client diversity, verifiability, and performance.
 
 ## About the Author
 
