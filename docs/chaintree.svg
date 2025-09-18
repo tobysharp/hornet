@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="300" font-family="sans-serif">
+
+  <!-- Styles -->
+  <style>
+    .main-node { fill: steelblue; stroke: black; stroke-width:1; }
+    .fork-node { fill: orange; stroke: black; stroke-width:1; }
+    .main-edge { stroke: steelblue; stroke-width:8; }
+    .genesis-edge { stroke: steelblue; stroke-width:5; stroke-dasharray: 10, 5;}
+    .fork-edge { stroke: orange; stroke-width:1.5; marker-mid: url(#arrow); }
+    .label { font-size: 14px; text-anchor: middle; dominant-baseline: middle; fill: #666}
+    .legend-text { font-size: 12px; fill: #666}
+    @media (prefers-color-scheme: dark) {
+      .label, .legend-text { fill: #ddd; }
+    }
+    @media (prefers-color-scheme: light) {
+    .label, .legend-text { fill: #222; }
+    }
+  </style>
+
+  <!-- Arrowhead marker for fork edges -->
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="5" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L6,3 z" fill="orange"/>
+    </marker>
+  </defs>
+
+  <!-- Main chain -->
+  <g transform="translate(60,150)">
+    <!-- edges -->
+    <line x1="0"   y1="0" x2="100" y2="0" class="genesis-edge"/>
+    <line x1="100" y1="0" x2="200" y2="0" class="main-edge"/>
+    <line x1="200" y1="0" x2="300" y2="0" class="main-edge"/>
+    <line x1="300" y1="0" x2="400" y2="0" class="main-edge"/>
+    <line x1="400" y1="0" x2="500" y2="0" class="main-edge"/>
+    <line x1="500" y1="0" x2="600" y2="0" class="main-edge"/>
+    <line x1="600" y1="0" x2="700" y2="0" class="main-edge"/>
+
+    <!-- nodes -->
+    <circle cx="0"   cy="0" r="15" class="main-node"/>
+    <circle cx="100" cy="0" r="15" class="main-node"/>
+    <circle cx="200" cy="0" r="15" class="main-node"/>
+    <circle cx="300" cy="0" r="15" class="main-node"/>
+    <circle cx="400" cy="0" r="15" class="main-node"/>
+    <circle cx="500" cy="0" r="15" class="main-node"/>
+    <circle cx="600" cy="0" r="15" class="main-node"/>
+    <circle cx="700" cy="0" r="15" class="main-node"/>
+
+    <!-- forks -->
+    <!-- fork 1 from node D -->
+    <circle cx="400" cy="-70" r="12" class="fork-node"/>
+    <line x1="400" y1="-70" x2="400" y2="-35" class="fork-edge" marker-end="url(#arrow)"/>
+    <line x1="400" y1="-35" x2="400" y2="0" class="fork-edge"/>
+
+    <circle cx="450" cy="-120" r="12" class="fork-node"/>
+    <line x1="450" y1="-120" x2="425" y2="-95" class="fork-edge" marker-end="url(#arrow)"/>
+    <line x1="425" y1="-95" x2="400" y2="-70" class="fork-edge"/>
+
+    <!-- fork 2 from node E -->
+    <circle cx="500" cy="70" r="12" class="fork-node"/>
+    <line x1="500" y1="70" x2="500" y2="35" class="fork-edge" marker-end="url(#arrow)"/>
+    <line x1="500" y1="35" x2="500" y2="0" class="fork-edge"/>
+
+    <!-- fork 3 from node F -->
+    <circle cx="600" cy="-70" r="12" class="fork-node"/>
+    <line x1="600" y1="-70" x2="600" y2="-35" class="fork-edge" marker-end="url(#arrow)"/>
+    <line x1="600" y1="-35" x2="600" y2="0" class="fork-edge"/>
+
+    <!-- two children branching from F’s fork root -->
+    <circle cx="650" cy="-120" r="12" class="fork-node"/>
+    <line x1="650" y1="-120" x2="625" y2="-95" class="fork-edge" marker-end="url(#arrow)"/>
+    <line x1="625" y1="-95" x2="600" y2="-70" class="fork-edge"/>
+
+    <circle cx="675" cy="-70" r="12" class="fork-node"/>
+    <line x1="675" y1="-70" x2="637" y2="-70" class="fork-edge" marker-end="url(#arrow)"/>
+    <line x1="637" y1="-70" x2="600" y2="-70" class="fork-edge"/>
+
+    <!-- labels -->
+    <text x="0"   y="-25" class="label">G</text>
+    <text x="100" y="-25" class="label">A</text>
+    <text x="200" y="-25" class="label">B</text>
+    <text x="300" y="-25" class="label">C</text>
+    <text x="400" y="-25" class="label">D</text>
+    <text x="500" y="-25" class="label">E</text>
+    <text x="600" y="-25" class="label">F</text>
+    <text x="700" y="-25" class="label">Tip</text>
+
+  </g>
+
+  <!-- Legend -->
+  <g transform="translate(700,240)">
+    <rect x="0" y="0" width="15" height="15" class="main-node"/>
+    <text x="25" y="12" class="legend-text">Nodes in the array (main chain)</text>
+
+    <rect x="0" y="25" width="15" height="15" class="fork-node"/>
+    <text x="25" y="37" class="legend-text">Nodes in the forest (forks)</text>
+  </g>
+</svg>
