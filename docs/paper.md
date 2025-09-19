@@ -1,4 +1,33 @@
 <style>
+/* PDF styling */
+/*
+pre {
+  font-family: "Consolas", "Lucida Console", monospace;
+  font-size: 8px;        
+  line-height: 1.3;
+  letter-spacing: -0.5px;
+}
+p code, li code {
+  font-family: monospace;
+  font-size: 0.9em !important;   
+}
+body {
+  font-family: Georgia, serif;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: justify;
+  text-justify: inter-word;
+}
+h1, h2, h3, h4, h5, h6 {
+  page-break-after: avoid;   
+  page-break-inside: avoid;
+}
+pre, figure, table {
+  page-break-inside: avoid;
+}
+*/
+/* HTML styling */
+
 body {
   font-family: "Fira Code", "JetBrains Mono", SFMono-Regular, Consolas, monospace;
   background-color: #1e1e1e;
@@ -69,6 +98,7 @@ blockquote {
   color: #aaa;
   font-style: italic;
 }
+
 </style>
 
 ![](banner.png)
@@ -77,7 +107,7 @@ blockquote {
 ### *A Minimal, Executable Specification for Bitcoin Consensus*
 
 ### Toby Sharp
-18 September 2025\
+19 September 2025\
 toby@hornetnode.org
 
 ## 1. Abstract
@@ -126,7 +156,7 @@ Bitcoin's consensus rules, first introduced in [1], are today defined only by th
 While there may be strong arguments for the ossification of the protocol, the same cannot be said for any codebase. Software must be maintained to be able to run on current hardware and operating systems, to fix bugs, and to adhere to design principles. Moreover, programming languages evolve, and each generation will have different ways to express logic. To attract talented developers of the future, the reference client should also allow for refactoring and improvement. 
 
 ### 2.3 The Goals of Formal Specification
-The above risks could be substantially mitigated by prioritizing a pure specification of consensus rules separate from its implementation. Such a spec would enable plaintext readability, LLM reasoning, full-coverage automated testing, and eventually formal verification. The end goal would be a formal proof that a given client is consensus-correct. 
+The above risks could be substantially mitigated by prioritizing a pure specification of consensus rules separate from its implementation. Such a spec would enable plaintext readability, LLM reasoning, full-coverage automated testing, and eventually formal verification. The end goal would be a formal proof that a given client is consensus-correct. This may become imperative for institutions with large bitcoin treasuries.
 
 A declarative spec also allows precise, compact expression of BIPs as composable validation rules, facilitating analysis of their effects and enabling audit of their correctness. Likewise, rulesets can be modified to simulate  hypothetical consensus forks, enabling exploration of edge cases and stress-testing of invariants in a controlled environment.
 
@@ -680,8 +710,9 @@ https://www.theinvestorspodcast.com/bitcoin-fundamentals/btc242-bitcoin-core-vs-
 [6] C. Moody, *Clark Moody Bitcoin Dashboard*. \
 [https://bitcoin.clarkmoody.com/bitcoin](htts://bitcoin.clarkmoody.com/bitcoin)
 
-[7] J. Murch (2021). *The 2013 Chain Fork.* Bitcoin Optech. \
-[https://bitcoinops.org/en/newsletters/2021/07/21/](https://bitcoinops.org/en/newsletters/2021/07/21/)
+[7] De Filippi, P., & Loveluck, B. (2015). \
+*Analyzing the 2013 Bitcoin fork: centralized decision-making saved the day. Princeton CITP Blog.* \
+https://blog.citp.princeton.edu/2015/07/28/analyzing-the-2013-bitcoin-fork-centralized-decision-making-saved-the-day/
 
 [8] Bartoletti, M., Zunino, R. (2018). *BitML: A Calculus for Bitcoin Smart Contracts*.\
 https://arxiv.org/abs/1804.07574
