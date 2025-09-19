@@ -4,24 +4,10 @@ body {
   background-color: #1e1e1e;
   color: #dddddd;
   max-width: 900px;
-  width: 100%
-  margin-left: auto;
-  margin-right: auto;
-  margin-top: 2em;
-  margin-bottom: 2em;
+  margin: 2em auto;
   padding: 0 2em;
   line-height: 1.7;
-  text-align: justify;
-  text-justify: inter-word;
 }
-body.markdown-body {
-  max-width: 900px;
-  margin-left: auto;
-  margin-right: auto;
-  padding-left: 2em;
-  padding-right: 2em;
-}
-
 h1, h2, h3, h4 {
   color: #ffffff;
   margin-top: 1.8em;
@@ -78,7 +64,7 @@ blockquote {
 
 ### Toby Sharp
 18 September 2025\
-toby@hornetnode.org
+toby@hornetnode.com
 
 ## 1. Abstract
 
@@ -668,7 +654,7 @@ Hornet Node is a self-funded spare-time passion project. If you would like to su
 [https://github.com/bitcoin/bitcoin](https://github.com/bitcoin/bitcoin)
 
 [3] T. Sharp (2025). *Hornet Node: A Declarative, Executable Specification of Bitcoin Consensus*.\
-https://hornetnode.org/paper.html
+https://hornetnode.com/paper.html
 
 [4] NVK (2025). *BTC242: Bitcoin Core vs Knots w/ NVK*, hosted by Preston Pysh. The Investor Podcast. \
 https://www.theinvestorspodcast.com/bitcoin-fundamentals/btc242-bitcoin-core-vs-knots-w-nvk/ \

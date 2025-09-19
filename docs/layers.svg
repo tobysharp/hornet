@@ -1,34 +1,28 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="347" viewBox="0 0 960 347">
-<rect x="0" y="0" width="960" height="347" opacity="0" fill="#ffffff"/>
-<style>text{font-family:Inter, SF Pro Text, Segoe UI, Helvetica, Arial, sans-serif;dominant-baseline:middle;}</style>
-<rect x="36.0" y="4.0" rx="10" ry="10" width="888.0" height="42.0" fill="#fff5e6" stroke="#e5e7eb"/>
-<text x="480.0" y="25.0" fill="#111827" font-size="14" text-anchor="middle">hornet::node</text>
-<rect x="36.0" y="47.0" rx="10" ry="10" width="888.0" height="42.0" fill="#fff5e6" stroke="#e5e7eb"/>
-<text x="480.0" y="68.0" fill="#111827" font-size="14" text-anchor="middle">hornet::node::sync</text>
-<rect x="36.0" y="90.0" rx="10" ry="10" width="888.0" height="42.0" fill="#fff5e6" stroke="#e5e7eb"/>
-<text x="480.0" y="111.0" fill="#111827" font-size="14" text-anchor="middle">hornet::node::dispatch</text>
-<rect x="36.0" y="133.0" rx="10" ry="10" width="213.0" height="42.0" fill="#eef6ff" stroke="#e5e7eb"/>
-<text x="142.5" y="154.0" fill="#111827" font-size="14" text-anchor="middle">hornet::protocol::script</text>
-<rect x="261.0" y="133.0" rx="10" ry="10" width="213.0" height="42.0" fill="#eef6ff" stroke="#e5e7eb"/>
-<text x="367.5" y="154.0" fill="#111827" font-size="14" text-anchor="middle">hornet::protocol::message</text>
-<rect x="486.0" y="133.0" rx="10" ry="10" width="213.0" height="42.0" fill="#eef6ff" stroke="#e5e7eb"/>
-<text x="592.5" y="154.0" fill="#111827" font-size="14" text-anchor="middle">hornet::data</text>
-<rect x="711.0" y="133.0" rx="10" ry="10" width="213.0" height="42.0" fill="#fff5e6" stroke="#e5e7eb"/>
-<text x="817.5" y="154.0" fill="#111827" font-size="14" text-anchor="middle">hornet::node::net</text>
-<rect x="36.0" y="176.0" rx="10" ry="10" width="888.0" height="42.0" fill="#eef6ff" stroke="#e5e7eb"/>
-<text x="480.0" y="197.0" fill="#111827" font-size="14" text-anchor="middle">hornet::protocol</text>
-<rect x="36.0" y="219.0" rx="10" ry="10" width="288.0" height="42.0" fill="#eef6ff" stroke="#e5e7eb"/>
-<text x="180.0" y="240.0" fill="#111827" font-size="14" text-anchor="middle">hornet::encoding</text>
-<rect x="336.0" y="219.0" rx="10" ry="10" width="288.0" height="42.0" fill="#eef6ff" stroke="#e5e7eb"/>
-<text x="480.0" y="240.0" fill="#111827" font-size="14" text-anchor="middle">hornet::consensus</text>
-<rect x="636.0" y="219.0" rx="10" ry="10" width="288.0" height="42.0" fill="#fff5e6" stroke="#e5e7eb"/>
-<text x="780.0" y="240.0" fill="#111827" font-size="14" text-anchor="middle">hornet::node::util</text>
-<rect x="36.0" y="262.0" rx="10" ry="10" width="438.0" height="42.0" fill="#eef6ff" stroke="#e5e7eb"/>
-<text x="255.0" y="283.0" fill="#111827" font-size="14" text-anchor="middle">hornet::crypto</text>
-<rect x="486.0" y="262.0" rx="10" ry="10" width="438.0" height="42.0" fill="#eef6ff" stroke="#e5e7eb"/>
-<text x="705.0" y="283.0" fill="#111827" font-size="14" text-anchor="middle">hornet::util</text>
-<rect x="36" y="326.0" rx="4" ry="4" width="14" height="14" fill="#eef6ff" stroke="#e5e7eb"/>
-<text x="58" y="333.0" fill="#ffffff" font-size="12" text-anchor="start">hornetlib</text>
-<rect x="162" y="326.0" rx="4" ry="4" width="14" height="14" fill="#fff5e6" stroke="#e5e7eb"/>
-<text x="184" y="333.0" fill="#ffffff" font-size="12" text-anchor="start">hornetnodelib</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="448" viewBox="0 0 960 448">
+<rect x="0" y="0" width="960" height="448" opacity="0" fill="#ffffff"/>
+<style>text{font-family:Inter, sans-serif;dominant-baseline:middle;}</style>
+<rect x="36.0" y="286.0" rx="10" ry="10" width="888.0" height="42.0" fill="#eef6ff" stroke="#e5e7eb"/>
+<text x="480.0" y="307.0" text-anchor="middle" font-size="14" fill="#111827">hornet::util</text>
+<rect x="36.0" y="239.0" rx="10" ry="10" width="222.0" height="42.0" fill="#eef6ff" stroke="#e5e7eb"/>
+<text x="147.0" y="260.0" text-anchor="middle" font-size="14" fill="#111827">hornet::crypto</text>
+<rect x="270.0" y="239.0" rx="10" ry="10" width="222.0" height="42.0" fill="#eef6ff" stroke="#e5e7eb"/>
+<text x="381.0" y="260.0" text-anchor="middle" font-size="14" fill="#111827">hornet::encoding</text>
+<rect x="504.0" y="239.0" rx="10" ry="10" width="420.0" height="42.0" fill="#ffeecc" stroke="#e5e7eb"/>
+<text x="714.0" y="260.0" text-anchor="middle" font-size="14" fill="#111827">hornet::node::util</text>
+<rect x="110.0" y="192.0" rx="10" ry="10" width="382.0" height="42.0" fill="#eef6ff" stroke="#e5e7eb"/>
+<text x="301.0" y="213.0" text-anchor="middle" font-size="14" fill="#111827">hornet::protocol</text>
+<rect x="504.0" y="145.0" rx="10" ry="10" width="420.0" height="89.0" fill="#ffeecc" stroke="#e5e7eb"/>
+<text x="714.0" y="189.5" text-anchor="middle" font-size="14" fill="#111827">hornet::node::net</text>
+<path d="M 418.0 155.0 A 10 10 0 0 0 408.0 145.0 L 46.0 145.0 A 10 10 0 0 0 36.0 155.0 L 36.0 224.0 A 10 10 0 0 0 46.0 234.0 L 88.0 234.0 A 10 10 0 0 0 98.0 224.0 L 98.0 197.0 A 10 10 0 0 1 108.0 187.0 L 408.0 187.0 A 10 10 0 0 0 418.0 177.0 Z" fill="#eef6ff" stroke="#e5e7eb"/>
+<text x="301.0" y="166.0" text-anchor="middle" font-size="14" fill="#111827">hornet::consensus</text>
+<path d="M 492.0 108.0 A 10 10 0 0 0 482.0 98.0 L 46.0 98.0 A 10 10 0 0 0 36.0 108.0 L 36.0 130.0 A 10 10 0 0 0 46.0 140.0 L 420.0 140.0 A 10 10 0 0 1 430.0 150.0 L 430.0 177.0 A 10 10 0 0 0 440.0 187.0 L 482.0 187.0 A 10 10 0 0 0 492.0 177.0 Z" fill="#eef6ff" stroke="#e5e7eb"/>
+<text x="301.0" y="119.0" text-anchor="middle" font-size="14" fill="#111827">hornet::data</text>
+<path d="M 147.0 61.0 A 10 10 0 0 1 157.0 51.0 L 914.0 51.0 A 10 10 0 0 1 924.0 61.0 L 924.0 130.0 A 10 10 0 0 1 914.0 140.0 L 514.0 140.0 A 10 10 0 0 1 504.0 130.0 L 504.0 103.0 A 10 10 0 0 0 494.0 93.0 L 157.0 93.0 A 10 10 0 0 1 147.0 83.0 Z" fill="#ffeecc" stroke="#e5e7eb"/>
+<text x="480.0" y="72.0" text-anchor="middle" font-size="14" fill="#111827">hornet::node::dispatch</text>
+<path d="M 924.0 14.0 A 10 10 0 0 0 914.0 4.0 L 46.0 4.0 A 10 10 0 0 0 36.0 14.0 L 36.0 83.0 A 10 10 0 0 0 46.0 93.0 L 125.0 93.0 A 10 10 0 0 0 135.0 83.0 L 135.0 56.0 A 10 10 0 0 1 145.0 46.0 L 914.0 46.0 A 10 10 0 0 0 924.0 36.0 Z" fill="#ffeecc" stroke="#e5e7eb"/>
+<text x="480.0" y="25.0" text-anchor="middle" font-size="14" fill="#111827">hornet::sync</text>
+<rect x="36" y="348" rx="10" ry="10" width="14" height="14" fill="#eef6ff" stroke="#e5e7eb"/>
+<text x="58" y="355" fill="#111827" font-size="12" text-anchor="start">hornetlib</text>
+<rect x="162" y="348" rx="10" ry="10" width="14" height="14" fill="#ffeecc" stroke="#e5e7eb"/>
+<text x="184" y="355" fill="#111827" font-size="12" text-anchor="start">hornetnodelib</text>
 </svg>
