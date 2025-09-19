@@ -25,15 +25,15 @@ class MessageHandler {
  public:
   virtual ~MessageHandler() = default;
   virtual void OnMessage(const Message&) {}
-  virtual void OnMessage(const message::Block&);
-  virtual void OnMessage(const message::GetData&);
-  virtual void OnMessage(const message::GetHeaders&);
-  virtual void OnMessage(const message::Headers&);
-  virtual void OnMessage(const message::Ping&);
-  virtual void OnMessage(const message::Pong&);
-  virtual void OnMessage(const message::SendCompact&);
-  virtual void OnMessage(const message::Verack&);
-  virtual void OnMessage(const message::Version&);
+  virtual void OnMessage(const message::Block&) {}
+  virtual void OnMessage(const message::GetData&) {}
+  virtual void OnMessage(const message::GetHeaders&) {}
+  virtual void OnMessage(const message::Headers&) {}
+  virtual void OnMessage(const message::Ping&) {}
+  virtual void OnMessage(const message::Pong&) {}
+  virtual void OnMessage(const message::SendCompact&) {}
+  virtual void OnMessage(const message::Verack&) {}
+  virtual void OnMessage(const message::Version&) {}
 };
 
 }  // namespace hornet::protocol
