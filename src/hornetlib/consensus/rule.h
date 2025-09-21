@@ -19,14 +19,13 @@ template <size_t N, typename Fn>
 using Ruleset = std::array<Rule<Fn>, N>;
 
 template <typename Error, size_t N, typename Fn, typename... Args>
-ErrorStack<Error> ValidateRules(const Ruleset<N, Fn>& ruleset, int height, Args&&... args) {
-  ErrorStack<Error> stack;
+SuccessOr<Error> ValidateRules(const Ruleset<N, Fn>& ruleset, int height, Args&&... args) {
   for (const auto& rule : ruleset) {
     Assert(!(rule.bip && height <= 0));
     if (rule.bip && !IsBIPEnabledAtHeight(*rule.bip, height)) continue;
-    if (!stack.Push(rule.fn(std::forward<Args>(args)...))) return stack;
+    if (const auto result = rule.fn(std::forward<Args>(args)...); !result) return result;
   }
-  return stack;
+  return {};
 }
 
 }  // namespace hornet::consensus
