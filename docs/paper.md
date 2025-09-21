@@ -1,6 +1,6 @@
 <style>
 /* PDF styling */
-/*
+
 pre {
   font-family: "Consolas", "Lucida Console", monospace;
   font-size: 8px;        
@@ -25,9 +25,9 @@ h1, h2, h3, h4, h5, h6 {
 pre, figure, table {
   page-break-inside: avoid;
 }
-*/
-/* HTML styling */
 
+/* HTML styling */
+/*
 body {
   font-family: "Fira Code", "JetBrains Mono", SFMono-Regular, Consolas, monospace;
   background-color: #1e1e1e;
@@ -98,16 +98,17 @@ blockquote {
   color: #aaa;
   font-style: italic;
 }
-
+*/
 </style>
 
-![](banner.png)
+<!-- ![](banner.png) -->
 
 # Hornet Node and the Hornet DSL:
 ### *A Minimal, Executable Specification for Bitcoin Consensus*
 
 ### Toby Sharp
-19 September 2025\
+v1.1\
+20 September 2025\
 toby@hornetnode.org
 
 ## 1. Abstract
@@ -171,7 +172,11 @@ An ongoing effort with Bitcoin Core is the creation of `libbitcoinkernel` [14], 
 
 ## 3. Specifying Consensus
 
-Our response to the motivation above is a declarative, executable specification of Bitcoin's consensus rules, designed under language constraints such as pure functions, explicit state transitions, immutability by default, and a strict avoidance of side effects or concurrency.
+The March 2013 chain fork [7] exposed the danger of implicit consensus rules. Nodes running v0.7 with BerkeleyDB rejected a block that exceeded the database's lock limit, while v0.8 nodes with LevelDB accepted it, producing a consensus split. The resolution was that the minority miners running v0.8 downgraded to v0.7, effectively canonizing the BerkeleyDB lock limit as a consensus rule. In subsequent releases, Bitcoin Core made this implicit rule explicit by adding validation logic to reject blocks with more than 10,000 UTXO changes.
+
+This episode illustrates the core principle of Hornet: *the safest practice is for consensus rules to be **explicitly specified and independent** of implementation details*. What was done reactively in 2013 for one rule, Hornet seeks to do systematically for the entire protocol.
+
+With this motivation, our approach is a declarative, executable specification of Bitcoin's consensus rules, designed under language constraints such as pure functions, explicit state transitions, immutability by default, and a strict avoidance of side effects or concurrency.
 
 We first show how this specification drives validation in Hornet Node, our *de novo*, modern C++ client. We then introduce the Hornet DSL: a canonical, implementation-neutral domain-specific language for Bitcoin consensus, designed to be easily and unambiguously parsed, audited, and reasoned about--whether by humans, LLMs, or theorem provers.
 
