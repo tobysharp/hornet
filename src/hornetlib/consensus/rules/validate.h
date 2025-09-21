@@ -27,7 +27,7 @@ namespace rules {
     Rule{ValidateVersion}               // A header version number MUST meet deployment requirements depending on activated BIPs.
   };
   // clang-format on
-  HeaderValidationContext context{header, parent, view, parent.height + 1};
+  const HeaderValidationContext context{header, parent, view, parent.height + 1};
   return ValidateRules<HeaderError>(ruleset, 0, context);
 }
 
@@ -73,7 +73,7 @@ namespace rules {
     Rule{ValidateWitnessCommitment,     BIP::SegWit           },  // From BIP141, the coinbase transaction MUST include a valid witness commitment for blocks containing witness data.
     Rule{ValidateBlockWeight}};                                   // A block’s total weight MUST NOT exceed 4,000,000 weight units.
   //clang-format on
-  BlockValidationContext context{block, ancestry, ancestry.Length()};
+  const BlockValidationContext context{block, ancestry, ancestry.Length()};
   return ValidateRules<std::variant<BlockError, TransactionError>>(ruleset, context.height, context);
 }
 
