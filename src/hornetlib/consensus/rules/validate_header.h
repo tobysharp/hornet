@@ -19,13 +19,12 @@
 namespace hornet::consensus {
 namespace rules {
 
-using ValidateHeaderResult = ErrorStack<HeaderError>;
-
 struct HeaderValidationContext {
   const protocol::BlockHeader& header;
   const model::HeaderContext& parent;
   const HeaderAncestryView& view;
-  int height;
+  const int64_t current_time;
+  const int height;
 };
 
 namespace detail {
@@ -41,7 +40,7 @@ inline bool IsVersionValidAtHeight(int32_t version, int height) {
 }  // namespace detail
 
 // A header MUST reference the hash of its valid parent.
-[[nodiscard]] inline ValidateHeaderResult ValidatePreviousHash(
+[[nodiscard]] inline SuccessOr<HeaderError> ValidatePreviousHash(
     const HeaderValidationContext& context) {
   if (context.parent.hash != context.header.GetPreviousBlockHash())
     return HeaderError::ParentNotFound;
@@ -49,7 +48,7 @@ inline bool IsVersionValidAtHeight(int32_t version, int height) {
 }
 
 // A header's 256-bit hash value MUST NOT exceed the header's proof-of-work target.
-[[nodiscard]] inline ValidateHeaderResult ValidateProofOfWork(
+[[nodiscard]] inline SuccessOr<HeaderError> ValidateProofOfWork(
     const HeaderValidationContext& context) {
   const auto hash = context.header.ComputeHash();
   const auto target = context.header.GetCompactTarget().Expand();
@@ -58,7 +57,7 @@ inline bool IsVersionValidAtHeight(int32_t version, int height) {
 }
 
 // A header's proof-of-work target MUST satisfy the difficulty adjustment formula.
-[[nodiscard]] inline ValidateHeaderResult ValidateDifficultyAdjustment(
+[[nodiscard]] inline SuccessOr<HeaderError> ValidateDifficultyAdjustment(
     const HeaderValidationContext& context) {
   if (context.header.GetCompactTarget() !=
       AdjustCompactTarget(context.height, context.parent.data, context.view))
@@ -67,7 +66,7 @@ inline bool IsVersionValidAtHeight(int32_t version, int height) {
 }
 
 // A header timestamp MUST be strictly greater than the median of its 11 ancestors' timestamps.
-[[nodiscard]] inline ValidateHeaderResult ValidateMedianTimePast(
+[[nodiscard]] inline SuccessOr<HeaderError> ValidateMedianTimePast(
     const HeaderValidationContext& context) {
   if (context.header.GetTimestamp() <= context.view.MedianTimePast())
     return HeaderError::BadTimestamp;
@@ -75,7 +74,7 @@ inline bool IsVersionValidAtHeight(int32_t version, int height) {
 }
 
 // A header timestamp MUST be less than or equal to network-adjusted time plus 2 hours.
-[[nodiscard]] inline ValidateHeaderResult ValidateTimestampCurrent(
+[[nodiscard]] inline SuccessOr<HeaderError> ValidateTimestampCurrent(
     const HeaderValidationContext& context) {
   constexpr int kTimestampTolerance = 2 * 60 * 60;
   const auto now = std::chrono::system_clock::now().time_since_epoch();
@@ -86,7 +85,7 @@ inline bool IsVersionValidAtHeight(int32_t version, int height) {
 }
 
 // A header version number MUST meet deployment requirements depending on activated BIPs.
-[[nodiscard]] inline ValidateHeaderResult ValidateVersion(const HeaderValidationContext& context) {
+[[nodiscard]] inline SuccessOr<HeaderError> ValidateVersion(const HeaderValidationContext& context) {
   if (!detail::IsVersionValidAtHeight(context.header.GetVersion(), context.height))
     return HeaderError::BadVersion;
   return {};

@@ -21,17 +21,15 @@ namespace hornet::consensus {
 struct BlockValidationContext {
   const protocol::Block& block;
   const HeaderAncestryView& view;
-  int height;
+  const int height;
 };
-
-using ValidateBlockResult = ErrorStack<std::variant<BlockError, TransactionError>>;
 
 namespace rules {
 
 namespace detail {
 // Determines whether the locktime should be interpreted as a block height (returns true),
 // otherwise it should be interpreted as a timestamp.
-inline bool IsLockTimeABlockHeight(uint32_t locktime) {
+inline bool IsLockTimeABlockHeight(const uint32_t locktime) {
   constexpr uint32_t kLocktimeMinimumTimestamp = 500'000'000;
   return locktime < kLocktimeMinimumTimestamp;
 }
@@ -39,8 +37,9 @@ inline bool IsLockTimeABlockHeight(uint32_t locktime) {
 // Determines whether the transaction is final at the given height/timestamp.
 // A transaction is considered final if its locktime has expired.
 // This function is equivalent to Bitcoin Core's IsFinalTx function.
-inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transaction, int height,
-                                 int64_t timestamp) {
+inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transaction, 
+                                 const int height,
+                                 const int64_t timestamp) {
   constexpr uint32_t kSequenceFinal = 0xFFFF'FFFF;
 
   // A locktime of zero means the transaction is immediately final.
@@ -59,7 +58,7 @@ inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transacti
 }  // namespace detail
 
 // All transactions in the block MUST be final given the block height and locktime rules.
-[[nodiscard]] inline ValidateBlockResult ValidateTransactionFinality(const BlockValidationContext& context) {
+[[nodiscard]] inline SuccessOr<BlockError> ValidateTransactionFinality(const BlockValidationContext& context) {
   const int64_t current_locktime = IsBIPEnabledAtHeight(BIP::LockTimeMedianPast, context.height)
                                        ? context.view.MedianTimePast()
                                        : context.block.Header().GetTimestamp();
@@ -71,7 +70,7 @@ inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transacti
 }
 
 // From BIP34, the coinbase transaction’s scriptSig MUST begin by pushing the block height.
-[[nodiscard]] /* [[BIP::HeightInCoinbase]] */ inline ValidateBlockResult ValidateCoinbaseHeight(
+[[nodiscard]] /* [[BIP::HeightInCoinbase]] */ inline SuccessOr<BlockError> ValidateCoinbaseHeight(
     const BlockValidationContext& context) {
   const auto expected = protocol::script::Writer{}.PushInt(context.height).Release();
   if (!context.block.CoinbaseSignature().StartsWith(expected)) return BlockError::BadCoinBaseHeight;
@@ -79,7 +78,7 @@ inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transacti
 }
 
 // From BIP141, the coinbase transaction MUST include a valid witness commitment for blocks containing witness data.
-[[nodiscard]] /* [[BIP::SegWit]] */ inline ValidateBlockResult ValidateWitnessCommitment(
+[[nodiscard]] /* [[BIP::SegWit]] */ inline SuccessOr<BlockError> ValidateWitnessCommitment(
     const BlockValidationContext& context) {
   // With BIP141 (Segwit v0), witness data is added to transactions. But that witness data can't be
   // included in the header's Merkle root for backwards compatibility. So instead, a commitment hash
@@ -87,8 +86,8 @@ inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transacti
   // of the coinbase transaction's outputs. Here we validate that the coinbase's commitment correctly
   // commits to the block's witness data.  
   using protocol::script::lang::Op;
-  static constexpr std::array<uint8_t, 6> kWitnessCommitmentBytes = {+Op::Return, 0x24, 0xaa,
-                                                                     0x21,        0xa9, 0xed};
+  constexpr std::array<uint8_t, 6> kWitnessCommitmentBytes = {+Op::Return, 0x24, 0xaa,
+                                                              0x21,        0xa9, 0xed};
   if (context.block.Empty()) return {};
 
   // Discover which of the block's coinbase transaction outputs contain a witness commitment.
@@ -124,7 +123,7 @@ inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transacti
 }
 
 // A block’s total weight MUST NOT exceed 4,000,000 weight units.
-[[nodiscard]] inline ValidateBlockResult ValidateBlockWeight(const BlockValidationContext& context) {
+[[nodiscard]] inline SuccessOr<BlockError> ValidateBlockWeight(const BlockValidationContext& context) {
   constexpr int kMaximumWeightUnits = 4'000'000;
   if (context.block.GetWeightUnits() > kMaximumWeightUnits) return BlockError::BadBlockWeight;
   return {};

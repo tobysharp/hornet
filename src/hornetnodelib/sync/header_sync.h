@@ -96,17 +96,17 @@ inline bool HeaderSync::RequestHeadersFrom(net::WeakPeer weak_peer) {
         const int version = peer ? peer->GetCapabilities().GetVersion() : protocol::kCurrentVersion;
         protocol::message::GetHeaders getheaders{version};
         getheaders.AddLocatorHash(next_request_);
-        ok = handler_.OnRequest(peer, std::make_unique<protocol::message::GetHeaders>(std::move(getheaders)));
+        ok = handler_.OnRequest(
+            peer, std::make_unique<protocol::message::GetHeaders>(std::move(getheaders)));
       }
-      if (!ok)
-        send_blocked_.clear();
+      if (!ok) send_blocked_.clear();
       return ok;
     }
   }
   return false;
 }
 
-  // Begins downloading and validating headers from a given peer.
+// Begins downloading and validating headers from a given peer.
 inline void HeaderSync::StartSync(net::WeakPeer peer) {
   next_request_ = timechain_.ReadHeaders()->ChainTip()->hash;
   send_blocked_.clear(std::memory_order::release);
@@ -126,15 +126,13 @@ inline void HeaderSync::OnHeaders(net::WeakPeer peer, const protocol::message::H
     next_request_ = headers.back().ComputeHash();
     send_blocked_.clear(std::memory_order::release);
     RequestHeadersFrom(peer);
-  }
-  else
+  } else
     next_request_ = {};  // No more headers to be requested.
 }
 
 // Validates queued headers, and adds them to the headers timechain.
 inline void HeaderSync::Process() {
   for (std::optional<Item> item; (item = queue_.WaitPop());) {
-
     if (!item->batch.empty()) {
       // As soon as we pop from the queue, request new headers if appropriate.
       RequestHeadersFrom(item->weak_peer);
@@ -152,8 +150,12 @@ inline void HeaderSync::Process() {
           headers->GetValidationView(parent);
 
       for (const auto& header : item->batch) {
+        const int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::system_clock::now().time_since_epoch())
+                                .count();
+
         // Validates the header against consensus rules.
-        const auto validated = consensus::ValidateHeader(*parent, header, *view);
+        const auto validated = consensus::ValidateHeader(header, *parent, *view, now);
 
         // Handles consensus failures, breaking out of this batch.
         if (!validated) {
@@ -167,7 +169,8 @@ inline void HeaderSync::Process() {
       }
     }
 
-    util::NotifyMetric("sync/headers", {{"headers_validated",timechain_.ReadHeaders()->ChainLength()}});
+    util::NotifyMetric("sync/headers",
+                       {{"headers_validated", timechain_.ReadHeaders()->ChainLength()}});
 
     // Notify if the sync is complete.
     if (!IsFullBatch(item->batch)) {

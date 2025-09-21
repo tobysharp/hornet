@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <expected>
 #include <optional>
-#include <variant>
 #include <vector>
 
 namespace hornet::consensus {
@@ -47,8 +46,6 @@ enum class BlockError {
   BadBlockWeight
 };
 
-using BlockValidation = std::expected<void, BlockError>;
-
 enum class TransactionError {
   None = 0,
   EmptyInputs,
@@ -62,81 +59,42 @@ enum class TransactionError {
   BadCoinBaseSignatureScriptSize
 };
 
-template <typename T>
-inline std::expected<void, T> Fail(T err) {
-  return std::unexpected(err);
-}
-
-using ValidationError = std::variant<HeaderError, BlockError, TransactionError>;
-
+// SuccessOr represents state that is either "success" or it is a specific typed error.
 template <typename Err>
-class ErrorStack {
+class SuccessOr {
  public:
-  ErrorStack() = default;
+  SuccessOr() = default;
 
   template <typename E>
   requires std::is_constructible_v<Err, E>
-  ErrorStack(E error) {
-    stack_.push_back(error);
-  }
+  SuccessOr(const E err) : value_(std::unexpected{err}) {}
 
   template <typename E>
   requires std::is_constructible_v<Err, E>
-  ErrorStack(const ErrorStack<E>& rhs) {
-    stack_.insert(stack_.end(), rhs.begin(), rhs.end());
+  SuccessOr(const SuccessOr<E>& rhs) : value_{rhs ? std::expected<void, Err>{} : std::unexpected{rhs.Error()}} {}
+
+  explicit operator bool() const { return value_.has_value(); }
+
+  bool operator ==(const SuccessOr& rhs) const {
+    return value_ == rhs.value_;
   }
 
-  operator bool() const {
-    return stack_.empty();
-  }
-
-  template <typename E>
-  requires std::is_constructible_v<Err, E>
-  ErrorStack& Push(E error) {
-    stack_.push_back(error);
-    return *this;
-  }
-
-  ErrorStack& Push(ErrorStack&& rhs) {
-    if (!rhs) {
-      stack_.insert(stack_.end(), std::make_move_iterator(rhs.stack_.begin()),
-                    std::make_move_iterator(rhs.stack_.end()));
-      rhs.stack_.clear();
+  // If in the "success" state, executes the given function, and stores its result.
+  // The function must return SuccessOr<E> where E can be converted to type Err.
+  template <typename Func>
+  SuccessOr& AndThen(Func fn) {
+    if (value_.has_value()) {
+      if (const auto result = fn(); !result) value_ = std::unexpected{result.Error()};
     }
     return *this;
   }
 
-  template <typename E>
-  requires std::is_constructible_v<Err, E>
-  ErrorStack& Push(const ErrorStack<E>& rhs) {
-    stack_.insert(stack_.end(), rhs.begin(), rhs.end());
-    return *this;
-  }
-  
-  template <typename Func>
-  ErrorStack& AndPush(Func fn) {
-    if (stack_.empty()) return Push(fn());
-    return *this;
-  }
-
   const Err& Error() const {
-    return stack_.back();
+    return value_.error();
   }
 
-  bool operator==(const ErrorStack& rhs) const {
-    return std::ranges::equal(stack_, rhs.stack_);
-  }
-
-  auto begin() const {
-    return stack_.begin();
-  }
-
-  auto end() const {
-    return stack_.end();
-  }
-
- protected:
-  std::vector<Err> stack_;
+ private:
+  std::expected<void, Err> value_;
 };
 
 }  // namespace hornet::consensus
