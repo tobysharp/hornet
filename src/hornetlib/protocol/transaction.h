@@ -360,6 +360,14 @@ class TransactionViewT {
   std::span<const struct Output> Outputs() const {
     return detail_.outputs.Span(data_.outputs);
   }
+  auto SignatureScripts() const {
+    return std::views::iota(0, InputCount()) | 
+           std::views::transform([&] (const int i) { return SignatureScript(i); });
+  }
+  auto PkScripts() const {
+    return std::views::iota(0, OutputCount()) | 
+           std::views::transform([&] (const int i) { return PkScript(i); });
+  }
 
   // The following non-const member methods are chosen by the compiler in the case where
   // the TransactionViewT object is non-const. In this case, the constness of the return value
@@ -396,6 +404,14 @@ class TransactionViewT {
   }
   auto Outputs() {
     return detail_.outputs.Span(data_.outputs);
+  }
+  auto SignatureScripts() {
+    return std::views::iota(0, InputCount()) | 
+           std::views::transform([&] (const int i) { return SignatureScript(i); });
+  }
+  auto PkScripts() {
+    return std::views::iota(0, OutputCount()) | 
+           std::views::transform([&] (const int i) { return PkScript(i); });
   }
 
   // The following methods are only valid on mutable views, and will cause compile errors if

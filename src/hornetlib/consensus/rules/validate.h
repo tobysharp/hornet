@@ -3,6 +3,7 @@
 #include "hornetlib/consensus/header_ancestry_view.h"
 #include "hornetlib/consensus/rules/validate_block_context.h"
 #include "hornetlib/consensus/rules/validate_block_structure.h"
+#include "hornetlib/consensus/rules/validate_forward.h"
 #include "hornetlib/consensus/rules/validate_header.h"
 #include "hornetlib/consensus/rules/validate_transaction.h"
 #include "hornetlib/consensus/types.h"
@@ -14,11 +15,12 @@ namespace hornet::consensus {
 namespace rules {
 
 // Performs header validation, aligned with Core's CheckBlockHeader and ContextualCheckBlockHeader.
-[[nodiscard]] inline ValidateHeaderResult ValidateHeader(const model::HeaderContext& parent,
-                                                         const protocol::BlockHeader& header,
-                                                         const HeaderAncestryView& view) {
+[[nodiscard]] inline SuccessOr<HeaderError> ValidateHeader(const protocol::BlockHeader& header,
+                                                         const model::HeaderContext& parent,
+                                                         const HeaderAncestryView& view,
+                                                         const int64_t current_time) {
   // clang-format off
-  const std::array ruleset = {
+  static constexpr std::array ruleset = {
     Rule{ValidatePreviousHash},         // A header MUST reference the hash of its valid parent.
     Rule{ValidateProofOfWork},          // A header MUST satisfy the chain's target proof-of-work.
     Rule{ValidateDifficultyAdjustment}, // A header's proof-of-work target MUST satisfy the difficulty adjustment formula.
@@ -27,12 +29,12 @@ namespace rules {
     Rule{ValidateVersion}               // A header version number MUST meet deployment requirements depending on activated BIPs.
   };
   // clang-format on
-  const HeaderValidationContext context{header, parent, view, parent.height + 1};
+  const HeaderValidationContext context{header, parent, view, current_time, parent.height + 1};
   return ValidateRules<HeaderError>(ruleset, 0, context);
 }
 
 // Performs transaction validation, aligned with Core's CheckTransaction function.
-[[nodiscard]] inline ValidateTransactionResult ValidateTransaction(
+[[nodiscard]] inline SuccessOr<TransactionError> ValidateTransaction(
     const protocol::TransactionConstView transaction) {
   // clang-format off
   static constexpr std::array ruleset = {
@@ -49,7 +51,7 @@ namespace rules {
 }
 
 // Performs non-contextual block validation, aligned with Core's CheckBlock function.
-[[nodiscard]] inline ValidateBlockResult ValidateBlockStructure(const protocol::Block& block) {
+[[nodiscard]] inline SuccessOr<BlockOrTransactionError> ValidateBlockStructure(const protocol::Block& block) {
   // clang-format off
   static constexpr std::array ruleset = {
     Rule{ValidateNonEmpty},           // A block MUST contain at least one transaction.
@@ -60,21 +62,22 @@ namespace rules {
     Rule{ValidateSignatureOps}        // The total number of signature operations in a block MUST NOT exceed the consensus maximum.
   };
   // clang-format on
-  return ValidateRules<std::variant<BlockError, TransactionError>>(ruleset, 0, block);
+  return ValidateRules<BlockOrTransactionError>(ruleset, 0, block);
 }
 
 // Performs contextual block validation, aligned with Core's ContextualCheckBlock function.
-[[nodiscard]] inline ValidateBlockResult ValidateBlockContext(const HeaderAncestryView& ancestry,
+[[nodiscard]] inline SuccessOr<BlockError> ValidateBlockContext(const HeaderAncestryView& ancestry,
                                                               const protocol::Block& block) {
   // clang-format off
   static constexpr std::array ruleset = {
     Rule{ValidateTransactionFinality},                            // All transactions in the block MUST be final given the block height and locktime rules.
     Rule{ValidateCoinbaseHeight,        BIP::HeightInCoinbase },  // From BIP34, the coinbase transaction’s scriptSig MUST begin by pushing the block height.
     Rule{ValidateWitnessCommitment,     BIP::SegWit           },  // From BIP141, the coinbase transaction MUST include a valid witness commitment for blocks containing witness data.
-    Rule{ValidateBlockWeight}};                                   // A block’s total weight MUST NOT exceed 4,000,000 weight units.
+    Rule{ValidateBlockWeight}                                     // A block’s total weight MUST NOT exceed 4,000,000 weight units.
+  };
   //clang-format on
   const BlockValidationContext context{block, ancestry, ancestry.Length()};
-  return ValidateRules<std::variant<BlockError, TransactionError>>(ruleset, context.height, context);
+  return ValidateRules<BlockError>(ruleset, context.height, context);
 }
 
 }  // namespace rules
