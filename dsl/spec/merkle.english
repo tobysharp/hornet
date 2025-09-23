@@ -1,0 +1,20 @@
+// Returns the Merkle root of a sequence of hashes, defined recursively.
+Let MerkleRoot from (xs as Hash⟨⟩, unique as bool (true)) to (root as Hash, unique as bool):
+
+    // Make a pair from each consecutive element in the sequence, ignoring any odd tail.
+    Let pairs be
+        ⟨ (xs[2i], xs[2i + 1]) for every i in ⟦0, |xs| / 2⟯ ⟩.
+
+    // Check that each pair has distinct elements, preserving uniqueness.
+    Let unique_at_level be true iff every (a, b) in pairs has a ≠ b.
+
+    // If the sequence length is odd, duplicate the last element to complete the final pair.
+    Let extended be
+        pairs                         if |pairs| is even,
+        pairs ⧺ (xs.last, xs.last)    otherwise.
+
+Result:
+    (xs.first, unique)   if |xs| = 1,    // Base case: return the sole element and uniqueness flag.
+    MerkleRoot(⟨ SHA256²(a ⧺ b) for every (a, b) in extended ⟩, unique and unique_at_level)
+                         otherwise.   // Recursive case.
+

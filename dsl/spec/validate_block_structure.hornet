@@ -1,0 +1,55 @@
+// The total number of signature operations in a block MUST NOT exceed the consensus maximum.
+Rule SigOpLimit(block ∈ Block)
+    Let SigOpCost : (op ∈ OpCode) -> int32 |-> 
+      ⎧  1  if op ∈ {Op_CheckSig,      Op_CheckSigVerify     },
+      ⎨ 20  if op ∈ {Op_CheckMultiSig, Op_CheckMultiSigVerify},
+      ⎩  0  otherwise
+    Require Σ SigOpCost(inst.opcode)
+            ∀ inst ∈ script.instructions
+            ∀ script ∈ tx.inputs.scriptSig ⧺ tx.outputs.scriptPubKey
+            ∀ tx ∈ block.transactions
+        ≤ 20,000
+
+// Strips the witness data out of a transaction.
+Let WithoutWitness : (tx ∈ Transaction) -> Transaction
+|-> tx \ {witness_flag, witnesses}
+
+// Returns the SHA256² hash of a transaction with witness excluded.
+Let Txid : (tx ∈ Transaction) -> Hash
+|-> SHA256²(WithoutWitness(tx).serial)
+
+// Validates that the Merkle root matches the header, and all elements are pairwise unique.
+Rule ValidateMerkleRoot(block ∈ Block)
+    Let x := MerkleRoot(⟨ Txid(tx) : tx ∈ block.transactions ⟩)
+    Require x.unique ∧ (x.root = block.header.merkle_root)
+
+// Defines the serialization of a block with witness data excluded.
+Let SerializeNoWitness : (block ∈ Block) -> byte[]
+    Let txs := ⟨ WithoutWitness(tx) : tx ∈ block.transactions ⟩
+|-> (block with { transactions := txs }).serial
+
+Let IsPrevOutNull : (out ∈ OutPoint) -> bool
+|-> out.hash = ⟨0x00⟩⧺^32 ∧ out.index = 0xffffffff
+
+Let IsCoinbase : (tx ∈ Transaction) -> bool
+|-> |tx.inputs| = 1 ∧ IsPrevOutNull(tx.inputs.first.previous_output)
+
+Rule ValidateBlockStructure(block ∈ Block)
+    // A block MUST contain at least one transaction.
+    Require NonEmptyBlock:      block.transactions ≠ ∅
+
+    // A block’s Merkle root field MUST equal the Merkle root of its transaction list.
+    Require ValidateMerkleRoot(block)
+    
+    // A block’s serialized size (before SegWit) MUST NOT exceed 1,000,000 bytes.
+    Require OriginalSizeLimit:  |SerializeNoWitness(block)| <= 1,000,000
+    
+    // A block MUST contain exactly one coinbase transaction, and it MUST be the first transaction.
+    Require UniqueCoinbase:     ∃! tx ∈ block.transactions : IsCoinbase(tx)
+    Require CoinbaseFirst:      IsCoinbase(block.transactions.first)
+
+    // Every transaction in a block MUST be valid according to transaction-level consensus rules.
+    Require ∀ tx ∈ block.transactions, ValidateTransaction(tx)
+
+    // The total number of signature operations in a block MUST NOT exceed the consensus maximum.
+    Require SigOpLimit(block)

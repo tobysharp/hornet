@@ -1,0 +1,24 @@
+Let Hash := byte⟨32⟩
+
+Let Header := (
+  int32 version,
+  Hash prev_block,
+  Hash merkle_root,
+  uint32 timestamp,
+  uint32 bits,
+  uint32 nonce
+)
+
+Let Transaction := (
+    int32     version
+    byte⟨2⟩?  witness_flag  : ⟨0x00, 0x01⟩,
+    TxIn⟨⟩    inputs,
+    TxOut⟨⟩   outputs,
+    Witness⟨⟩ witnesses,
+    uint32    locktime
+)
+
+Let Block := (
+    Header        header,
+    Transaction⟨⟩ transactions
+)
