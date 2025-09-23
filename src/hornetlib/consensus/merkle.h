@@ -34,7 +34,7 @@ class MerkleReducer {
     MerkleRoot result = { {}, true };
     for (int n = count_; n > 1; n = (n + 1) >> 1) {
       // Consensus requires that none of the sibling pairs are identical twins.
-      for (int i = 0; i < n; i += 2)
+      for (int i = 0; i < (n & ~1); i += 2)
         if (nodes_[i] == nodes_[i + 1]) result.unique = false;
       
       // Duplicate the last item if we have an odd number of nodes at this layer.
