@@ -1,0 +1,11 @@
+Let money_supply ∈ int64 := 21,000,000 * 100,000,000
+
+Rule OutputValueRange(tx ∈ Transaction)
+    Require ∀ out ∈ tx.outputs, out.value ∈ [0, money_supply]
+
+Rule OutputValueSum(tx ∈ Transaction)
+    Require Σ_{out ∈ tx.outputs} out.value ≤ money_supply
+
+Rule ValidateTransaction(tx ∈ Transaction)
+    Require OutputValueRange(tx)
+    Require OutputValueSum(tx)
