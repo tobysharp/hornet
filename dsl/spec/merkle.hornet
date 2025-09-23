@@ -1,0 +1,15 @@
+// Returns the Merkle root of a set of hashes, defined recursively.
+Let MerkleRoot : (xs ∈ Hash⟨⟩, unique ∈ bool := true) -> (root ∈ Hash, unique ∈ bool)
+    // Make a tuple from each consecutive pair in the set, ignoring any odd tail.
+    Let pairs :=
+        ⟨ (xs[2i], xs[2i + 1]) : i ∈ ⟦0, |xs| / 2⟯ ⟩
+    // Evaluate whether uniqueness is preserved among all such pairs.
+    Let unique_at_level := ∀ (a, b) ∈ pairs, a ≠ b
+    // Duplicate an odd tail for completeness.
+    Let extended :=
+    ⎧   pairs                         if |pairs| even,
+    ⎩   pairs ⧺ (xs.last, xs.last)    otherwise
+
+|-> ⎧   (xs.first, unique)  if |xs| = 1,  // Returns the root hash and the accumulated uniqueness.
+    ⎨   MerkleRoot(⟨SHA256²(a ⧺ b) : (a, b) ∈ extended⟩, unique ∧ unique_at_level)
+    ⎩                       otherwise     // Recurses into the next level of the tree.

@@ -129,5 +129,11 @@
         "CMAKE_TOOLCHAIN_FILE": "${workspaceFolder}/clang20.toolchain.cmake"
     },
     "cmake.showCTestOutput": false,
-    "cmake.showTestExplorer": false
+    "cmake.showTestExplorer": false,
+    "[hornetdsl]": {
+        "editor.fontFamily": "Fira Code, Menlo, Monaco, 'Courier New', monospace",
+        "editor.fontSize": 14,
+        "editor.tabSize": 2,
+        "editor.fontLigatures": true
+    },
 }

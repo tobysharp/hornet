@@ -1,0 +1,38 @@
+// The total number of signature operations in a block MUST NOT exceed the consensus maximum.
+Rule SigOpLimit(block in Block)
+    Let SigOpCost(op in OpCode) be
+         1  if op is Op_CheckSig or Op_CheckSigVerify
+        20  if op is Op_CheckMultiSig or Op_CheckMultiSigVerify
+         0  otherwise
+
+    Require sum of SigOpCost(inst.opcode)
+            for every inst in script.instructions
+            for every script in (tx.inputs.scriptSig ⧺ tx.outputs.scriptPubKey)
+            for every tx in block.transactions
+        ≤ 20,000
+
+// Strips the witness data out of a transaction.
+Let WithoutWitness(tx in Transaction) be
+    tx without {witness_flag, witnesses}
+
+// Returns the SHA256² hash of a transaction with witness excluded.
+Let Txid(tx in Transaction) be
+    SHA256²(WithoutWitness(tx).serial)
+
+// Validates that the Merkle root matches the header, and all elements are pairwise unique.
+Rule ValidateMerkleRoot(block in Block)
+    Let x be MerkleRoot(⟨ Txid(tx) for every tx in block.transactions ⟩)
+    Require x.unique and (x.root = block.header.merkle_root)
+
+// Defines the serialization of a block with witness data excluded.
+Let SerializeNoWitness(block in Block) be
+    Let txs be ⟨ WithoutWitness(tx) for every tx in block.transactions ⟩
+    (block with { transactions := txs }).serial
+
+// Tests whether an OutPoint is null (hash = zeros, index = 0xffffffff).
+Let IsPrevOutNull(out in OutPoint) be
+    out.hash = ⟨0x00⟩ ⧺^ 32 and out.index = 0xffffffff
+
+// Tests whether a transaction is a coinbase.
+Let IsCoinbase(tx in Transaction) be
+    |tx.inputs| = 1 and IsPrevOutNull(tx.inputs.first.previous_output)
