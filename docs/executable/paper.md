@@ -1,121 +1,16 @@
-<style>
-/* PDF styling */
-
-pre {
-  font-family: "Consolas", "Lucida Console", monospace;
-  font-size: 8px;        
-  line-height: 1.3;
-  letter-spacing: -0.5px;
-}
-p code, li code {
-  font-family: monospace;
-  font-size: 0.9em !important;   
-}
-body {
-  font-family: Georgia, serif;
-  font-size: 12px;
-  line-height: 1.5;
-  text-align: justify;
-  text-justify: inter-word;
-}
-h1, h2, h3, h4, h5, h6 {
-  page-break-after: avoid;   
-  page-break-inside: avoid;
-}
-pre, figure, table {
-  page-break-inside: avoid;
-}
-
-/* HTML styling */
-/*
-body {
-  font-family: "Fira Code", "JetBrains Mono", SFMono-Regular, Consolas, monospace;
-  background-color: #1e1e1e;
-  color: #dddddd;
-  max-width: 900px;
-  width: 100%
-  margin-left: auto;
-  margin-right: auto;
-  margin-top: 2em;
-  margin-bottom: 2em;
-  padding: 0 2em;
-  line-height: 1.7;
-  text-align: justify;
-  text-justify: inter-word;
-}
-body.markdown-body {
-  max-width: 900px;
-  margin-left: auto;
-  margin-right: auto;
-  padding-left: 2em;
-  padding-right: 2em;
-}
-
-h1, h2, h3, h4 {
-  color: #ffffff;
-  margin-top: 1.8em;
-  border-bottom: 1px solid #444;
-  padding-bottom: 0.3em;
-}
-code {
-  background-color: #2d2d2d;
-  color: #ffa07a;
-  padding: 0.2em 0.4em;
-  border-radius: 4px;
-}
-pre {
-  background-color: #2d2d2d;
-  color: #dddddd;
-  padding: 1em;
-  overflow-x: auto;
-  border-radius: 8px;
-  margin: 1.5em 0;
-}
-table {
-  border-collapse: collapse;
-  width: 100%;
-  margin: 2em 0;
-}
-th, td {
-  border: 1px solid #444;
-  padding: 0.5em 1em;
-}
-th {
-  background-color: #333;
-  color: #fff;
-}
-a {
-  color: #6ab0f3;
-  text-decoration: none;
-}
-a:hover {
-  text-decoration: underline;
-}
-blockquote {
-  border-left: 4px solid #555;
-  margin: 1em 0;
-  padding-left: 1em;
-  color: #aaa;
-  font-style: italic;
-}
-*/
-</style>
-
-<!-- ![](banner.png) -->
-
 # Hornet Node and the Hornet DSL:
 ### *A Minimal, Executable Specification for Bitcoin Consensus*
 
 ### Toby Sharp
-v1.1\
-20 September 2025\
+v1.2\
+23 September 2025\
 toby@hornetnode.org
 
 ## 1. Abstract
 
 Bitcoin's consensus rules [1] are encoded in the implementation of its reference client [2]: "The code is the spec." Yet this code is unsuitable for formal verification due to side effects, mutable state, concurrency, and legacy design.
 
-A standalone formal specification would enable verification both across versions of the reference client and against new client implementations, strengthening decentralization by reducing the risk of consensus-splitting bugs. Yet such a specification has long been considered intractable given the complexity of Bitcoin’s consensus logic [4].
+A standalone formal specification would enable verification both across versions of the reference client and against new client implementations, strengthening decentralization by reducing the risk of consensus-splitting bugs. Yet such a specification has long been considered intractable given the complexity of Bitcoin’s consensus logic (e.g. [4]).
 
 We demonstrate a compact, executable, declarative C++ specification of Bitcoin consensus rules that syncs mainnet to tip in a few hours on a single thread. We also introduce the Hornet Domain-Specific Language (DSL) specifically designed to encode these rules unambiguously for execution, enabling formal reasoning, consensus code generation, and AI-driven adversarial testing.
 
@@ -706,8 +601,7 @@ Hornet Node is a self-funded spare-time passion project. If you would like to su
 https://hornetnode.org/paper.html
 
 [4] NVK (2025). *BTC242: Bitcoin Core vs Knots w/ NVK*, hosted by Preston Pysh. The Investor Podcast. \
-https://www.theinvestorspodcast.com/bitcoin-fundamentals/btc242-bitcoin-core-vs-knots-w-nvk/ \
-(*"Anything is possible, but it's ... completely unrealistic."*)
+https://www.theinvestorspodcast.com/bitcoin-fundamentals/btc242-bitcoin-core-vs-knots-w-nvk/
 
 [5] Luke Dashjr. *Bitcoin Knots*. \
 [https://bitcoinknots.org](https://bitcoinknots.org)
