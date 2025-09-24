@@ -3,7 +3,7 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "hornetlib/consensus/validate_transaction.h"
+#include "hornetlib/consensus/rules/validate.h"
 
 #include "hornetlib/protocol/transaction.h"
 #include "testutil/round_trip.h"
@@ -29,7 +29,7 @@ TEST(ValidatorTest, AcceptsValidTransaction) {
   tx.SetLockTime(0);
 
   auto result = ValidateTransaction(RoundTrip(tx));
-  EXPECT_EQ(result, TransactionError::None);
+  EXPECT_TRUE(result);
 }
 
 TEST(ValidatorTest, RejectsEmptyInputs) {

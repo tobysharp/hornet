@@ -4,6 +4,7 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <vector>
@@ -35,8 +36,9 @@ class HeaderAncestryView {
   virtual std::vector<uint32_t> LastNTimestamps(int count) const = 0;
 
   uint32_t MedianTimePast() const {
-    const auto timestamps = LastNTimestamps(constants::kBlocksForMedianTime);
+    auto timestamps = LastNTimestamps(constants::kBlocksForMedianTime);
     Assert(!timestamps.empty());  // Impossible: would imply trying to validate the genesis.
+    std::sort(timestamps.begin(), timestamps.end());
     return timestamps[timestamps.size() / 2];
   }
 };

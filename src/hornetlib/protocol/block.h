@@ -63,6 +63,11 @@ class Block {
     return 4 * serialized_bytes_ - 3 * data_.GetWitnessBytes();
   }
 
+  // Returns the number of serialized bytes for the block with witness data excluded.
+  int GetStrippedSize() const {
+    return serialized_bytes_ - data_.GetWitnessBytes();
+  }
+
   // Returns the size of the block in memory, in bytes.
   int SizeBytes() const {
     int size = sizeof(*this) - sizeof(data_);

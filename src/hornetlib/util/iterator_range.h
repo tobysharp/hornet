@@ -29,3 +29,9 @@ IteratorRange<Iterator, End> MakeRange(Iterator begin, End end) {
 }
 
 }  // namespace hornet::util
+
+// Enable std::ranges methods to operator on rvalue references.
+namespace std::ranges {
+template <typename I, typename S>
+inline constexpr bool enable_borrowed_range<hornet::util::IteratorRange<I, S>> = true;
+}  // namespace std::ranges

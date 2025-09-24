@@ -59,6 +59,8 @@ enum class Op : uint8_t {
   CheckMultiSigVerify = 0xaf
 };
 
+inline constexpr int OpCount = 256;
+
 inline constexpr int kImmediateMin = -1;
 
 inline constexpr uint8_t operator +(Op op) {
