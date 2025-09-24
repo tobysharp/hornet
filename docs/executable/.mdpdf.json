@@ -1,0 +1,8 @@
+{
+  "stylesheet": [
+    "https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.2.0/github-markdown-dark.min.css",
+    "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"
+  ],
+  "body_class": "markdown-body",
+  "highlight_style": "github-dark"
+}
