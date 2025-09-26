@@ -7,7 +7,7 @@
 #include "hornetlib/consensus/header_ancestry_view.h"
 #include "hornetlib/consensus/merkle.h"
 #include "hornetlib/consensus/rule.h"
-#include "hornetlib/consensus/rules/validate_forward.h"
+#include "hornetlib/consensus/rules/context.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/block_header.h"
@@ -16,9 +16,7 @@
 #include "hornetlib/protocol/script/writer.h"
 #include "hornetlib/protocol/transaction.h"
 
-namespace hornet::consensus {
-
-namespace rules {
+namespace hornet::consensus::rules {
 
 namespace detail {
 // Determines whether the locktime should be interpreted as a block height (returns true),
@@ -125,5 +123,4 @@ inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transacti
   return {};
 }
 
-}  // namespace rules
-}  // namespace hornet::consensus
+}  // namespace hornet::consensus::rules

@@ -1,9 +1,9 @@
 #pragma once
 
 #include "hornetlib/consensus/header_ancestry_view.h"
+#include "hornetlib/consensus/rules/context.h"
 #include "hornetlib/consensus/rules/validate_block_context.h"
 #include "hornetlib/consensus/rules/validate_block_structure.h"
-#include "hornetlib/consensus/rules/validate_forward.h"
 #include "hornetlib/consensus/rules/validate_header.h"
 #include "hornetlib/consensus/rules/validate_spending.h"
 #include "hornetlib/consensus/rules/validate_transaction.h"
@@ -12,8 +12,7 @@
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/transaction.h"
 
-namespace hornet::consensus {
-namespace rules {
+namespace hornet::consensus::rules {
 
 // Performs header validation, aligned with Core's CheckBlockHeader and ContextualCheckBlockHeader.
 [[nodiscard]] inline Result ValidateHeader(const HeaderValidationContext& context) {
@@ -74,17 +73,6 @@ namespace rules {
   return ValidateRules(ruleset, context.height, context);
 }
 
-// Performs non-spending validation, aligned with the combination of Core's CheckBlock and ContextualCheckBlock functions.
-[[nodiscard]] inline Result ValidateNonSpending(const BlockEnvironmentContext& context) {
-  // clang-format off
-  static const auto ruleset = std::make_tuple(
-    Rule{ValidateStructural},           
-    Rule{ValidateContextual}
-  );
-  //clang-format on
-  return ValidateRules(ruleset, context.height, context);
-}
-
 [[nodiscard]] inline Result ValidateInputSpend(const protocol::TransactionConstView tx,
                                                const int input_index,
                                                const UnspentDetail& prevout,
@@ -99,29 +87,6 @@ namespace rules {
   return ValidateRules(ruleset, height, context);
 }
 
-[[nodiscard]] inline Result ValidateSpending(const BlockSpendingContext& context) {
-  return context.unspent.ForEachUnspentPrevout(context.block,
-    [&](const int tx_index, const int input_index, const UnspentDetail& prevout) {
-      return ValidateInputSpend(context.block.Transaction(tx_index), input_index, prevout, context.height);
-  });
-}
 
-[[nodiscard]] inline auto ValidateBlock(const protocol::Block& block,
-                                        const protocol::BlockHeader& parent,
-                                        const HeaderAncestryView& view,
-                                        const int64_t current_time,
-                                        const UnspentTransactionsView& unspent) {
-  // clang-format off
-  static const auto ruleset = std::make_tuple(
-    Rule{ValidateHeader,          MakeHeaderContext},
-    Rule{ValidateNonSpending,     MakeEnvironmentContext},
-    Rule{ValidateSpending,        MakeBlockSpendingContext}
-  );
-  //clang-format on                                            
-  const BlockValidationContext context{block, parent, view, current_time, unspent};
-  return ValidateRules(ruleset, view.Length(), context);
-}
 
-}  // namespace rules
-
-}  // namespace hornet::consensus
+}  // namespace hornet::consensus::rules

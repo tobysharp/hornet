@@ -12,7 +12,6 @@
 
 #include "hornetlib/consensus/merkle.h"
 #include "hornetlib/consensus/rule.h"
-#include "hornetlib/consensus/rules/validate_forward.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/block_header.h"
@@ -23,9 +22,9 @@
 #include "hornetlib/util/iterator_range.h"
 #include "hornetlib/util/log.h"
 
-namespace hornet::consensus {
+namespace hornet::consensus::rules {
 
-namespace rules {
+[[nodiscard]] Result ValidateTransaction(const protocol::TransactionConstView transaction);
 
 namespace detail {
 
@@ -106,5 +105,4 @@ inline int GetLegacySigOpCount(const protocol::TransactionConstView& tx) {
   return {};
 }
 
-}  // namespace rules
-}  // namespace hornet::consensus
+}  // namespace hornet::consensus::rules
