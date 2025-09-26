@@ -2,7 +2,7 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "hornetlib/consensus/rules/validate.h"
+#include "hornetlib/consensus/validate_api.h"
 
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/protocol/block.h"
@@ -42,7 +42,7 @@ TEST(ValidatorTest, DetectsInvalidMerkleRoot) {
   header.SetMerkleRoot(Hash{0x99});
   block.SetHeader(header);
 
-   EXPECT_EQ(ValidateBlockStructure(RoundTrip(block)), BlockError::BadMerkleRoot);
+   EXPECT_EQ(ValidateStructural(RoundTrip(block)), Error::Structure_BadMerkleRoot);
 }
 
 TEST(ValidatorTest, DetectsNonFirstCoinbase) {
@@ -79,7 +79,7 @@ TEST(ValidatorTest, DetectsNonFirstCoinbase) {
   header.SetMerkleRoot(ComputeMerkleRoot(block).hash);
   block.SetHeader(header);
 
-  EXPECT_EQ(ValidateBlockStructure(RoundTrip(block)), BlockError::BadCoinBase);
+  EXPECT_EQ(ValidateStructural(RoundTrip(block)), Error::Structure_BadCoinBase);
 }
 
 TEST(ValidatorTest, RejectsBlockWithExcessiveWeight) {
@@ -101,7 +101,7 @@ TEST(ValidatorTest, RejectsBlockWithExcessiveWeight) {
 
   const auto block2 = RoundTrip(block);
   EXPECT_GT(block2.GetWeightUnits(), 4'000'000);
-  EXPECT_EQ(ValidateBlockStructure(block2), BlockError::BadSize);
+  EXPECT_EQ(ValidateStructural(block2), Error::Structure_BadSize);
 }
 
 TEST(ValidatorTest, RejectsBlockWithNoTransactions) {
@@ -112,7 +112,7 @@ TEST(ValidatorTest, RejectsBlockWithNoTransactions) {
   header.SetMerkleRoot(Hash{});
   block.SetHeader(header);
 
-  EXPECT_EQ(ValidateBlockStructure(block), BlockError::BadTransactionCount);
+  EXPECT_EQ(ValidateStructural(block), Error::Structure_BadTransactionCount);
 }
 
 TEST(ValidatorTest, RejectsBlockWithInvalidTransaction) {
@@ -131,7 +131,7 @@ TEST(ValidatorTest, RejectsBlockWithInvalidTransaction) {
   header.SetMerkleRoot(ComputeMerkleRoot(block).hash);
   block.SetHeader(header);
 
-  EXPECT_EQ(std::get<BlockError>(ValidateBlockStructure(RoundTrip(block)).Error()), BlockError::BadTransaction);
+  EXPECT_EQ(ValidateStructural(RoundTrip(block)), Error::Transaction_NegativeOutputValue);
 }
 
 }  // namespace

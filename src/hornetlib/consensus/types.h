@@ -7,56 +7,45 @@
 #include <algorithm>
 #include <expected>
 #include <optional>
+#include <variant>
 #include <vector>
 
 namespace hornet::consensus {
 
-// Represents errors that can occur during header validation.
-enum class HeaderError {
-  None = 0,
-  ParentNotFound,
-  InvalidProofOfWork,
-  BadTimestamp,
-  BadDifficultyTransition,
-  BadVersion
-};
+// Represents errors that can occur during validation.
+enum class Error {
+  // Headers
+  Header_ParentNotFound,
+  Header_InvalidProofOfWork,
+  Header_BadTimestamp,
+  Header_BadDifficultyTransition,
+  Header_BadVersion,
 
-// Represents the validation status of a block.
-enum class BlockValidationStatus {
-  Unvalidated,     // The block has not yet been validated.
-  AssumedValid,    // The block is buried under enough work to be assumed valid.
-  StructureValid,  // The block's transaction structure is valid, but scripts have not been
-                   // validated.
-  Validated        // The block has been fully validated.
-};
+  // Block structure
+  Structure_BadSize,
+  Structure_BadTransactionCount,
+  Structure_BadCoinBase,
+  Structure_BadCoinBaseHeight,
+  Structure_BadMerkleRoot,
+  Structure_BadTransaction,
+  Structure_BadSigOpCount,
+  Structure_NonFinalTransaction,
+  Structure_BadWitnessNonce,
+  Structure_BadWitnessMerkle,
+  Structure_UnexpectedWitness,
+  Structure_BadBlockWeight,
 
-enum class BlockError {
-  None = 0,
-  BadSize,
-  BadTransactionCount,
-  BadCoinBase,
-  BadCoinBaseHeight,
-  BadMerkleRoot,
-  BadTransaction,
-  BadSigOpCount,
-  NonFinalTransaction,
-  BadWitnessNonce,
-  BadWitnessMerkle,
-  UnexpectedWitness,
-  BadBlockWeight
-};
-
-enum class TransactionError {
-  None = 0,
-  EmptyInputs,
-  EmptyOutputs,
-  OversizedByteCount,
-  NegativeOutputValue,
-  OversizedOutputValue,
-  OversizedTotalOutputValues,
-  DuplicatedInput,
-  NullPreviousOutput,
-  BadCoinBaseSignatureScriptSize
+  // Transactions
+  Transaction_EmptyInputs,
+  Transaction_EmptyOutputs,
+  Transaction_OversizedByteCount,
+  Transaction_NegativeOutputValue,
+  Transaction_OversizedOutputValue,
+  Transaction_OversizedTotalOutputValues,
+  Transaction_DuplicatedInput,
+  Transaction_NullPreviousOutput,
+  Transaction_BadCoinBaseSigScriptSize,
+  Transaction_NotUnspent
 };
 
 // SuccessOr represents state that is either "success" or it is a specific typed error.
@@ -79,13 +68,11 @@ class SuccessOr {
     return value_ == rhs.value_;
   }
 
-  // If in the "success" state, executes the given function, and stores its result.
-  // The function must return SuccessOr<E> where E can be converted to type Err.
+  // If in the "success" state, executes the given function, and returns the result.
+  // The function fn must return SuccessOr<E> where E can be converted to type Err.
   template <typename Func>
-  SuccessOr& AndThen(Func fn) {
-    if (value_.has_value()) {
-      if (const auto result = fn(); !result) value_ = std::unexpected{result.Error()};
-    }
+  SuccessOr AndThen(Func fn) const {
+    if (value_.has_value()) return fn();
     return *this;
   }
 
@@ -96,5 +83,7 @@ class SuccessOr {
  private:
   std::expected<void, Err> value_;
 };
+
+using Result = SuccessOr<Error>;
 
 }  // namespace hornet::consensus

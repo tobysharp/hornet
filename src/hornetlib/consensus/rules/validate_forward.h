@@ -1,32 +1,80 @@
 #pragma once
 
+#include <cstdint>
 #include <variant>
 
 #include "hornetlib/consensus/header_ancestry_view.h"
 #include "hornetlib/consensus/types.h"
-#include "hornetlib/model/header_context.h"
+#include "hornetlib/consensus/utxo.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/transaction.h"
 
 namespace hornet::consensus {
 
-using BlockOrTransactionError = std::variant<BlockError, TransactionError>;
+struct UnspentDetail;
+
+struct BlockValidationContext {
+  const protocol::Block& block;
+  const protocol::BlockHeader& parent;
+  const HeaderAncestryView& view;
+  const int64_t current_time;
+  const UnspentTransactionsView& unspent;
+};
+
+struct HeaderValidationContext {
+  const protocol::BlockHeader& header;
+  const protocol::BlockHeader& parent;
+  const HeaderAncestryView& view;
+  const int64_t current_time;
+  const int height;
+};
+
+inline HeaderValidationContext MakeHeaderContext(const BlockValidationContext& rhs) {
+  return {rhs.block.Header(), rhs.parent, rhs.view, rhs.current_time, rhs.view.Length()};
+}
+
+struct BlockEnvironmentContext {
+  const protocol::Block& block;
+  const HeaderAncestryView& view;
+  const int height;
+
+  operator const protocol::Block&() const { return block; }
+};
+
+inline BlockEnvironmentContext MakeEnvironmentContext(const BlockValidationContext& rhs) {
+  return {rhs.block, rhs.view, rhs.view.Length()};
+}
+
+struct BlockSpendingContext {
+  const protocol::Block& block;
+  const UnspentTransactionsView& unspent;
+  const int height;
+};
+
+inline BlockSpendingContext MakeBlockSpendingContext(const BlockValidationContext& rhs) {
+  return {rhs.block, rhs.unspent, rhs.view.Length()};
+}
 
 namespace rules {
 
-[[nodiscard]] SuccessOr<HeaderError> ValidateHeader(const model::HeaderContext& parent,
-                                                 const protocol::BlockHeader& header,
-                                                 const HeaderAncestryView& view,
-                                                 const int64_t current_time);
+[[nodiscard]] Result ValidateHeader(const HeaderValidationContext& context);
 
-[[nodiscard]] SuccessOr<TransactionError> ValidateTransaction(
+[[nodiscard]] Result ValidateTransaction(
     const protocol::TransactionConstView transaction);
 
 // Performs non-contextual block validation, aligned with Core's CheckBlock function.
-[[nodiscard]] SuccessOr<BlockOrTransactionError> ValidateBlockStructure(const protocol::Block& block);
+[[nodiscard]] Result ValidateStructural(
+    const protocol::Block& block);
 
-[[nodiscard]] SuccessOr<BlockError> ValidateBlockContext(const HeaderAncestryView& ancestry,
-                                                      const protocol::Block& block);
+[[nodiscard]] Result ValidateContextual(const BlockEnvironmentContext& context);
+
+[[nodiscard]] Result ValidateNonSpending(const BlockEnvironmentContext& context);
+
+[[nodiscard]] Result ValidateInputSpend(
+    const protocol::TransactionConstView tx, const int input_index, const UnspentDetail& prevout,
+    const int height);
+
+[[nodiscard]] inline Result ValidateSpending(const BlockSpendingContext& context);
 
 }  // namespace rules
 }  // namespace hornet::consensus
