@@ -62,7 +62,7 @@ class HeaderSync {
 
   // Calls error handler and deletes peer's other queued items.
   void HandleError(const Item& item, const protocol::BlockHeader& header,
-                   consensus::HeaderError error);
+                   consensus::Error error);
 
   // Returns true if a batch contains the full 2,000 headers.
   static bool IsFullBatch(std::span<const protocol::BlockHeader> batch) {
@@ -141,7 +141,7 @@ inline void HeaderSync::Process() {
       auto headers = timechain_.ReadHeaders();
       auto parent = headers->Search(item->batch[0].GetPreviousBlockHash());
       if (!parent) {
-        HandleError(*item, item->batch[0], consensus::HeaderError::ParentNotFound);
+        HandleError(*item, item->batch[0], consensus::Error::Header_ParentNotFound);
         continue;
       }
 
@@ -155,7 +155,7 @@ inline void HeaderSync::Process() {
                                 .count();
 
         // Validates the header against consensus rules.
-        const auto validated = consensus::ValidateHeader(header, *parent, *view, now);
+        const auto validated = consensus::ValidateHeader(header, parent->data, *view, now);
 
         // Handles consensus failures, breaking out of this batch.
         if (!validated) {
@@ -181,7 +181,7 @@ inline void HeaderSync::Process() {
 
 // Calls error handler and deletes peer's other queued items.
 inline void HeaderSync::HandleError(const Item& item, const protocol::BlockHeader&,
-                                    consensus::HeaderError error) {
+                                    consensus::Error error) {
   std::ostringstream oss;
   oss << "Header validation error code " << static_cast<int>(error) << ".";
   handler_.OnError(item.weak_peer, oss.str());

@@ -6,13 +6,13 @@
 
 #include <atomic>
 #include <cstdint>
+#include <format>
 #include <memory>
-#include <sstream>
 #include <thread>
 #include <variant>
 
 #include "hornetlib/consensus/types.h"
-#include "hornetlib/consensus/rules/validate.h"
+#include "hornetlib/consensus/validate_api.h"
 #include "hornetlib/data/sidecar_binding.h"
 #include "hornetlib/data/timechain.h"
 #include "hornetlib/protocol/message/block.h"
@@ -63,8 +63,8 @@ class BlockSync {
   // Gets the next block ID to request from a peer.
   std::optional<data::Key> GetNextBlockId() const;
 
-  consensus::SuccessOr<consensus::BlockOrTransactionError> ValidateItem(const Item& item);
-  void HandleError(const Item& item, consensus::BlockOrTransactionError error);
+  consensus::Result ValidateItem(const Item& item);
+  void HandleError(const Item& item, consensus::Error error);
 
   data::Timechain& timechain_;
   BlockValidationBinding validation_;
@@ -121,8 +121,8 @@ inline std::optional<data::Key> BlockSync::GetNextBlockId() const {
   // out of the main chain. In either case, now we defer to the validation status sidecar
   // to ask it for the first unvalidated block in the chain.
   const auto unvalidated =
-      validation_.Sidecar().FindInChainIf(1, [](consensus::BlockValidationStatus status) {
-        return status == consensus::BlockValidationStatus::Unvalidated;
+      validation_.Sidecar().FindInChainIf(1, [](BlockValidationStatus status) {
+        return status == BlockValidationStatus::Unvalidated;
       });
   if (unvalidated)
     return data::Key{*unvalidated, headers->GetChainHash(*unvalidated)};
@@ -195,9 +195,9 @@ inline void BlockSync::OnBlock(net::SharedPeer peer, const protocol::message::Bl
   RequestNextBlock(peer);
 }
 
-inline consensus::SuccessOr<consensus::BlockOrTransactionError> BlockSync::ValidateItem(const Item& item) {
+inline consensus::Result BlockSync::ValidateItem(const Item& item) {
   // Validates the block.
-  return consensus::rules::ValidateBlockStructure(*item.block).AndThen([&] {
+  return consensus::ValidateStructural(*item.block).AndThen([&] {
     // Lock the header chain during the scope of contextual validation.
     const auto headers = timechain_.ReadHeaders();
     // Find the header for this block, and advance up the tree to its parent.
@@ -211,7 +211,7 @@ inline consensus::SuccessOr<consensus::BlockOrTransactionError> BlockSync::Valid
     // Create a validation view with the parent as the tip.
     const auto view = headers->GetValidationView(parent);
     // Call the contextual block validation.
-    return consensus::rules::ValidateBlockContext(*view, *item.block);
+    return consensus::ValidateContextual(*item.block, *view);
   });
 }
 
@@ -236,7 +236,7 @@ inline void BlockSync::Process() {
     util::NotifyMetric("sync/blocks", {{"blocks_validated", item->id.height + 1}});
     LogDebug() << "Block height " << item->id.height << " validated, " << item->block->SizeBytes()
                << " bytes.";
-    validation_.Set(item->id, consensus::BlockValidationStatus::StructureValid);
+    validation_.Set(item->id, BlockValidationStatus::StructureValid);
 
     // TODO: Update the current UTXO set and the active chain tip, once all necessary validation is
     // complete. We might choose to do this in a separate thread for increased parallelism.
@@ -248,19 +248,11 @@ inline void BlockSync::Process() {
   }
 }
 
-inline void BlockSync::HandleError(const Item& item, consensus::BlockOrTransactionError error) {
-  std::ostringstream oss;
-  std::visit([&](const auto& e) {
-    using E = std::decay_t<decltype(e)>;
-    if constexpr (std::is_same_v<E, consensus::BlockError>)
-      oss << "Block validation";
-    else if constexpr (std::is_same_v<E, consensus::TransactionError>)
-      oss << "Transaction validation";
-    oss << " error code" << static_cast<int>(e) << ".";
-  }, error);
+inline void BlockSync::HandleError(const Item& item, consensus::Error error) {
+  const auto msg = std::format("Validation error code {}.", static_cast<int>(error));
 
   // Drops peer immediately, and potentially applies misbehavior penalties.
-  handler_.OnError(item.peer, oss.str());
+  handler_.OnError(item.peer, msg);
 
   // Removes any queued blocks from the same peer.
   queue_.EraseIf([&](const Item& queued) { return item.peer == queued.peer; });

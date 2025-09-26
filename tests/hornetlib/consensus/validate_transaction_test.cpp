@@ -14,6 +14,7 @@ namespace hornet::consensus {
 namespace {
   
 using test::RoundTrip;
+using rules::ValidateTransaction;
 
 TEST(ValidatorTest, AcceptsValidTransaction) {
   protocol::Transaction tx;
@@ -45,7 +46,7 @@ TEST(ValidatorTest, RejectsEmptyInputs) {
   tx2.ResizeInputs(0);
 
   auto result = ValidateTransaction(tx2);
-  EXPECT_EQ(result, TransactionError::EmptyInputs);
+  EXPECT_EQ(result, Error::Transaction_EmptyInputs);
 }
 
 TEST(ValidatorTest, RejectsDuplicateInputs) {
@@ -64,7 +65,7 @@ TEST(ValidatorTest, RejectsDuplicateInputs) {
   tx.SetLockTime(0);
 
   auto result = ValidateTransaction(RoundTrip(tx));
-  EXPECT_EQ(result, TransactionError::DuplicatedInput);
+  EXPECT_EQ(result, Error::Transaction_DuplicatedInput);
 }
 
 TEST(ValidatorTest, RejectsOversizedTransactionNoWitness) {
@@ -83,7 +84,7 @@ TEST(ValidatorTest, RejectsOversizedTransactionNoWitness) {
   tx.SetLockTime(0);
 
   auto result = ValidateTransaction(RoundTrip(tx));
-  EXPECT_EQ(result, TransactionError::OversizedByteCount);
+  EXPECT_EQ(result, Error::Transaction_OversizedByteCount);
 }
 
 TEST(ValidatorTest, RejectsCoinbaseWithInvalidScriptSize) {
@@ -100,7 +101,7 @@ TEST(ValidatorTest, RejectsCoinbaseWithInvalidScriptSize) {
   tx.SetLockTime(0);
 
   auto result = ValidateTransaction(RoundTrip(tx));
-  EXPECT_EQ(result, TransactionError::BadCoinBaseSignatureScriptSize);
+  EXPECT_EQ(result, Error::Transaction_BadCoinBaseSigScriptSize);
 }
 
 TEST(ValidatorTest, RejectsEmptyOutputs) {
@@ -115,7 +116,7 @@ TEST(ValidatorTest, RejectsEmptyOutputs) {
   tx.SetLockTime(0);
 
   auto result = ValidateTransaction(RoundTrip(tx));
-  EXPECT_EQ(result, TransactionError::EmptyOutputs);
+  EXPECT_EQ(result, Error::Transaction_EmptyOutputs);
 }
 
 TEST(ValidatorTest, RejectsNegativeOutputValue) {
@@ -132,7 +133,7 @@ TEST(ValidatorTest, RejectsNegativeOutputValue) {
   tx.SetLockTime(0);
 
   auto result = ValidateTransaction(RoundTrip(tx));
-  EXPECT_EQ(result, TransactionError::NegativeOutputValue);
+  EXPECT_EQ(result, Error::Transaction_NegativeOutputValue);
 }
 
 TEST(ValidatorTest, RejectsTotalOutputOverflow) {
@@ -151,7 +152,7 @@ TEST(ValidatorTest, RejectsTotalOutputOverflow) {
   tx.SetLockTime(0);
 
   auto result = ValidateTransaction(RoundTrip(tx));
-  EXPECT_EQ(result, TransactionError::OversizedTotalOutputValues);
+  EXPECT_EQ(result, Error::Transaction_OversizedTotalOutputValues);
 }
 
 TEST(ValidatorTest, RejectsOversizedOutputValue) {
@@ -168,7 +169,7 @@ TEST(ValidatorTest, RejectsOversizedOutputValue) {
   tx.SetLockTime(0);
 
   auto result = ValidateTransaction(RoundTrip(tx));
-  EXPECT_EQ(result, TransactionError::OversizedOutputValue);
+  EXPECT_EQ(result, Error::Transaction_OversizedOutputValue);
 }
 
 }  // namespace
