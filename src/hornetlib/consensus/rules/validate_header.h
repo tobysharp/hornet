@@ -10,14 +10,13 @@
 #include "hornetlib/consensus/difficulty_adjustment.h"
 #include "hornetlib/consensus/header_ancestry_view.h"
 #include "hornetlib/consensus/rule.h"
-#include "hornetlib/consensus/rules/validate_forward.h"
+#include "hornetlib/consensus/rules/context.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/compact_target.h"
 #include "hornetlib/protocol/hash.h"
 
-namespace hornet::consensus {
-namespace rules {
+namespace hornet::consensus::rules {
 
 namespace detail {
 inline bool IsVersionValidAtHeight(int32_t version, int height) {
@@ -83,5 +82,4 @@ inline bool IsVersionValidAtHeight(int32_t version, int height) {
   return {};
 }
 
-}  // namespace rules
-}  // namespace hornet::consensus
+}  // namespace hornet::consensus::rules

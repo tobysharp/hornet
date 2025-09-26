@@ -8,9 +8,7 @@
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/protocol/transaction.h"
 
-namespace hornet::consensus {
-
-namespace rules {
+namespace hornet::consensus::rules {
 
 // A transaction MUST contain at least one input.
 [[nodiscard]] inline Result ValidateInputCount(
@@ -86,5 +84,4 @@ namespace rules {
   return {};
 }
 
-}  // namespace rules
-}  // namespace hornet::consensus
+}  // namespace hornet::consensus::rules

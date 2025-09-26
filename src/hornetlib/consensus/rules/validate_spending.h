@@ -1,12 +1,22 @@
 #pragma once
 
-#include "hornetlib/consensus/rules/validate_forward.h"
+#include "hornetlib/consensus/rules/context.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/consensus/utxo.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/transaction.h"
 
-namespace hornet::consensus {
+namespace hornet::consensus::rules {
+
+struct BlockSpendingContext {
+  const protocol::Block& block;
+  const UnspentTransactionsView& unspent;
+  const int height;
+};
+
+inline BlockSpendingContext MakeBlockSpendingContext(const BlockValidationContext& rhs) {
+  return {rhs.block, rhs.unspent, rhs.view.Length()};
+}
 
 struct InputSpendingContext {
     const protocol::TransactionConstView tx;
@@ -15,12 +25,8 @@ struct InputSpendingContext {
     const int height;
 };
 
-namespace rules {
-
 [[nodiscard]] inline Result ValidateCoinbaseMaturity(const InputSpendingContext&) {
     return {};  // TODO
 }
 
-
-}  // namespace rules
-}  // namespace hornet::consensus
+}  // namespace hornet::consensus::rules
