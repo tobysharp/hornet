@@ -1,5 +1,6 @@
 add_library(hornetlib STATIC
    data/header_timechain.cpp
+   data/utxo/streaming_unspent_state.cpp
    protocol/block.cpp
    protocol/message_factory.cpp
    protocol/message_handler.cpp
