@@ -8,10 +8,20 @@
 #include "hornetlib/data/utxo/streaming_unspent_state.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/transaction.h"
+#include "hornetlib/util/throw.h"
 
 namespace hornet::data {
 
 namespace {
+
+template <typename Key, typename Value>
+struct KeyValue {
+  inline friend bool operator <(const KeyValue& lhs, const Key& rhs) { return lhs.key < rhs; }
+  inline friend bool operator <(const Key& lhs, const KeyValue& rhs) { return lhs < rhs.key; }
+
+  Key key;
+  Value value;
+};
 
 using OutputRecord = consensus::UnspentDetail;
 
@@ -50,7 +60,8 @@ void OutputsTable::AppendOutputs(const protocol::Block& block, int height) {
 }
 
 template <typename RandomIt, typename T>
-inline std::pair<RandomIt, RandomIt> GallopingRangeSearch(RandomIt begin, RandomIt end, const T& value) {
+inline std::pair<RandomIt, RandomIt> GallopingRangeSearch(RandomIt begin, RandomIt end,
+                                                          const T& value) {
   RandomIt gallop = begin;
   int step = 1;
   while (gallop < end) {
@@ -64,22 +75,8 @@ inline std::pair<RandomIt, RandomIt> GallopingRangeSearch(RandomIt begin, Random
   return {begin, end};
 }
 
-struct SearchResults {
-  bool missing;    // True if any of the processed queries were not found in the unspent index.
-                    // (Failure to validate spending.)
-  bool overflow;   // True if we stopped the query early because we filled the candidates buffer.
-  int processed;   // Number of queries processed and candidates written to output buffer.
-};
-
-template <typename IndexIter, typename Visit>
-SearchResults ProcessCandidate(IndexIter in, IndexIter end, SearchResults acc, Visit visit) {
-  if ((acc.missing |= (in == end))) return acc;
-  const bool is_continue = visit(acc.processed++, *in);
-  if ((acc.overflow |= !is_continue)) return acc;
-  return acc;
-}
-
-// Returns the first compact key-value index within [lower, upper) that matches `match`, or -1 if no match.
+// Returns the first compact key-value index within [lower, upper) that matches `match`, or -1 if no
+// match.
 template <typename Iter, typename T>
 inline Iter BinarySearchFirst(Iter begin, Iter end, const T& match) {
   const auto it = std::lower_bound(begin, end, match);
@@ -87,51 +84,71 @@ inline Iter BinarySearchFirst(Iter begin, Iter end, const T& match) {
   return it;
 }
 
-template <typename QueryIter, typename Key, typename IndexIter, typename Visit>
-SearchResults ForEachMatchInDoubleSorted(QueryIter qbegin, QueryIter qend, Key key, 
-                                         IndexIter ibegin, IndexIter iend, Visit visit) {
-    SearchResults rv = {false, false, 0 };
-    if (!(qbegin < qend)) return rv;
+// Searches for a sorted range of queries among a sorted range of an index.
+// If there is more than one matching key in the index, we always use the first such match.
+// Calls visit for each matched key. Returns the number of queries processed and matched successfully.
+// Key: auto key(*qbegin);
+// Visit: void visit(output_index, *ibegin);
+template <typename QueryIter, typename IndexIter, typename Key, typename Visit>
+int ForEachMatchInDoubleSorted(QueryIter qbegin, QueryIter qend,
+                                         IndexIter ibegin, IndexIter iend, Key key, Visit visit) {
+  int rv = 0;
+  if (!(qbegin < qend)) return rv;
 
-    // Start by binary searching for the first outpoint in the compact index.
-    // From there we will do a galloping search for each next query.
-    auto lower = ibegin;
-    auto upper = iend;
-    
-    // Binary search compact_[begin:end) looking for query_key.match.
-    auto search = BinarySearchFirst(lower, upper, key(*qbegin));
-    rv = ProcessCandidate(search, upper, rv, visit);
-    if (rv.overflow || rv.missing) return rv;
+  // Start by binary searching for the first outpoint in the compact index.
+  // From there we will do a galloping search for each next query.
+  auto lower = ibegin;
+  auto upper = iend;
 
-    // Search the remainder of the compact index using galloping search.
-    for (auto query = qbegin + 1; query != qend; ++query) {
-      const auto match = key(*query);
-      std::tie(lower, upper) = GallopingRangeSearch(lower, iend, match);
-      search = BinarySearchFirst(lower, upper, match);
-      rv = ProcessCandidate(search, upper, rv, visit);
-      if (rv.overflow || rv.missing) return rv;
-    }
-    return rv;
+  // Binary search compact_[begin:end) looking for query_key.match.
+  auto search = BinarySearchFirst(lower, upper, key(*qbegin));
+  if (search != upper) visit(rv++, *search);
+
+  // Search the remainder of the compact index using galloping search.
+  for (auto query = qbegin + 1; query != qend; ++query) {
+    const auto match = key(*query);
+    std::tie(lower, upper) = GallopingRangeSearch(lower, iend, match);
+    search = BinarySearchFirst(lower, upper, match);
+    if (search != upper) visit(rv++, *search);
+  }
+  return rv;
 }
 
 class CompactIndex {
  public:
-  SearchResults Query(std::span<const protocol::OutPoint> queries, const int skip_bits,
+  CompactIndex(int skip_bits) : skip_bits_(skip_bits) {}
+
+  int Query(std::span<const protocol::OutPoint> queries,
                       uint32_t* candidates, const int size, const int lo = 0,
                       const int hi = std::numeric_limits<int>::max()) const {
+    // We actually require that the size of the candidates buffer is sufficient to hold one 
+    // candidate per query.
+    if (size < static_cast<int>(queries.size()))
+      util::ThrowInvalidArgument("CompactIndex::Query size of candidates fewer than queries.");
 
-    // Start by binary searching for the first outpoint in the compact index.
-    // From there we will do a galloping search for each next query.
     const auto matcher = [&](const protocol::OutPoint& op) -> uint16_t {
-      return GetMatchBits(op, skip_bits);
+      return KeyPrefix(op);
     };
-    const auto visit = [&](int candidate_index, const CompactKeyValue& kv) -> bool {
+    const auto visit = [&](int candidate_index, const CompactKeyValue& kv)  {
+      // TODO: Debug assert that candidate_index < size, but should be guaranteed by construction.
       candidates[candidate_index] = kv.Value();
-      return candidate_index < size;
     };
-    auto lower = compact_.begin() + std::max(lo, 0);
-    auto upper = std::min(compact_.begin() + hi, compact_.end());
-    return ForEachMatchInDoubleSorted(queries.begin(), queries.end(), matcher, lower, upper, visit);
+    const auto lower = compact_.begin() + std::max(lo, 0);
+    const auto upper = std::min(compact_.begin() + hi, compact_.end());
+    return ForEachMatchInDoubleSorted(queries.begin(), queries.end(), lower, upper, matcher, visit);
+  }
+
+  uint16_t KeyPrefix(const protocol::OutPoint& out_point) const {
+    constexpr int kTxidBits = 12;
+    constexpr int kVoutBits = 4;
+
+    uint32_t word;
+    std::memcpy(&word, out_point.hash.data(), sizeof(word));
+
+    uint32_t after = word >> skip_bits_;
+    uint16_t txid_part = after & ((1 << kTxidBits) - 1);
+    uint16_t vout_part = out_point.index & ((1 << kVoutBits) - 1);
+    return (txid_part << kVoutBits) | vout_part;
   }
 
  private:
@@ -150,10 +167,10 @@ class CompactIndex {
     uint32_t Storage() const {
       return storage_;
     }
-    friend std::strong_ordering operator <=>(CompactKeyValue lhs, uint16_t rhs) {
+    friend std::strong_ordering operator<=>(CompactKeyValue lhs, uint16_t rhs) {
       return lhs.Key() <=> rhs;
     }
-    friend std::strong_ordering operator <=>(uint16_t lhs, CompactKeyValue rhs) {
+    friend std::strong_ordering operator<=>(uint16_t lhs, CompactKeyValue rhs) {
       return lhs <=> rhs.Key();
     }
     static uint16_t MaximumKey() {
@@ -170,98 +187,64 @@ class CompactIndex {
     uint32_t storage_;
   };
 
-  inline uint16_t GetMatchBits(const protocol::OutPoint& out_point, int skip_bits) const {
-    constexpr int kTxidBits = 12;
-    constexpr int kVoutBits = 4;
-
-    uint32_t word;
-    std::memcpy(&word, out_point.hash.data(), sizeof(word));
-
-    uint32_t after = word >> skip_bits;
-    uint16_t txid_part = after & ((1 << kTxidBits) - 1);
-    uint16_t vout_part = out_point.index & ((1 << kVoutBits) - 1);
-    return (txid_part << kVoutBits) | vout_part;
-  }
-
+  const int skip_bits_;
   std::vector<CompactKeyValue> compact_;
 };
 
 // A top-level partition of the spent index.
 class UnspentShard {
  public:
-  UnspentShard(int directory_bits = 7)
-      : directory_bits_(directory_bits), directory_((1 << directory_bits) + 1),
-      run_indices_(32), out_offsets_(32) {
-  }
+  UnspentShard(int shard_bits = 9, int directory_bits = 7)
+      : shard_bits_(shard_bits),
+        directory_bits_(directory_bits),
+        directory_((1 << directory_bits) + 1),
+        compact_(shard_bits + directory_bits),
+        run_indices_(32),
+        out_offsets_(32) {}
 
-  struct QueryResults {
-    std::span<uint64_t> outputs_refs;
-  };
+  using QueryResults = std::expected<std::span<uint64_t>, std::monostate>;
 
   // Query the unspent shard with the given SORTED query outpoints.
   // If all queries matched, returns a vector of indices into OutputsTable.
   // Otherwise returns std::unexpected.
-  QueryResults Query(std::span<const protocol::OutPoint> queries, int shard_bits) const {
+  QueryResults Query(std::span<const protocol::OutPoint> queries) const {
     QueryResults rv = {};
     if (queries.empty()) return rv;
+    run_indices_.resize(queries.size());
+    out_offsets_.resize(queries.size());
 
-    int queries_processed = 0;
-    while (queries_processed < std::ssize(queries)) {
-      // Start by looking up the query in our radix-style dictionary to get an initial bounded range.
-      const auto query_batch = queries.subspan(queries_processed);
-      const int dir_index = GetDictionaryIndex(query_batch.front(), shard_bits);
-      const int lower = directory_[dir_index];
-      const int upper = directory_[dir_index + 1];  // Yes, because we deliberately sized it as 2^D+1.
+    const int dir_index = GetDictionaryIndex(queries.front());
+    const int lower = directory_[dir_index];
+    const int upper = directory_[dir_index + 1];  // Yes, because we deliberately sized it as 2^D+1.
 
-      // Search the compact index for a list of candidates
-      const auto candidate_batch = std::span{run_indices_};
-      const auto results = compact_.Query(query_batch, shard_bits + directory_bits_,
-                                            candidate_batch.data(), candidate_batch.size(), lower, upper);
-      if (results.missing) {
-        // TODO: Return with missing unspent record error
-      } else if (results.overflow) {
-        // We ran out of space in the candidates buffer. We'll double its size to prevent this happening again.
-        // We'll have to run the query tail again, and hopefully we don't run out of memory again.
-        // We do rely on having enough memory for these candidates, but the expected number is small, ~6 per shard per block, or 12KB total.
-        run_indices_.resize(run_indices_.size() << 1);
-        // We'll have to run the query tail again, and hopefully we don't run out of memory again.
-        // TODO: Put a policy on this to bound the maximum size
-        // Double the size of the out_offsets buffer too since that has to contain about the same number of entries.
-        out_offsets_.reserve(out_offsets_.capacity() << 1);
-      }
+    // Search the compact index for a list of candidates
+    const int candidates =
+        compact_.Query(queries, run_indices_.data(),
+                        run_indices_.size(), lower, upper);
 
-      // All the candidates are already sorted so now go through them, indexing into the full run,
-      // and checking for an exact match, building the set of offsets for this shard.
-      for (int i = 0; i < results.processed; ++i) {
-        std::strong_ordering order = std::strong_ordering::less;
-        for (uint32_t run_index = candidate_batch[i]; run_index < tail_ && order == std::strong_ordering::less; ++run_index) {
-          const KeyValue& run_entry = run_[run_index];
-          order = run_entry.key <=> query_batch[i];
-          if (order == std::strong_ordering::equal) {
-            // We have an exact match. This is the very common case.
-            out_offsets_.push_back(run_entry.value);
-            // Since the outpoints are all unique, we can move onto the next query now.
-          }
-        }
-        if (order != std::strong_ordering::equal) {
-          // We did not find an exact match. This implies an unspendable prevout. Early exit here.
-          return {}; // TODO
-        }
-      }
-      queries_processed += results.processed;
-    }
+    // All the candidates are already sorted so now go through them, indexing into the full run,
+    // and checking for an exact match, building the set of offsets for this shard.
+    const int matches_from_candidates = MergeWalkQueriesAndCandidates(queries, run_indices_.data(), candidates);
 
     // Search the sorted tail separately for all query matches.
     const auto tail = std::span{run_}.subspan(tail_);
-
-    for (size_t i = 0; i < tail.size(); ++i) {
-      // TODO: Reuse the galloping binary search from earlier.
-      //GallopingRangeSearch(tail.begin(), tail.end(), 
+    const auto matches_from_tail = ForEachMatchInDoubleSorted(queries.begin(), queries.end(), tail.begin(), tail.end(), 
+      [](const protocol::OutPoint& key) { return key; },
+      [&](int output_index, const IndexEntry& kv) {
+        out_offsets_[matches_from_candidates + output_index] = kv.value;
+        return true;
+      }
+    );
+    
+    // Now we are in a position to know if any of the matches were missing from the unspent shard index.
+    const int total_matches = matches_from_candidates + matches_from_tail;
+    Assert(total_matches <= std::ssize(queries));
+    if (total_matches < std::ssize(queries)) {
+      // Not all queries were found in the unspent index.
+      return std::unexpected(std::monostate{});
     }
 
-    // TODO: Prepare output value
-
-    return rv;
+    return std::span{out_offsets_}.subspan(0, total_matches);
   }
 
  private:
@@ -271,31 +254,82 @@ class UnspentShard {
     uint64_t segment : 15;  // Segment index in OutputsTable.
   };
 
-  struct KeyValue {
-    protocol::OutPoint key;
-    IndexValue value;
-  };
+  using IndexEntry = KeyValue<protocol::OutPoint, uint64_t>;
 
-  inline uint16_t GetDictionaryIndex(const protocol::OutPoint& out_point, int skip_bits) const {
+  inline std::strong_ordering ComparePrefix(const protocol::OutPoint& query, const IndexEntry& kv) const {
+    const uint16_t query_prefix = compact_.KeyPrefix(query);
+    const uint16_t index_prefix = compact_.KeyPrefix(kv.key);
+    return query_prefix <=> index_prefix;
+  }
+
+  int MergeWalkQueriesAndCandidates(const std::span<const protocol::OutPoint> queries, const uint32_t* candidate_begin, int candidates) const {
+    // All the candidates are already sorted so now go through them, indexing into the full run,
+    // and checking for an exact match, building the set of offsets for this shard.
+    int outputs = 0;
+    auto query = queries.begin();
+    auto candidate = candidate_begin;
+    const auto candidates_end = candidate_begin + candidates;
+    const auto tail = std::span{run_}.subspan(tail_);
+    const auto index_end = tail.begin();
+    auto index = candidate != candidates_end ? std::next(run_.begin(), *candidate) : index_end;
+    while (query != queries.end() && index != index_end) {
+      std::strong_ordering prefix_query_vs_candidate = ComparePrefix(*query, *index);
+      while (prefix_query_vs_candidate == std::strong_ordering::equal) {
+        // Prefixes are matching: compare the whole key.
+        const std::strong_ordering order = *query <=> index->key;
+        if (order == std::strong_ordering::equal) {
+          // Found an exact match
+          out_offsets_[outputs++] = index->value;
+          // Move on to next query and next candidate
+          ++query;
+          index = ++candidate != candidates_end ? std::next(run_.begin(), *candidate) : index_end;
+          break;
+        } else if (order == std::strong_ordering::less) {
+          // Query is behind index. Query has no match here, move to next query.
+          ++query;
+          break;
+        } else if (order == std::strong_ordering::greater) {
+          // Index is behind query: continue scanning index while prefix matches.
+          if (++index == index_end) break;
+          prefix_query_vs_candidate = ComparePrefix(*query, *index);
+        } 
+      }
+      if (prefix_query_vs_candidate == std::strong_ordering::less) {
+        // Query is behind candidate: query has no match here, maybe it's in the tail.
+        ++query;
+      } else if (prefix_query_vs_candidate == std::strong_ordering::greater) {
+        // Candidate is behind query: candidate has no match
+        index = ++candidate != candidates_end ? std::next(run_.begin(), *candidate) : index_end;
+      }
+    }
+    return outputs;
+  }
+
+  inline uint16_t GetDictionaryIndex(const protocol::OutPoint& out_point) const {
     uint32_t word;
     std::memcpy(&word, out_point.hash.data(), sizeof(word));
-    const uint32_t after = word >> skip_bits;
+    const uint32_t after = word >> shard_bits_;
     const uint32_t directory_mask = (1 << directory_bits_) - 1;
     return after & directory_mask;
   }
 
+  const int shard_bits_;
   const int directory_bits_;
-  std::vector<KeyValue> run_;
+  std::vector<IndexEntry> run_;
   std::vector<uint32_t> directory_;
   CompactIndex compact_;
   size_t tail_;  // Offset to the start of the disjoint sorted tail in run_.
   mutable std::vector<uint32_t> run_indices_;
-  mutable std::vector<IndexValue> out_offsets_;
+  mutable std::vector<uint64_t> out_offsets_;
 };
 
 class UnspentIndex {
  public:
-  UnspentIndex(int shard_bits = 9) : shard_bits_(shard_bits), shards_(1 << shard_bits) {}
+  UnspentIndex(int shard_bits = 9, int dictionary_bits = 7) {
+    shards_.reserve(1 << shard_bits);
+    for (int i = 0; i < 1 << shard_bits; ++i)
+      shards_.emplace_back(shard_bits, dictionary_bits);
+  }
 
   int ShardCount() const {
     return std::ssize(shards_);
@@ -305,7 +339,6 @@ class UnspentIndex {
   void QueryUnspent(const protocol::Block&) {}
 
  protected:
-  const int shard_bits_;
   std::vector<UnspentShard> shards_;
 };
 
