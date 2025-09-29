@@ -8,11 +8,11 @@ namespace hornet::data {
 
 template <typename Key, typename Value>
 struct KeyValue {
-  inline friend bool operator<(const KeyValue& lhs, const Key& rhs) {
-    return lhs.key < rhs;
+  inline friend std::strong_ordering operator <=>(const KeyValue& lhs, const Key& rhs) {
+    return lhs.key <=> rhs;
   }
-  inline friend bool operator<(const Key& lhs, const KeyValue& rhs) {
-    return lhs < rhs.key;
+  inline friend std::strong_ordering operator <=>(const Key& lhs, const KeyValue& rhs) {
+    return lhs <=> rhs.key;
   }
 
   Key key;
@@ -42,6 +42,13 @@ inline std::pair<RandomIt, RandomIt> GallopingRangeSearch(RandomIt begin, Random
   }
   if (gallop < end) end = gallop;
   return {begin, end};
+}
+
+template <typename RandomIt, typename T>
+inline RandomIt GallopingBinarySearch(RandomIt begin, RandomIt end, const T& match) {
+  const auto [lower, upper] = GallopingRangeSearch(begin, end, match);
+  const auto found = BinarySearchFirst(lower, upper, match);
+  return found == upper ? end : found;
 }
 
 // Searches for a sorted range of queries among a sorted range of an index.
