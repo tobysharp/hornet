@@ -93,27 +93,21 @@ class UnspentShard {
     auto index = candidate != candidates_end ? std::next(run_.begin(), *candidate) : index_end;
     while (query != queries.end() && index != index_end) {
       std::strong_ordering prefix_query_vs_candidate = ComparePrefix(*query, *index);
-      while (prefix_query_vs_candidate == std::strong_ordering::equal) {
-        // Prefixes are matching: compare the whole key.
-        const std::strong_ordering order = *query <=> index->key;
-        if (order == std::strong_ordering::equal) {
+      if (prefix_query_vs_candidate == std::strong_ordering::equal) {
+        // Prefixes are matching, so *index <= *query.
+        const auto match_it = GallopingBinarySearch(index, index_end, *query);
+        if (match_it == index_end) {
+          ++query;
+        } else {
           // Found an exact match
-          out_offsets_[outputs++] = index->value;
+          out_offsets_[outputs++] = match_it->value;
           // Move on to next query and next candidate
           ++query;
-          index = ++candidate != candidates_end ? std::next(run_.begin(), *candidate) : index_end;
-          break;
-        } else if (order == std::strong_ordering::less) {
-          // Query is behind index. Query has no match here, move to next query.
-          ++query;
-          break;
-        } else if (order == std::strong_ordering::greater) {
-          // Index is behind query: continue scanning index while prefix matches.
-          if (++index == index_end) break;
-          prefix_query_vs_candidate = ComparePrefix(*query, *index);
-        } 
+          if (++candidate == candidates_end) index = index_end;
+          else index = std::next(run_.begin(), std::max(*candidate, static_cast<uint32_t>(match_it - run_.begin()) + 1));
+        }
       }
-      if (prefix_query_vs_candidate == std::strong_ordering::less) {
+      else if (prefix_query_vs_candidate == std::strong_ordering::less) {
         // Query is behind candidate: query has no match here, maybe it's in the tail.
         ++query;
       } else if (prefix_query_vs_candidate == std::strong_ordering::greater) {
