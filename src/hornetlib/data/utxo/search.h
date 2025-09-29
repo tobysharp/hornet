@@ -54,7 +54,7 @@ inline RandomIt GallopingBinarySearch(RandomIt begin, RandomIt end, const T& mat
 // Searches for a sorted range of queries among a sorted range of an index.
 // If there is more than one matching key in the index, we always use the first such match.
 // Calls visit for each matched key. Returns the number of queries processed and matched
-// successfully. Key: auto key(*qbegin); Visit: void visit(output_index, *ibegin);
+// successfully. Key: auto key(*qbegin); Visit: void visit(output_index, *qbegin, *ibegin);
 template <typename QueryIter, typename IndexIter, typename Key, typename Visit>
 int ForEachMatchInDoubleSorted(QueryIter qbegin, QueryIter qend, IndexIter ibegin, IndexIter iend,
                                Key key, Visit visit) {
@@ -68,14 +68,14 @@ int ForEachMatchInDoubleSorted(QueryIter qbegin, QueryIter qend, IndexIter ibegi
 
   // Binary search compact_[begin:end) looking for query_key.match.
   auto search = BinarySearchFirst(lower, upper, key(*qbegin));
-  if (search != upper) visit(rv++, *search);
+  if (search != upper) visit(rv++, 0, *search);
 
   // Search the remainder of the compact index using galloping search.
   for (auto query = qbegin + 1; query != qend; ++query) {
     const auto match = key(*query);
     std::tie(lower, upper) = GallopingRangeSearch(lower, iend, match);
     search = BinarySearchFirst(lower, upper, match);
-    if (search != upper) visit(rv++, *search);
+    if (search != upper) visit(rv++, query - qbegin, *search);
   }
   return rv;
 }

@@ -13,7 +13,7 @@ namespace hornet::data {
 // A top-level partition of the spent index.
 class UnspentShard {
  public:
-  UnspentShard(int shard_bits = 9, int directory_bits = 7)
+  UnspentShard(int shard_bits, int directory_bits)
       : shard_bits_(shard_bits),
         directory_bits_(directory_bits),
         directory_((1 << directory_bits) + 1),
@@ -32,30 +32,36 @@ class UnspentShard {
     run_indices_.resize(queries.size());
     out_offsets_.resize(queries.size());
 
-    const int dir_index = GetDictionaryIndex(queries.front());
+    const int dir_index = GetDirectoryIndex(queries.front());
     const int lower = directory_[dir_index];
     const int upper = directory_[dir_index + 1];  // Yes, because we deliberately sized it as 2^D+1.
 
     // Search the compact index for a list of candidates
-    const int candidates =
-        compact_.Query(queries, run_indices_.data(),
-                        run_indices_.size(), lower, upper);
+    const int candidates = compact_.Query(
+        queries, lower, upper,
+        [&](int write_index, int query_index, const CompactIndex::CompactKeyValue& compact) {
+          run_indices_[write_index] = directory_[GetDirectoryIndex(queries[query_index])] + compact.Value();
+        });
 
     // All the candidates are already sorted so now go through them, indexing into the full run,
     // and checking for an exact match, building the set of offsets for this shard.
-    const int matches_from_candidates = MergeWalkQueriesAndCandidates(queries, run_indices_.data(), candidates);
+    const int matches_from_candidates =
+        MergeWalkQueriesAndCandidates(queries, run_indices_.data(), candidates, 
+        [&](int /* write_index */, int query_index, uint64_t offset) {
+          out_offsets_[query_index] = offset;
+        });
 
     // Search the sorted tail separately for all query matches.
     const auto tail = std::span{run_}.subspan(tail_);
-    const auto matches_from_tail = ForEachMatchInDoubleSorted(queries.begin(), queries.end(), tail.begin(), tail.end(), 
-      [](const protocol::OutPoint& key) { return key; },
-      [&](int match_index, const IndexEntry& kv) {
-        out_offsets_[matches_from_candidates + match_index] = kv.value;
-        return true;
-      }
-    );
-    
-    // Now we are in a position to know if any of the matches were missing from the unspent shard index.
+    const auto matches_from_tail = ForEachMatchInDoubleSorted(
+        queries.begin(), queries.end(), tail.begin(), tail.end(),
+        [](const protocol::OutPoint& key) { return key; },
+        [&](int /* write_index */, int query_index, const IndexEntry& kv) {
+          out_offsets_[query_index] = kv.value;
+        });
+
+    // Now we are in a position to know if any of the matches were missing from the unspent shard
+    // index.
     const int total_matches = matches_from_candidates + matches_from_tail;
     Assert(total_matches <= std::ssize(queries));
     if (total_matches < std::ssize(queries)) {
@@ -63,7 +69,7 @@ class UnspentShard {
       return std::unexpected(std::monostate{});
     }
 
-    return std::span{out_offsets_}.subspan(0, total_matches);
+    return std::span{out_offsets_}.first(queries.size());
   }
 
  private:
@@ -75,13 +81,16 @@ class UnspentShard {
 
   using IndexEntry = KeyValue<protocol::OutPoint, uint64_t>;
 
-  inline std::strong_ordering ComparePrefix(const protocol::OutPoint& query, const IndexEntry& kv) const {
+  inline std::strong_ordering ComparePrefix(const protocol::OutPoint& query,
+                                            const IndexEntry& kv) const {
     const uint16_t query_prefix = compact_.KeyPrefix(query);
     const uint16_t index_prefix = compact_.KeyPrefix(kv.key);
     return query_prefix <=> index_prefix;
   }
 
-  int MergeWalkQueriesAndCandidates(const std::span<const protocol::OutPoint> queries, const uint32_t* candidate_begin, int candidates) const {
+  template <typename Visit>
+  int MergeWalkQueriesAndCandidates(const std::span<const protocol::OutPoint> queries,
+                                    const uint32_t* candidate_begin, int candidates, Visit&& visit) const {
     // All the candidates are already sorted so now go through them, indexing into the full run,
     // and checking for an exact match, building the set of offsets for this shard.
     int outputs = 0;
@@ -100,14 +109,15 @@ class UnspentShard {
           ++query;
         } else {
           // Found an exact match
-          out_offsets_[outputs++] = match_it->value;
+          visit(outputs++, query - queries.begin(), match_it->value);
           // Move on to next query and next candidate
           ++query;
-          if (++candidate == candidates_end) index = index_end;
-          else index = std::next(run_.begin(), std::max(*candidate, static_cast<uint32_t>(match_it - run_.begin()) + 1));
+          if (++candidate == candidates_end)
+            index = index_end;
+          else
+            index = std::max(run_.begin() + *candidate, match_it + 1);
         }
-      }
-      else if (prefix_query_vs_candidate == std::strong_ordering::less) {
+      } else if (prefix_query_vs_candidate == std::strong_ordering::less) {
         // Query is behind candidate: query has no match here, maybe it's in the tail.
         ++query;
       } else if (prefix_query_vs_candidate == std::strong_ordering::greater) {
@@ -118,7 +128,7 @@ class UnspentShard {
     return outputs;
   }
 
-  inline uint16_t GetDictionaryIndex(const protocol::OutPoint& out_point) const {
+  inline uint16_t GetDirectoryIndex(const protocol::OutPoint& out_point) const {
     uint32_t word;
     std::memcpy(&word, out_point.hash.data(), sizeof(word));
     const uint32_t after = word >> shard_bits_;
@@ -128,7 +138,8 @@ class UnspentShard {
 
   const int shard_bits_;
   const int directory_bits_;
-  std::vector<IndexEntry> run_;
+  std::vector<IndexEntry>
+      run_;  // TODO: Use mmap with sequential mode, and manual discard of old pages.
   std::vector<uint32_t> directory_;
   CompactIndex compact_;
   size_t tail_;  // Offset to the start of the disjoint sorted tail in run_.
