@@ -17,7 +17,7 @@ class UnspentShard {
       : shard_bits_(shard_bits),
         directory_bits_(directory_bits),
         directory_((1 << directory_bits) + 1),
-        compact_(shard_bits + directory_bits),
+        compact_(shard_bits + directory_bits, 6),
         run_indices_(32),
         out_offsets_(32) {}
 
@@ -32,15 +32,13 @@ class UnspentShard {
     run_indices_.resize(queries.size());
     out_offsets_.resize(queries.size());
 
-    const int dir_index = GetDirectoryIndex(queries.front());
-    const int lower = directory_[dir_index];
-    const int upper = directory_[dir_index + 1];  // Yes, because we deliberately sized it as 2^D+1.
+    const auto [lower, upper] = SliceRange(queries.front());
 
     // Search the compact index for a list of candidates
     const int candidates = compact_.Query(
         queries, lower, upper,
-        [&](int write_index, int query_index, const CompactIndex::CompactKeyValue& compact) {
-          run_indices_[write_index] = directory_[GetDirectoryIndex(queries[query_index])] + compact.Value();
+        [&](int write_index, int query_index, uint16_t run_index) {
+          run_indices_[write_index] = SliceRange(queries[query_index]).first + run_index;
         });
 
     // All the candidates are already sorted so now go through them, indexing into the full run,
@@ -55,7 +53,8 @@ class UnspentShard {
     const auto tail = std::span{run_}.subspan(tail_);
     const auto matches_from_tail = ForEachMatchInDoubleSorted(
         queries.begin(), queries.end(), tail.begin(), tail.end(),
-        [](const protocol::OutPoint& key) { return key; },
+        std::identity{},
+        [](const auto& lhs, const auto& rhs) { return lhs <=> rhs; },
         [&](int /* write_index */, int query_index, const IndexEntry& kv) {
           out_offsets_[query_index] = kv.value;
         });
@@ -104,7 +103,7 @@ class UnspentShard {
       std::strong_ordering prefix_query_vs_candidate = ComparePrefix(*query, *index);
       if (prefix_query_vs_candidate == std::strong_ordering::equal) {
         // Prefixes are matching, so *index <= *query.
-        const auto match_it = GallopingBinarySearch(index, index_end, *query);
+        const auto match_it = GallopingBinarySearch(index, index_end, *query, [](auto&& lhs, auto&& rhs) { return lhs <=> rhs; });
         if (match_it == index_end) {
           ++query;
         } else {
@@ -128,12 +127,14 @@ class UnspentShard {
     return outputs;
   }
 
-  inline uint16_t GetDirectoryIndex(const protocol::OutPoint& out_point) const {
+  inline std::pair<uint32_t, uint32_t> SliceRange(const protocol::OutPoint& out_point) const {
     uint32_t word;
     std::memcpy(&word, out_point.hash.data(), sizeof(word));
+    word = __builtin_bswap32(word);
     const uint32_t after = word >> shard_bits_;
     const uint32_t directory_mask = (1 << directory_bits_) - 1;
-    return after & directory_mask;
+    const uint32_t index = after & directory_mask;
+    return {directory_[index], directory_[index + 1]};
   }
 
   const int shard_bits_;
