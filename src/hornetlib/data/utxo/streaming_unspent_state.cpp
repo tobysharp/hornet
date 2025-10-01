@@ -6,50 +6,16 @@
 
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/data/utxo/compact_index.h"
+#include "hornetlib/data/utxo/outputs_table.h"
 #include "hornetlib/data/utxo/shard.h"
 #include "hornetlib/data/utxo/streaming_unspent_state.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/transaction.h"
 
-namespace hornet::data {
+namespace hornet::data::utxo {
 
 namespace {
 
-using OutputRecord = consensus::UnspentDetail;
-
-// Append-only storage for full outputs. Disk-backed, segmented, mmap for reads.
-// Copy-merge for compaction in the background, per-segment prioritized by least efficient first.
-class OutputsTable {
- public:
-  void AppendOutputs(const protocol::Block& block, int height);
-  uint64_t AppendOutput(const OutputRecord& record);
-
-  // For each {segment, offset} index in [begin, end), call fn with an OutputRecord.
-  template <typename Iter, typename Fn>
-  void ForEachOutput(Iter begin, Iter end, Fn&& fn);
-
- private:
-  std::vector<uint8_t> data_;
-};
-
-uint64_t OutputsTable::AppendOutput(const OutputRecord& record) {
-  const uint64_t start = data_.size();
-  const uint8_t* precord = reinterpret_cast<const uint8_t*>(&record);
-  const uint8_t* pscript = reinterpret_cast<const uint8_t*>(&record.script);
-  data_.insert(data_.end(), precord, pscript);
-  data_.push_back(static_cast<uint32_t>(record.script.size()));
-  data_.insert(data_.end(), record.script.begin(), record.script.end());
-  return start;
-}
-
-void OutputsTable::AppendOutputs(const protocol::Block& block, int height) {
-  for (const auto& tx : block.Transactions()) {
-    for (int i = 0; i < tx.OutputCount(); ++i) {
-      const auto& output = tx.Output(i);
-      AppendOutput(OutputRecord{height, 0, output.value, tx.PkScript(i)});
-    }
-  }
-}
 
 class UnspentIndex {
  public:
@@ -99,9 +65,9 @@ class StreamingUnspentState::Impl {
 consensus::Result StreamingUnspentState::EnumerateUnspentImpl(const protocol::Block& block,
                                                               const Callback cb,
                                                               const void* user) const {
-  return impl_->QueryUnspent(block, [&](int tx_index, int input_index, const OutputRecord& record) {
+  return impl_->QueryUnspent(block, [&](int tx_index, int input_index, const auto& record) {
     return (*cb)(tx_index, input_index, record, user);
   });
 }
 
-}  // namespace hornet::data
+}  // namespace hornet::data::utxo

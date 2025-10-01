@@ -8,7 +8,7 @@
 #include "hornetlib/data/utxo/compact_index.h"
 #include "hornetlib/protocol/transaction.h"
 
-namespace hornet::data {
+namespace hornet::data::utxo {
 
 // A top-level partition of the spent index.
 class UnspentShard {
@@ -148,4 +148,4 @@ class UnspentShard {
   mutable std::vector<uint64_t> out_offsets_;
 };
 
-}  // namespace hornet::data
+}  // namespace hornet::data::utxo

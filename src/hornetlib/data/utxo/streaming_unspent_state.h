@@ -4,7 +4,7 @@
 
 #include "hornetlib/consensus/utxo.h"
 
-namespace hornet::data {
+namespace hornet::data::utxo {
 
 // UnspentTransactionsView backend, optimized for initial block download.
 // No explicit rewind/reorg support (but can be added later if needed).
@@ -20,4 +20,4 @@ class StreamingUnspentState : public consensus::UnspentTransactionsView {
   std::shared_ptr<Impl> impl_;                                      
 };
 
-}  // namespace hornet::data
+}  // namespace hornet::data::utxo
