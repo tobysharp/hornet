@@ -4,7 +4,7 @@
 #include <span>
 #include <vector>
 
-namespace hornet::data {
+namespace hornet::data::utxo {
 
 template <typename Key, typename Value>
 struct KeyValue {
@@ -86,4 +86,4 @@ int ForEachMatchInDoubleSorted(QueryIter qbegin, QueryIter qend, IndexIter ibegi
   return rv;
 }
 
-}  // namespace hornet::data
+}  // namespace hornet::data::utxo

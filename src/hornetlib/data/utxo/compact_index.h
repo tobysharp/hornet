@@ -11,7 +11,7 @@
 #include "hornetlib/util/assert.h"
 #include "hornetlib/util/throw.h"
 
-namespace hornet::data {
+namespace hornet::data::utxo {
 
 // Returns bits of the hash that can be compared numerically the same way that bytes are compared
 // lexicographically. The most significant `skip_bits` bits are discarded, and the next most 
@@ -113,4 +113,4 @@ class CompactIndex {
   std::vector<Codec::KeyValueType> compact_;
 };
 
-}  // namespace hornet::data
+}  // namespace hornet::data::utxo
