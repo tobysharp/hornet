@@ -3,21 +3,33 @@
 #include <memory>
 
 #include "hornetlib/consensus/utxo.h"
+#include "hornetlib/data/utxo/index.h"
+#include "hornetlib/data/utxo/outputs_table.h"
 
 namespace hornet::data::utxo {
 
-// UnspentTransactionsView backend, optimized for initial block download.
-// No explicit rewind/reorg support (but can be added later if needed).
-class StreamingUnspentState : public consensus::UnspentTransactionsView {
+class DatabaseView : public consensus::UnspentTransactionsView {
  public:
+   struct Info {};
+
+  // Retrieve stats on the internal state of this object.
+  Info GetInfo() const;
+
+  // Mark input prevouts as spent and add new outputs.
+  // May use cached mutable state from the previous EnumerateUnspentImpl to save duplicated work.
+  void ConnectBlock(const protocol::Block& block);
+
+  // Explicitly compact the representation, which may be an expensive operation.
+  void Compact();
+  
+  consensus::Result QueryPrevoutsUnspent(const protocol::Block& block) const override;
+
  protected:
-  class Impl;
+  consensus::Result EnumerateSpends(const protocol::Block& block, const Callback cb,
+                                 const void* user) const override;
 
-  virtual consensus::Result EnumerateUnspentImpl(const protocol::Block& block,
-                                      const Callback cb,
-                                      const void* user) const override;
-
-  std::shared_ptr<Impl> impl_;                                      
+  OutputsTable table_;
+  UnspentIndex index_;
 };
 
 }  // namespace hornet::data::utxo

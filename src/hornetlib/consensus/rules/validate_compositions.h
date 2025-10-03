@@ -23,10 +23,10 @@ namespace hornet::consensus::rules {
 }
 
 [[nodiscard]] inline Result ValidateSpending(const BlockSpendingContext& context) {
-  return context.unspent.ForEachUnspentPrevout(context.block,
-    [&](const int tx_index, const int input_index, const UnspentDetail& prevout) {
-      return ValidateInputSpend(context.block.Transaction(tx_index), input_index, prevout, context.height);
-  });
+  return context.unspent.ForEachSpend(context.block,
+    [&](const SpendRecord& spend) { 
+      return ValidateInputSpend(spend, context.height);
+    });
 }
 
 [[nodiscard]] inline Result ValidateBlock(const protocol::Block& block,

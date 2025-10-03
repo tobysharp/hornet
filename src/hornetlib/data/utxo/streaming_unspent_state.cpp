@@ -7,6 +7,7 @@
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/data/utxo/compact_index.h"
 #include "hornetlib/data/utxo/outputs_table.h"
+#include "hornetlib/data/utxo/results.h"
 #include "hornetlib/data/utxo/shard.h"
 #include "hornetlib/data/utxo/streaming_unspent_state.h"
 #include "hornetlib/protocol/block.h"
@@ -14,60 +15,18 @@
 
 namespace hornet::data::utxo {
 
-namespace {
+consensus::Result DatabaseView::QueryPrevoutsUnspent(const protocol::Block&) const {
+  // 1. Query the unspent outputs index.
+  // 2. Store the query result in the cache, keyed by block hash or pointer.
+  return {};
+}
 
-
-class UnspentIndex {
- public:
-  UnspentIndex(int shard_bits = 9, int dictionary_bits = 7) {
-    shards_.reserve(1 << shard_bits);
-    for (int i = 0; i < 1 << shard_bits; ++i)
-      shards_.emplace_back(shard_bits, dictionary_bits);
-  }
-
-  int ShardCount() const {
-    return std::ssize(shards_);
-  }
-
-  // Query all the input prevouts to check they exist as unspent outputs.
-  void QueryUnspent(const protocol::Block&) {}
-
- protected:
-  std::vector<UnspentShard> shards_;
-};
-
-}  // namespace
-
-class StreamingUnspentState::Impl {
- public:
-  struct Info {};
-
-  // Retrieve stats on the internal state of this object.
-  Info GetInfo() const;
-
-  // Mark input prevouts as spent and add new outputs.
-  // May use cached mutable state from the previous EnumerateUnspentImpl to save duplicated work.
-  void ConnectBlock(const protocol::Block& block);
-
-  // Explicitly compact the representation, which may be an expensive operation.
-  void Compact();
-
-  template <typename Fn>
-  consensus::Result QueryUnspent(const protocol::Block&, Fn&&) {
-    return {};
-  }
-
- private:
-  OutputsTable outputs_;
-  UnspentIndex unspent_;
-};
-
-consensus::Result StreamingUnspentState::EnumerateUnspentImpl(const protocol::Block& block,
-                                                              const Callback cb,
-                                                              const void* user) const {
-  return impl_->QueryUnspent(block, [&](int tx_index, int input_index, const auto& record) {
-    return (*cb)(tx_index, input_index, record, user);
-  });
+consensus::Result DatabaseView::EnumerateSpends(const protocol::Block&, const Callback,
+                                                const void*) const {
+  // 1. Retrieve the relevant query result from the cache.
+  // 2. If its records haven't already been fetched, fetched them now (but ideally already happened).
+  // 3. Iterate over the retrieved records in parallel, calling the callback function on each result.
+  return {};
 }
 
 }  // namespace hornet::data::utxo

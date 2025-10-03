@@ -19,10 +19,8 @@ inline BlockSpendingContext MakeBlockSpendingContext(const BlockValidationContex
 }
 
 struct InputSpendingContext {
-    const protocol::TransactionConstView tx;
-    const int input_index;
-    const UnspentDetail& prevout;
-    const int height;
+  const SpendRecord spend;
+  const int height;
 };
 
 [[nodiscard]] inline Result ValidateCoinbaseMaturity(const InputSpendingContext&) {
