@@ -3,7 +3,7 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "hornetlib/consensus/rules/validate_api.h"
+#include "hornetlib/consensus/validate_api.h"
 
 #include "hornetlib/protocol/transaction.h"
 #include "testutil/round_trip.h"

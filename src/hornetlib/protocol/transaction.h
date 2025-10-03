@@ -26,12 +26,7 @@ struct OutPoint {
   uint32_t index = 0;
   static constexpr uint32_t kNullIndex = std::numeric_limits<uint32_t>::max();
 
-  std::strong_ordering operator <=>(const OutPoint& rhs) const {
-    const int hashcmp = std::memcmp(&hash, &rhs.hash, sizeof(Hash));
-    if (hashcmp < 0) return std::strong_ordering::less;
-    if (hashcmp > 0) return std::strong_ordering::greater;
-    return index <=> rhs.index;
-  }
+  std::strong_ordering operator <=>(const OutPoint& rhs) const = default;
 
   static OutPoint Null() { return {{}, kNullIndex}; }
 

@@ -14,13 +14,16 @@ class SubArray {
  public:
   SubArray() : start_(0), count_(0) {}
   SubArray(int start, Count count) : start_(start), count_(count) {}
+  SubArray(std::span<const T> subspan, std::span<const T> data)
+      : start_(static_cast<int>(subspan.begin() - data.begin())),
+        count_(static_cast<Count>(subspan.size())) {}
   SubArray(const SubArray&) = default;
   SubArray& operator=(const SubArray&) = default;
 
   int StartIndex() const {
     return start_;
   }
-  
+
   int EndIndex() const {
     return start_ + count_;
   }

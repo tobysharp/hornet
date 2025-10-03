@@ -73,17 +73,14 @@ namespace hornet::consensus::rules {
   return ValidateRules(ruleset, context.height, context);
 }
 
-[[nodiscard]] inline Result ValidateInputSpend(const protocol::TransactionConstView tx,
-                                               const int input_index,
-                                               const UnspentDetail& prevout,
-                                               const int height) {
+[[nodiscard]] inline Result ValidateInputSpend(const SpendRecord& spend, int height) {
   // clang-format off
   static const std::array ruleset = {
     Rule{ValidateCoinbaseMaturity}
     // TODO: Others
   };
   //clang-format on
-  const InputSpendingContext context{tx, input_index, prevout, height};
+  const InputSpendingContext context{spend, height};
   return ValidateRules(ruleset, height, context);
 }
 
