@@ -13,3 +13,4 @@ add_library(hornetlib STATIC
 )
 target_compile_features(hornetlib PRIVATE cxx_std_20)
 target_include_directories(hornetlib PUBLIC ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(hornetlib PRIVATE uring)
