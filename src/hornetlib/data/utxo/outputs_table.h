@@ -43,20 +43,17 @@ class OutputsTable {
   // Removes all uncommitted outputs for block heights >= since.
   void RemoveRecentOutputs(int since);
 
-  int GetOutputsSizeBytes(std::span<const uint64_t> addresses) const;
-  int GetOutputsScriptBytes(std::span<const uint64_t> addresses) const;
-  int CopyOutputsRaw(std::span<const uint64_t> addresses, uint8_t* buffer, int size) const;
   std::pair<std::vector<OutputDetail>, std::vector<uint8_t>> Fetch(
       std::span<const uint64_t> addresses) const;
 
   // Testing methods.
   IndexEntry AppendOutput(protocol::TransactionConstView tx, int output, int height,
                           bool wake = true);
-  uint32_t GetScriptLength(uint64_t address) const {
-    return ParseAddress(address).length;
-  }
 
  private:
+  int CopyOutputsRaw(std::span<const uint64_t> addresses, uint8_t* buffer, int size) const;
+  int GetOutputsSizeBytes(std::span<const uint64_t> addresses) const;
+
   struct Entry {
     OutputHeader record;
     util::SubArray<uint8_t> script;
@@ -78,29 +75,35 @@ class OutputsTable {
   void PrepareCurrentSegment(size_t bytes_to_write);
   void OpenSegments();
 
-  UniqueFD fd_write_;
-  std::filesystem::path folder_;
-  std::atomic<uint64_t> max_segment_length_ = (uint64_t)1 << 30;  // 1 GiB
-  std::vector<Segment> segments_;
+  // Collected data in the tail, prior to commit.
   std::vector<Entry> entries_;
-  std::vector<uint8_t> scripts_;  // The array of
-  std::mutex entries_mutex_;      // Locks access to the in-memory append buffer.
-  std::thread worker_;            // The background thread performs flush to disk and compaction.
+  std::vector<uint8_t> scripts_; 
   int max_height_ = -1;  // The height of the tallest block appended to the table in this session.
-  std::atomic<bool> abort_ = false;  // Controls when the worker thread should terminate.
-  std::condition_variable awake_;    // Controls when the worker thread should wake to do work.
   uint64_t size_bytes_ = 0;          // The total number of bytes of the whole table.
   int max_outputs_per_block_ = 0;    // The maximum number of outputs we've ever seen in a block.
   std::atomic<int> undo_window_ =
       0;  // The number of blocks to keep in memory before committing to disk.
-  
+
+  // Background thread that commits to the table.
+  std::thread worker_;               // The background thread performs flush to disk and compaction.
+  std::atomic<bool> abort_ = false;  // Controls when the worker thread should terminate.
+  std::condition_variable awake_;    // Controls when the worker thread should wake to do work.
+  std::mutex entries_mutex_;         // Locks access to the in-memory append buffer.
+
+  // Filesystem and file descriptors.
+  std::filesystem::path folder_;
+  std::atomic<uint64_t> max_segment_length_ = (uint64_t)1 << 30;  // 1 GiB
+  std::vector<Segment> segments_;
+  UniqueFD fd_write_;
+
+  // Asynchronous I/O reads.  
   mutable UringIOEngine io_;
   mutable std::vector<uint8_t>
       staging_;  // The staging buffer used to organize data before writing to disk.
 };
 
 inline OutputsTable::OutputsTable(const std::string& folder)
-    : folder_(folder), worker_(&OutputsTable::RunCommitThread, this) {
+    : worker_(&OutputsTable::RunCommitThread, this), folder_(folder) {
   OpenSegments();
 }
 
@@ -188,10 +191,6 @@ inline int OutputsTable::GetOutputsSizeBytes(std::span<const uint64_t> addresses
   return bytes;
 }
 
-inline int OutputsTable::GetOutputsScriptBytes(std::span<const uint64_t> addresses) const {
-  return GetOutputsSizeBytes(addresses) - addresses.size() * sizeof(OutputHeader);
-}
-
 inline std::pair<std::vector<OutputDetail>, std::vector<uint8_t>> OutputsTable::Fetch(
     std::span<const uint64_t> addresses) const {
   staging_.resize(GetOutputsSizeBytes(addresses));
@@ -199,17 +198,17 @@ inline std::pair<std::vector<OutputDetail>, std::vector<uint8_t>> OutputsTable::
 
   std::vector<OutputDetail> outputs(addresses.size());
   std::vector<uint8_t> scripts(staging_.size() - addresses.size() * sizeof(OutputHeader));
-  uint8_t *staging_cursor = staging_.data(), *script_cursor = scripts.data();
+  auto staging_cursor = staging_.begin();
+  auto script_cursor = scripts.begin();
   for (int i = 0; i < std::ssize(addresses); ++i) {
     const auto parsed = ParseAddress(addresses[i]);
     const int script_length = parsed.length - sizeof(OutputHeader);
-    const OutputHeader* header = reinterpret_cast<const OutputHeader*>(staging_cursor);
-    outputs[i] = {*header, {static_cast<int>(script_cursor - scripts.data()), script_length}};
-    std::memcpy(script_cursor, staging_cursor + sizeof(OutputHeader), script_length);
+    const OutputHeader header = *reinterpret_cast<const OutputHeader*>(*staging_cursor);
+    outputs[i] = {header, {static_cast<int>(script_cursor - scripts.begin()), script_length}};
+    std::memcpy(&*script_cursor, &*staging_cursor + sizeof(OutputHeader), script_length);
     staging_cursor += parsed.length;
     script_cursor += script_length;
   }
-
   return {outputs, scripts};
 }
 
