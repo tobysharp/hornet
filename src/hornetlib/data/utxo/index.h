@@ -21,15 +21,10 @@ class UnspentIndex {
     return std::ssize(shards_);
   }
 
-  struct QueryResult {
-    int tx_index;
-    int input_index;
-    uint64_t address;
-  };
-  using QueryResults = std::vector<QueryResult>;
+  using QueryResults = std::vector<uint64_t>;
 
   // Query all the input prevouts to check they exist as unspent outputs.
-  std::optional<QueryResults> QueryAllUnspent(const protocol::Block& block);
+  std::optional<QueryResults> QueryAllUnspent(std::span<const protocol::OutPoint> prevouts) const;
 
  protected:
   std::vector<UnspentShard> shards_;

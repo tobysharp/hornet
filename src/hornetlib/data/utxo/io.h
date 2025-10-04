@@ -8,7 +8,7 @@ namespace hornet::data::utxo {
 struct IORequest {
   int fd;
   uint64_t offset;
-  size_t length;
+  int length;
   uint8_t* buffer;
   uintptr_t user;
 };
@@ -30,23 +30,20 @@ concept IOEngine = requires(Engine engine) {
   { Engine::GetQueueDepth() } -> std::same_as<int>;
 };
 
-template <typename Engine, typename Func>
+template <typename Engine>
 requires IOEngine<Engine>
-void ForEach(Engine&& io, std::span<const IORequest> requests, Func&& func) {
+void Read(Engine& io, std::span<const IORequest> requests) {
   int submitted = 0;
   int completed = 0;
   std::array<const IORequest*, Engine::GetQueueDepth()> results;
   while (completed < std::ssize(requests)) {
     if (submitted < std::ssize(requests))
       submitted += io.Submit(std::span{requests}.subspan(submitted));
-
     int ready = io.Reap(results);
     if (ready == 0) {
       results[0] = io.WaitOne();
       ready = 1;
     }
-    
-    for (int i = 0; i < ready; ++i, ++completed) func(*results[i]);
   }
 }
 
