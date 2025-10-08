@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <filesystem>
 #include <optional>
 #include <vector>
 
@@ -9,9 +10,9 @@
 
 namespace hornet::data::utxo {
 
-class UnspentIndex {
+class Index {
  public:
-  UnspentIndex(int shard_bits = 9, int dictionary_bits = 7) {
+  Index(const std::filesystem::path& folder, int shard_bits = 9, int dictionary_bits = 7) {
     shards_.reserve(1 << shard_bits);
     for (int i = 0; i < 1 << shard_bits; ++i)
       shards_.emplace_back(shard_bits, dictionary_bits);
@@ -21,13 +22,26 @@ class UnspentIndex {
     return std::ssize(shards_);
   }
 
-  using QueryResults = std::vector<uint64_t>;
+  int QueryTail(std::span<const OutputKey> prevouts,
+                                 std::span<OutputId> ids) const;
+  int QueryMain(std::span<const OutputKey> prevouts,
+                                    std::span<OutputId> ids) const;
+ 
+  void AppendTail(std::span<const OutputKV> pairs, int height);
 
-  // Query all the input prevouts to check they exist as unspent outputs.
-  std::optional<QueryResults> QueryAllUnspent(std::span<const protocol::OutPoint> prevouts) const;
+  void RemoveSince(int height);
+
+  int GetEarliestTailHeight() const;
+
+  void CommitBefore(int height);
 
  protected:
-  std::vector<UnspentShard> shards_;
+  class Shard {
+
+  };
+
+  std::vector<Shard> shards_;   // The shards of the main index.
+  std::vector<OutputKV> tail_;  // The in-memory sorted tail.
 };
 
 }  // namespace hornet::data::utxo

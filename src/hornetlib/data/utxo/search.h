@@ -6,19 +6,6 @@
 
 namespace hornet::data::utxo {
 
-template <typename Key, typename Value>
-struct KeyValue {
-  inline friend std::strong_ordering operator<=>(const KeyValue& lhs, const Key& rhs) {
-    return lhs.key <=> rhs;
-  }
-  inline friend std::strong_ordering operator<=>(const Key& lhs, const KeyValue& rhs) {
-    return lhs <=> rhs.key;
-  }
-
-  Key key;
-  Value value;
-};
-
 // Returns the first compact key-value index within [lower, upper) that matches `match`, or -1 if no
 // match.
 template <typename Iter, typename T, typename Compare>
