@@ -13,7 +13,9 @@ class IdCodec {
   inline static uint64_t Encode(uint64_t offset, int length) {
     return (offset << kLengthBits) | (length & kLengthMask);
   }
-
+  inline static int Length(uint64_t id) {
+    return Decode(id).second;
+  }
  private:
   static constexpr int kLengthBits = 20;
   static constexpr int kLengthMask = (1 << kLengthBits) - 1;
