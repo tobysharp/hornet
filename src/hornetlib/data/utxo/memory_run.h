@@ -23,6 +23,8 @@ class MemoryRun {
 
   void EraseSince(int height);
 
+  static MemoryRun Merge(std::span<std::shared_ptr<const MemoryRun>> inputs, bool is_mutable = false);
+
  protected:
   TiledVector<OutputKV> entries_;
   Directory directory_;
@@ -59,6 +61,47 @@ inline bool MemoryRun::EraseSince(int height) {
     height_range_.second = height;
   }
   return false;
+}
+
+// Multi-way streaming merge of sorted input runs to a single sorted output run.
+inline MemoryRun MemoryRun::Merge(std::span<std::shared_ptr<const MemoryRun>> inputs, bool is_mutable /* = false */) {
+  using Iterator = typename decltype(entries_)::ConstIterator;
+  struct Cursor {
+    Iterator current, end;
+    bool operator >(const Cursor& rhs) const { return *rhs.current < *current; }
+  };
+
+  // Initialize output.
+  MemoryRun dst{is_mutable};
+  
+  // Initialize heap.
+  std::priority_queue heap{std::vector<Cursor>{}, std::greater{}};
+  for (const auto& run : inputs) heap.push({run->entries_.begin(), run->entries_.end()});
+
+  std::optional<Iterator> prev;
+  while (!heap.empty()) {
+    auto cur = heap.top();
+    heap.pop();
+
+    if (prev.has_value()) {
+      // If the current entry doesn't cancel out our deferred entry `prev`, then we add `prev` here.
+      if (cur.current->IsDelete() || cur.current->key != (*prev)->key)
+        dst.entries_.EmplaceBack(**prev);
+      prev.reset();
+    } 
+
+    if (!is_mutable && cur.current->IsDelete())
+      prev = cur.current;  // Defer adding this record to see whether the next item is the corresponding add.
+    else
+      dst.entries_.EmplaceBack(*cur.current);
+
+    if (++cur.current != cur.end) heap.push(cur);
+  }
+  if (prev.has_value())
+    dst.entries_.EmplaceBack(**prev);
+
+  dst.directory_.Rebuild(dst.entries_);
+  return dst;
 }
 
 }  // namespace hornet::data::utxo
