@@ -31,21 +31,21 @@ struct InputHeader {
   int input_index;
 };
 
-template <typename Key, typename Value>
-struct KeyValue {
-  inline friend std::strong_ordering operator<=>(const KeyValue& lhs, const Key& rhs) {
+using OutputKey = protocol::OutPoint;
+using OutputId = uint64_t;
+
+struct OutputKV {
+  inline friend std::strong_ordering operator<=>(const OutputKV& lhs, const OutputKey& rhs) {
     return lhs.key <=> rhs;
   }
-  inline friend std::strong_ordering operator<=>(const Key& lhs, const KeyValue& rhs) {
+  inline friend std::strong_ordering operator<=>(const OutputKey& lhs, const OutputKV& rhs) {
     return lhs <=> rhs.key;
   }
 
-  Key key;
-  Value value;
+  OutputKey key;
+  int height;
+  OutputId rid;
 };
-
-using OutputKey = protocol::OutPoint;
-using OutputId = uint64_t;
-using OutputKV = KeyValue<OutputKey, OutputId>;
+static_assert(sizeof(OutputKV) == 48);
 
 }  // namespace hornet::data::utxo

@@ -36,6 +36,10 @@ class SubArray {
     return count_ <= 0;
   }
 
+  void Resize(Count count) {
+    count_ = count;
+  }
+
   std::span<T> Span(std::vector<T>& data) const {
     return std::span<T>{data}.subspan(start_, count_);
   }

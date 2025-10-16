@@ -27,30 +27,30 @@ class Database {
 
   // Queries the recently appended items for each prevout and writes their IDs into the equivalent
   // slot of ids. Returns the number of matches found.
-  int QueryTail(std::span<const protocol::OutPoint> prevouts, std::span<uint64_t> ids) const;
+  int QueryRecent(std::span<const protocol::OutPoint> prevouts, std::span<uint64_t> ids) const;
 
   // Queries the committed items for each prevout and writes their IDs into the equivalent
   // slot of ids. Returns the number of matches found.
-  int QueryMain(std::span<const protocol::OutPoint> prevouts, std::span<uint64_t> ids) const;
+  int QueryCommitted(std::span<const protocol::OutPoint> prevouts, std::span<uint64_t> ids) const;
 
   // Fetches the output headers and script bytes for each ID.
   std::pair<std::vector<OutputDetail>, std::vector<uint8_t>> Fetch(
       std::span<const uint64_t> ids) const;
 
   // Appends all spendable outputs of the given block at the given height.
-  void AppendTail(const protocol::Block& block, int height);
+  void Append(const protocol::Block& block, int height);
 
   // Removes all outputs at heights greater than or equal to the given height. The given height
   // must be within the recent window compared to the highest block added. Otherwise the data
   // will already have been flushed to the permanently committed store.
   void RemoveSince(int height);
 
-  // Returns true if there is data in the recent store waiting to be committed to the permanent
-  // store.
-  int GetCommittableBlockCount() const;
+  // // Returns true if there is data in the recent store waiting to be committed to the permanent
+  // // store.
+  // int GetCommittableBlockCount() const;
 
-  // Commits data from the recent store that is older than the recent window.
-  void CommitTail();
+  // // Commits data from the recent store that is older than the recent window.
+  // void CommitTail();
 
   void SetUndoDuration(int blocks);
 
@@ -78,13 +78,13 @@ inline int Database::Query(std::span<const protocol::OutPoint> prevouts,
   return QueryCommitted(prevouts, ids) + QueryRecent(prevouts, ids);
 }
 
-inline int Database::QueryTail(std::span<const protocol::OutPoint> prevouts,
+inline int Database::QueryRecent(std::span<const protocol::OutPoint> prevouts,
                                std::span<uint64_t> ids) const {
   CheckRethrowFatal();
   return index_.QueryTail(prevouts, ids);
 }
 
-inline int Database::QueryMain(std::span<const protocol::OutPoint> prevouts,
+inline int Database::QueryCommitted(std::span<const protocol::OutPoint> prevouts,
                                std::span<uint64_t> ids) const {
   CheckRethrowFatal();
   return index_.QueryMain(prevouts, ids);
@@ -99,8 +99,8 @@ inline std::pair<std::vector<OutputDetail>, std::vector<uint8_t>> Database::Fetc
 void Database::AppendTail(const protocol::Block& block, int height) {
   CheckRethrowFatal();
   std::shared_lock lock(mutex_);
-  const auto kv_pairs = table_.AppendTail(block, height);
-  index_.AppendTail(kv_pairs, height);
+  const auto new_output_ids = table_.AppendOutputs(block, height);
+  index_.AddAndDeleteOutputs(block, new_output_ids, height);
 }
 
 void Database::RemoveSince(int height) {
@@ -110,36 +110,36 @@ void Database::RemoveSince(int height) {
   table_.RemoveSince(height);
 }
 
-int Database::GetCommittableBlockCount() const {
-  CheckRethrowFatal();
-  std::shared_lock lock(mutex_);
-  int end_height = GetLatestHeight() - undo_duration_ + 1;
-  int earliest_tail = std::min(table_.GetEarliestTailHeight(), index_.GetEarliestTailHeight());
-  return end_height - earliest_tail;
-}
+// int Database::GetCommittableBlockCount() const {
+//   CheckRethrowFatal();
+//   std::shared_lock lock(mutex_);
+//   int end_height = GetLatestHeight() - undo_duration_ + 1;
+//   int earliest_tail = std::min(table_.GetEarliestTailHeight(), index_.GetEarliestTailHeight());
+//   return end_height - earliest_tail;
+// }
 
-void Database::CommitTail() {
-  CheckRethrowFatal();
-  std::shared_lock lock(mutex_);
-  try {
-    int end_height = GetLatestHeight() - undo_duration_ + 1;
-    const auto marker = MutationMarker(std::format("CommitBefore: {}", end_height));
-    table_.CommitBefore(end_height);
-    index_.CommitBefore(end_height);
-  } catch (...) {
-    if (!is_fatal_exception_.exchange(true)) {
-      fatal_exception_ = std::current_exception();
-      try {
-        CheckRethrowFatal();
-      } catch (const std::exception& e) {
-        LogError("Database::CommitTail: ", e.what());
-      } catch (...) {
-        LogError("Database::CommitTail: Caught exception.");
-      }
-    }
-    throw;
-  }
-}
+// void Database::CommitTail() {
+//   CheckRethrowFatal();
+//   std::shared_lock lock(mutex_);
+//   try {
+//     int end_height = GetLatestHeight() - undo_duration_ + 1;
+//     const auto marker = MutationMarker(std::format("CommitBefore: {}", end_height));
+//     table_.CommitBefore(end_height);
+//     index_.CommitBefore(end_height);
+//   } catch (...) {
+//     if (!is_fatal_exception_.exchange(true)) {
+//       fatal_exception_ = std::current_exception();
+//       try {
+//         CheckRethrowFatal();
+//       } catch (const std::exception& e) {
+//         LogError("Database::CommitTail: ", e.what());
+//       } catch (...) {
+//         LogError("Database::CommitTail: Caught exception.");
+//       }
+//     }
+//     throw;
+//   }
+// }
 
 // inline std::vector<uint8_t> Database::Stage(std::span<const uint64_t> ids) const {
 //   // Pre-allocates data for staging.
