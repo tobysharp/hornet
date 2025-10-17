@@ -6,7 +6,7 @@
 
 namespace hornet::data::utxo {
 
-// Synchronization wrapper supporting multiple lock-free readers and serialized Copy-Mutate-Publish.
+// Synchronization wrapper supporting multiple lock-free readers and serialized, scoped edits for writers.
 template <class T>
 class SingleWriter {
  public:
@@ -31,7 +31,7 @@ class SingleWriter {
   };
 
   template <typename... Args>
-  SingleWriter(Args... args) : ptr_(std::make_shared<T>(std::forward<Args>(args)...)) {}
+  SingleWriter(Args&&... args) : ptr_(std::make_shared<T>(std::forward<Args>(args)...)) {}
   SingleWriter(std::shared_ptr<const T> ptr) : ptr_(std::move(ptr)) {}
 
   // Returns a read-only snapshot of the current state.
