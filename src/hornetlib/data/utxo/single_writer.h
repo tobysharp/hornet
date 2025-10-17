@@ -34,15 +34,19 @@ class SingleWriter {
   SingleWriter(Args... args) : ptr_(std::make_shared<T>(std::forward<Args>(args)...)) {}
   SingleWriter(std::shared_ptr<const T> ptr) : ptr_(std::move(ptr)) {}
 
-  // Returns a snapshot of the current state, used by readers.
+  // Returns a read-only snapshot of the current state.
   std::shared_ptr<const T> Snapshot() const { return ptr_; }
 
-  // Atomically publishes a new version, ignores other writers that may be mutating snapshots.
+  // Operates on a read-only snapshot of the current state.
+  const T* operator ->() const { return Snapshot().get(); }
+  const T& operator *() const { return *Snapshot(); }
+
+  // Atomically publishes a new version, ignoring other writers that may be mutating snapshots.
   void Publish(std::shared_ptr<const T> ptr) { ptr_ = std::move(ptr); }
 
   // Returns an object that holds an exclusive lock, makes a copy, and publishes the mutated
-  // object when scope ends.
-  Writer CopyOnWrite() { return {*this}; }
+  // object when scope ends. Copy-Mutate-Publish.
+  Writer Edit() { return {*this}; }
 
  private:
   friend class Writer;

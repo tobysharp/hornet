@@ -2,7 +2,7 @@ BasedOnStyle: Google
 IndentWidth: 2
 ColumnLimit: 100
 AllowShortFunctionsOnASingleLine: Inline
-AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortIfStatementsOnASingleLine: All
 SpacesBeforeTrailingComments: 2
 SortIncludes: true
 IncludeBlocks: Preserve
