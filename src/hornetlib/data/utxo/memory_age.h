@@ -20,28 +20,44 @@ class MemoryAge {
 
   MemoryAge(Options options, EnqueueFn enqueue = {}) : options_(std::move(options)), enqueue_(std::move(enqueue)) {}
 
-  // bool IsMutable() const { return options_.run.is_mutable; }
-  int Query(std::span<const OutputKey> keys, std::span<OutputId> rids) const;
+  bool IsMutable() const { return options_.run.is_mutable; }
+  int Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int height) const;
   int Size() const { return std::ssize(*runs_); }
-  bool IsMergeReady() const { return Size() >= options_.merge_fan_in; }
+  bool IsMergeReady() const;
 
   void Append(MemoryRun&& run);
   void Merge(MemoryAge* dst);
   void EraseSince(int height);
-
+  void RetainSince(int height);
+  
  protected:
   const Options options_;
   const EnqueueFn enqueue_;
+  std::atomic<int> retain_height_ = std::numeric_limits<int>::max();
   SingleWriter<std::vector<MemoryRunPtr>> runs_;
 };
 
-inline int MemoryAge::Query(std::span<const OutputKey> keys, std::span<OutputId> rids) const {
+inline int MemoryAge::Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int height) const {
   const auto snapshot = runs_.Snapshot();
   return std::accumulate(snapshot->rbegin(), snapshot->rend(), 0,
-                         [&](int sum, const MemoryRunPtr& run) {
-                           if (sum == std::ssize(keys)) return sum;
-                           return sum + run->Query(keys, rids);
-                         });
+        [&](int sum, const MemoryRunPtr& run) {
+          if (sum == std::ssize(keys)) return sum;
+          return sum + run->Query(keys, rids, height);
+        });
+}
+
+inline bool MemoryAge::IsMergeReady() const {
+  const int keep = retain_height_;
+  const auto snapshot = runs_.Snapshot();
+  const int ready = std::count_if(snapshot->begin(), snapshot->end(), [&](const MemoryRunPtr& run) {
+    return run->HeightRange().second <= keep;
+  });
+  return ready >= options_.merge_fan_in;
+}
+
+inline void MemoryAge::RetainSince(int height) { 
+  retain_height_ = height; 
+  if (IsMergeReady()) enqueue_(this); 
 }
 
 inline void MemoryAge::Append(MemoryRun&& run) {
@@ -71,7 +87,7 @@ inline void MemoryAge::Merge(MemoryAge* dst) {
 }
 
 inline void MemoryAge::EraseSince(int height) {
-  if (!IsMutable()) return;
+  Assert(IsMutable());
 
   auto copy = runs_.Edit();
   auto it = copy->begin();

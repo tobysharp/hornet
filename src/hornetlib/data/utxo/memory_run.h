@@ -3,11 +3,13 @@
 #include <cstdint>
 #include <optional>
 #include <tuple>
+#include <queue>
 #include <vector>
 
 #include "hornetlib/data/utxo/directory.h"
 #include "hornetlib/data/utxo/tiled_vector.h"
 #include "hornetlib/data/utxo/types.h"
+#include "hornetlib/util/assert.h"
 
 namespace hornet::data::utxo {
 
@@ -23,12 +25,11 @@ class MemoryRun {
   MemoryRun(const Options& options)
       : options_(options),
         entries_(options.tile_bits),
-        directory_(options.skip_bits, options.prefix_bits),
-        height_range_(0, 0) {}
+        directory_(options.skip_bits, options.prefix_bits) {}
 
   bool Empty() const { return entries_.Empty(); }
   size_t Size() const { return entries_.Size(); }
-  bool IsMutable() const { return is_mutable_; }
+  bool IsMutable() const { return options_.is_mutable; }
   int Query(std::span<const OutputKey> keys, std::span<OutputId> rids) const;
   std::pair<int, int> HeightRange() const { return height_range_; }
   bool ContainsHeight(int height) const {
@@ -46,40 +47,58 @@ class MemoryRun {
   TiledVector<OutputKV> entries_;
   Directory directory_;
   // TODO: Bloom filter.
-  std::pair<int, int> height_range_;
+  std::pair<int, int> height_range_ = { std::numeric_limits<int>::max(), std::numeric_limits<int>::min() };
 };
 
-inline int MemoryRun::Query(std::span<const OutputKey> keys, std::span<OutputId> rids) const {
+inline int MemoryRun::Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int height) const {
+  if (!IsMutable() && height_range_.second > height) 
+    util::ThrowInvalidArgument("Queried height already merged to immutable.");
+
   // TODO: Check Bloom filter for quick exit.
-  const auto [lo, hi] = directory_.LookupRange(keys[0]);
-  return ForEachMatchInDoubleSorted(
-      keys.begin(), keys.end(), entries_.begin() + lo, entries_.begin() + hi, entries_.end(),
-      rids.begin(),
-      [](const OutputId& rid) {
-        return IdCodec::Length(rid) == 0
-      },  // Only include queries that haven't already been found.
-      [](const OutputKV& kv, OutputId* rid) {
-        *rid = kv.rid;
-        return kv.IsAdd();  // Only count `Add` records towards the total count returned.
-      });
+
+  int rv = 0;
+  const int size = std::ssize(keys);
+  const auto order = [](const auto& lhs, const auto& rhs) { return lhs <=> rhs; };
+  const auto match = [height](const OutputKey& key, const OutputKV& entry) { 
+    return key == entry.key && entry.height <= height;
+  };
+  auto lower = entries_.begin(), upper = entries_.end();
+  for (int index = 0; index < size; ++index) {
+    // Skip queries that are filtered out by the output destination.
+    if (rids[index] != kNullOutputId) continue;
+
+    // Get the key for this query.
+    const auto& key = keys[index];
+    
+    // Tighten bounds when available externally (e.g. directory).
+    const auto [lo, hi] = directory_.LookupRange(key);
+    lower = std::max(lower, entries_.begin() + lo);  // Lower bound is monotonically increasing...
+    upper = entries_.begin() + hi;                   // while upper bound resets for each key.
+
+    // Tighten bounds again by galloping forwards until we pass over the key.
+    std::tie(lower, upper) = GallopingRangeSearch(lower, upper, key, order);
+
+    // Binary search within the tighter window for the first exact match, if any.
+    const auto found = BinarySearchFirst(lower, upper, key, order, match);
+
+    // Write the value to the output.
+    if (found != upper) {
+      rids[index] = found->rid;
+      if (found->op == OutputKV::Add) ++rv;
+    }
+  }
+  return rv;
 }
 
-inline bool MemoryRun::EraseSince(int height) {
+inline void MemoryRun::EraseSince(int height) {
   Assert(IsMutable());
-  if (height <= height_range_.first) {
-    // Entire run is removed.
-    entries_.Clear();
-    directory_.Clear();
-    height_range_ = {0, 0};
-    return true;  // Signal run may be removed by container.
-  } else if (height < height_range_.second) {
-    // Run partially overlaps with undo range.
-    entries_.EraseIf([&](const OutputKV& kv) { return kv.height >= height; });
-    directory_.Rebuild(entries_);
-    // TODO: Optionally rebuild Bloom filter.
-    height_range_.second = height;
-  }
-  return false;
+  Assert(ContainsHeight(height));
+
+  // Run partially overlaps with undo range.
+  entries_.EraseIf([&](const OutputKV& kv) { return kv.height >= height; });
+  directory_.Rebuild(entries_);
+  // TODO: Optionally rebuild Bloom filter.
+  height_range_.second = height;
 }
 
 inline int MemoryRun::AddEntry(const OutputKV& kv, int next_bucket) {
@@ -96,15 +115,19 @@ inline MemoryRun MemoryRun::Merge(std::span<std::shared_ptr<const MemoryRun>> in
   using Iterator = typename decltype(entries_)::ConstIterator;
   struct Cursor {
     Iterator current, end;
-    bool operator>(const Cursor& rhs) const { return *rhs.current < *current; }
+    bool operator >(const Cursor& rhs) const { return *rhs.current < *current; }
   };
 
   // Initialize output.
   MemoryRun dst{options};
 
-  // Initialize heap.
-  std::priority_queue heap{std::vector<Cursor>{}, std::greater{}};
-  for (const auto& run : inputs) heap.push({run->entries_.begin(), run->entries_.end()});
+  // Initialize heap and destination height range.
+  std::priority_queue<Cursor> heap{std::greater{}};
+  for (const auto& run : inputs) {
+    heap.push({run->entries_.begin(), run->entries_.end()});
+    dst.height_range_.first = std::min(dst.height_range_.first, run->height_range_.first);
+    dst.height_range_.second = std::max(dst.height_range_.second, run->height_range_.second);
+  }
 
   int next_bucket = 0;
   std::optional<Iterator> prev;
@@ -117,7 +140,7 @@ inline MemoryRun MemoryRun::Merge(std::span<std::shared_ptr<const MemoryRun>> in
         next_bucket = AddEntry(**prev, next_bucket);
       prev.reset();
     }
-    if (!is_mutable && cur.current->IsDelete())
+    if (!dst.IsMutable() && cur.current->IsDelete())
       prev = cur.current;  // Defer adding this record so delete/add pairs are skipped.
     else
       next_bucket = AddEntry(*cur.current, next_bucket);
@@ -128,6 +151,7 @@ inline MemoryRun MemoryRun::Merge(std::span<std::shared_ptr<const MemoryRun>> in
 
   // Finish directory.
   while (next_bucket < dst.directory_.Size()) dst.directory_[next_bucket++] = dst.entries_.Size();
+
   return dst;
 }
 
