@@ -35,15 +35,26 @@ using OutputKey = protocol::OutPoint;
 using OutputId = uint64_t;
 
 struct OutputKV {
-  inline friend std::strong_ordering operator<=>(const OutputKV& lhs, const OutputKey& rhs) {
+  enum Operation { Delete = 0, Add = 1 };
+  
+  std::strong_ordering operator <=>(const OutputKV& rhs) const noexcept {
+    if (auto cmp = key <=> rhs.key; cmp != 0) return cmp;
+    return rhs.data.height <=> data.height;
+  }
+  friend std::strong_ordering operator<=>(const OutputKV& lhs, const OutputKey& rhs) {
     return lhs.key <=> rhs;
   }
-  inline friend std::strong_ordering operator<=>(const OutputKey& lhs, const OutputKV& rhs) {
+  friend std::strong_ordering operator<=>(const OutputKey& lhs, const OutputKV& rhs) {
     return lhs <=> rhs.key;
   }
+  bool IsAdd() const { return data.op == Operation::Add; }
+  bool IsDelete() const { return data.op == Operation::Delete; }
 
   OutputKey key;
-  int height;
+  struct {
+    int height : 31;
+    int op     :  1;
+  } data;
   OutputId rid;
 };
 static_assert(sizeof(OutputKV) == 48);
