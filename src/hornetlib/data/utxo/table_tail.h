@@ -37,7 +37,8 @@ inline OutputKV TableTail::Append(const protocol::OutPoint& key, const OutputHea
   data_.insert(data_.end(), script.begin(), script.end());
   const int length = sizeof(header) + std::ssize(script);
   if (bytes_per_height_.empty()) begin_height_ = header.height;
-  bytes_per_height_.resize(header.height - begin_height_ + 1);
+  if (bytes_per_height_.size() < header.height - begin_height_ + 1)
+    bytes_per_height_.resize(header.height - begin_height_ + 1);
   bytes_per_height_[header.height - begin_height_] += length;
   return {key, {header.height, OutputKV::Add}, IdCodec::Encode(address, length)};
 }
