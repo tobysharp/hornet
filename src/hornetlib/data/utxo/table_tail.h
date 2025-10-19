@@ -24,20 +24,22 @@ class TableTail {
   std::vector<uint8_t> data_;
 };
 
-inline OutputKV TableTail::Append(protocol::TransactionConstView tx, int output, int height,
+inline OutputKV TableTail::Append(protocol::TransactionConstView tx, int output, int height, uint64_t offset) {
+  Append({tx.GetHash(), output}, {height, 0, tx.Output(output).value}, tx.PkScript(output), offset);
+}
+
+inline OutputKV TableTail::Append(const protocol::OutPoint& key, const OutputHeader& header, std::span<const uint8_t> script,
                              uint64_t offset) {
-  Assert(std::ssize(bytes_per_height_) + begin_height_ <= height + 1);
-  const OutputHeader header{height, 0, tx.Output(output).value};
+  Assert(std::ssize(bytes_per_height_) + begin_height_ <= header.height + 1);
   const uint8_t* pheader = reinterpret_cast<const uint8_t*>(&header);
-  const auto script = tx.PkScript(output);
   const uint64_t address = offset + data_.size();
   data_.insert(data_.end(), pheader, pheader + sizeof(header));
   data_.insert(data_.end(), script.begin(), script.end());
-  int length = sizeof(header) + std::ssize(script);
-  if (bytes_per_height_.empty()) begin_height_ = height;
-  bytes_per_height_.resize(height - begin_height_ + 1);
-  bytes_per_height_[height - begin_height_] += length;
-  return {{tx.GetHash(), output}, IdCodec::Encode(address, length)};
+  const int length = sizeof(header) + std::ssize(script);
+  if (bytes_per_height_.empty()) begin_height_ = header.height;
+  bytes_per_height_.resize(header.height - begin_height_ + 1);
+  bytes_per_height_[header.height - begin_height_] += length;
+  return {key, {header.height, OutputKV::Add}, IdCodec::Encode(address, length)};
 }
 
 inline std::optional<int> TableTail::GetEarliestHeight() const {
