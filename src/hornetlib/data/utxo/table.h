@@ -101,7 +101,10 @@ inline std::vector<OutputKV> Table::AppendTail(const protocol::Block& block, int
     std::unique_lock lock(tail_mutex_);
     const uint64_t offset = segments_.SizeBytes();
     for (const auto tx : block.Transactions()) {
-      for (int i = 0; i < tx.OutputCount(); ++i) kvs.push_back(tail_.Append(tx, i, height, offset));
+      for (int i = 0; i < tx.OutputCount(); ++i) {
+        const OutputKV kv = tail_.Append({tx.GetHash(), i}, {height, 0, tx.Output(i).value}, tx.PkScript(i), offset);
+        kvs.push_back(kv);
+      }
     }
   }
   return kvs;
