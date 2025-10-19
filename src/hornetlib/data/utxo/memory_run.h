@@ -37,8 +37,8 @@ class MemoryRun {
   }
   void EraseSince(int height);
 
-  static MemoryRun Merge(std::span<std::shared_ptr<const MemoryRun>> inputs,
-                         const Options& options);
+  static MemoryRun Merge(const Options& options, std::span<std::shared_ptr<const MemoryRun>> inputs);
+  static MemoryRun Create(const Options& options, std::span<const OutputKV> adds, std::span<const OutputKey> deletes, int height);
 
  protected:
   int AddEntry(const OutputKV& kv, int next_bucket);
@@ -110,8 +110,7 @@ inline int MemoryRun::AddEntry(const OutputKV& kv, int next_bucket) {
 }
 
 // Multi-way streaming merge of sorted input runs to a single sorted output run.
-inline MemoryRun MemoryRun::Merge(std::span<std::shared_ptr<const MemoryRun>> inputs,
-                                  const Options& options) {
+inline MemoryRun MemoryRun::Merge(const Options& options, std::span<std::shared_ptr<const MemoryRun>> inputs) {
   using Iterator = typename decltype(entries_)::ConstIterator;
   struct Cursor {
     Iterator current, end;
@@ -152,6 +151,16 @@ inline MemoryRun MemoryRun::Merge(std::span<std::shared_ptr<const MemoryRun>> in
   // Finish directory.
   while (next_bucket < dst.directory_.Size()) dst.directory_[next_bucket++] = dst.entries_.Size();
 
+  // TODO: Create Bloom filter.
+  return dst;
+}
+
+/* static */ inline MemoryRun MemoryRun::Create(const Options& options, std::span<const OutputKV> adds, std::span<const OutputKey> deletes, int height) {
+  MemoryRun dst{options};
+  for (const OutputKV& kv : adds) dst.entries_.PushBack(kv);
+  for (const OutputKey& key : deletes) dst.entries_.PushBack({key, OutputKV::Delete});
+  dst.directory_.Rebuild(dst.entries_);
+  // TODO: Create Bloom filter.
   return dst;
 }
 

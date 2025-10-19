@@ -3,47 +3,56 @@
 #include <cstdint>
 #include <vector>
 
-#include "hornetllib/data/utxo/database.h"
-#include "hornetllib/protocol/block.h"
-#include "hornetllib/protocol/transaction.h"
+#include "hornetlib/data/utxo/database.h"
+#include "hornetlib/data/utxo/types.h"
+#include "hornetlib/protocol/block.h"
+#include "hornetlib/protocol/transaction.h"
 
 namespace hornet::data::utxo {
 
 class SpendJoiner {
  public:
-  enum State { Init, Parsed, Appended, Queried, Fetched, Error };
+  enum State { Init, Parsed, Appended, Queried, Fetched, Joined, Error };
 
   using Callback = std::function<void(const consensus::SpendRecord&)>;
 
-  SpendJoiner(const Database& db, 
+  SpendJoiner(Database& db, 
               std::shared_ptr<const protocol::Block> block, 
               int height,
               Callback callback) 
               : state_(State::Init), db_(db), block_(block), height_(height), callback_(callback) {
-    for (int i = 0; i < block_->GetTransactionCount(); ++i) {
-      const auto tx = block_->Transaction(i);
-      for (int j = 0; j < tx.InputCount(); ++j) {
-        inputs_.push_back({i, j});
-        keys_.push_back(tx.Input(j).previous_output);
-      }
-    }
-    // Sort by prevouts, ready for query.
-    SortTogether(&keys_, &inputs_);
-    state_ = State::Parsed;
+    Parse();
   }
 
   explicit operator bool() const { return state_ != Error; }
 
   State GetState() const { return state_; }
 
+  void Parse() {
+    Assert(state_ == State::Init);
+    for (int i = 0; i < block_->GetTransactionCount(); ++i) {
+      const auto tx = block->Transaction(i);
+      for (int j = 0; j < tx.InputCount(); ++j) {
+        inputs_.push_back({i, j});
+        keys_.push_back(tx.Input(j).previous_output);
+      }
+    }
+    // Sort by keys, ready for query.
+    SortTogether(&keys_, &inputs_);
+    state_ = State::Parsed;
+  }
+
   void Append() {
-    // TODO: Append add and delete records for this block.
+    Assert(state_ == State::Parsed);
+    db_.Append(*block_, height_);
+    state_ = State::Appended;
   }
 
   bool Query() {
-    Assert(state_ == State::Parsed);
-    rids_.resize(prevouts_.size());
-    const int found_count_ = db_.Query(keys_, rids_, height_);
+    Assert(state_ == State::Appended);
+    rids_.resize(keys_.size());
+    // TODO: Change API so Query takes &rids_[0] for clarity
+    const int found_count = db_.Query(keys_, rids_, height_);
     if (found_count != std::ssize(keys_)) {
       state_ = State::Error;
       return false;
@@ -85,10 +94,16 @@ class SpendJoiner {
       };
       callback_(spend);
     });
+    inputs_.clear();
+    outputs_.clear();
+    scripts_.clear();
+    block_.reset();
+    state_ = Joined;
   }
 
   bool Advance() {
     switch (state_) {
+      case State::Init:     Parse();  break;
       case State::Parsed:   Append(); break;
       case State::Appended: Query();  break;
       case State::Queried:  Fetch();  break;
@@ -127,13 +142,13 @@ class SpendJoiner {
   }
 
   State state_;
-  const Database& db_;
-  const std::shared_ptr<const protocol::Block> block_;
+  Database& db_;
+  std::shared_ptr<const protocol::Block> block_;
   const int height_;
   const Callback callback_;
   std::vector<InputHeader> inputs_;
-  std::vector<protocol::OutPoint> keys_;
-  std::vector<uint64_t> rids_;
+  std::vector<OutputKey> keys_;
+  std::vector<OutputId> rids_;
   std::vector<OutputDetail> outputs_;
   std::vector<uint8_t> scripts_;
 };

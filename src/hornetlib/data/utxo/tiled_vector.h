@@ -41,6 +41,14 @@ class TiledVector {
     tiles_.back().emplace_back(std::forward<Args>(args)...);
   }
 
+  void PushBack(const T& value) {
+    if (tiles_.empty() || tiles_.back().size() >= entries_per_tile_) {
+      tiles_.emplace_back();
+      tiles_.back().reserve(entries_per_tile_);
+    }
+    tiles_.back().push_back(value);
+  }
+
   template <typename Pred>
   size_t EraseIf(Pred&& pred) {
     size_t removed = 0;
