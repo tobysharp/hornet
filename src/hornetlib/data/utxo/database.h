@@ -1,14 +1,16 @@
 #pragma once
 
-#include "hornetlib/data/utxo/codec.h"
-#include "hornetlib/data/utxo/committed.h"
-#include "hornetlib/data/utxo/recent.h"
+#include "hornetlib/data/utxo/index.h"
+#include "hornetlib/data/utxo/table.h"
+#include "hornetlib/data/utxo/tiled_vector.h"
 #include "hornetlib/data/utxo/types.h"
 
+#include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <shared_mutex>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -46,6 +48,7 @@ class Database {
   void CheckRethrowFatal() const {
     if (has_fatal_exception_) std::rethrow_exception(fatal_exception_);
   }
+  static void AppendSpends(const protocol::Block& block, int height, TiledVector<OutputKV>* entries);
 
   Table table_;
   Index index_;
@@ -70,21 +73,27 @@ inline std::pair<std::vector<OutputDetail>, std::vector<uint8_t>> Database::Fetc
   return table_.Fetch(ids);
 }
 
-void Database::Append(const protocol::Block& block, int height) {
+inline void Database::Append(const protocol::Block& block, int height) {
   CheckRethrowFatal();
   std::shared_lock lock(mutex_);
   TiledVector<OutputKV> entries;
   table_.AppendOutputs(block, height, &entries);
   AppendSpends(block, height, &entries);
-  entries.Sort();
+  ParallelSort(entries.begin(), entries.end());
   index_.Append(std::move(entries), height);
 }
 
-void Database::RemoveSince(int height) {
+inline void Database::RemoveSince(int height) {
   CheckRethrowFatal();
   std::unique_lock lock(mutex_);
   index_.RemoveSince(height);
   table_.RemoveSince(height);
+}
+
+/* static */ inline void Database::AppendSpends(const protocol::Block& block, int height, TiledVector<OutputKV>* entries) {
+  for (const auto tx : block.Transactions())
+    for (int i = 0; i < tx.OutputCount(); +++i) 
+      entries->PushBack(OutputKV::Tombstone({tx.GetHash(), i}));
 }
 
 }  // namespace hornet::data::utxo

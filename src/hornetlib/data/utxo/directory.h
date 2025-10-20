@@ -12,13 +12,9 @@ namespace hornet::data::utxo {
 
 class Directory {
  public:
-  Directory(int skip_bits, int prefix_bits)
-  : skip_bits_(skip_bits), prefix_bits_(prefix_bits), entries_((1 << prefix_bits) + 1) {}
-  //Directory(int skip_bits, int prefix_bits, std::vector<uint32_t>&& entries)
-  //: skip_bits_(skip_bits), prefix_bits_(prefix_bits), entries_(std::move(entries)) {
-  //  Assert(entries.size() == (1 << prefix_bits) + 1);
-  //}
-  Directory(const TiledVector<OutputKV>& kvs);
+  Directory(int prefix_bits)
+  : prefix_bits_(prefix_bits), entries_((1 << prefix_bits) + 1) {}
+  Directory(int prefix_bits, const TiledVector<OutputKV>& kvs);
 
   int Size() const {
     return std::ssize(entries_);
@@ -39,12 +35,12 @@ class Directory {
   void Rebuild(const TiledVector<OutputKV>& kvs);
 
  protected:
-  const int skip_bits_, prefix_bits_;
+  const int prefix_bits_;
   std::vector<uint32_t> entries_;
 };
 
-inline Directory::Directory(int skip_bits, int prefix_bits, const TiledVector<OutputKV>& kvs) 
-  : skip_bits_(skip_bits), prefix_bits_(prefix_bits), entries_((1 << prefix_bits) + 1) {
+inline Directory::Directory(int prefix_bits, const TiledVector<OutputKV>& kvs) 
+  : prefix_bits_(prefix_bits), entries_((1 << prefix_bits) + 1) {
   Rebuild(kvs);
 }
 

@@ -60,6 +60,10 @@ inline void MemoryAge::RetainSince(int height) {
   if (IsMergeReady()) enqueue_(this); 
 }
 
+inline void MemoryAge::Append(TiledVector<OutputKV>&& entries) {
+  Append(MemoryRun{options_.run, std::move(entries)});
+}
+
 inline void MemoryAge::Append(MemoryRun&& run) {
   const auto ptr = std::make_shared<MemoryRun>(std::move(run));
   runs_.Edit()->push_back(ptr);  // Publishes the new run set immediately.
