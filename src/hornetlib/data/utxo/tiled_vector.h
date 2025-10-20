@@ -17,7 +17,8 @@ class TiledVector {
   TiledVector(int entry_bits = 13) :
    entry_bits_(entry_bits), entries_per_tile_(1 << entry_bits), entry_mask_(entries_per_tile_ - 1) {
   }
-
+  TiledVector(TiledVector&& rhs) : tiles_(std::move(rhs.tiles_)), entry_bits_(rhs.entry_bits_), entries_per_tile_(rhs.entries_per_tile_), entry_mask_(rhs.entry_mask_) {}
+  
   // Returns the number of entries across all tiles.
   size_t Size() const { 
     return tiles_.empty() ? 0 : (tiles_.size() - 1) * entries_per_tile_ + tiles_.back().size(); 

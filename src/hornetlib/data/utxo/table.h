@@ -21,7 +21,7 @@ class Table {
 
   std::pair<std::vector<OutputDetail>, std::vector<uint8_t>> Fetch(
       std::span<const OutputId> ids) const;
-  std::vector<OutputKV> AppendTail(const protocol::Block& block, int height);
+  int AppendOutputs(const protocol::Block& block, int height, TiledVector<OutputKV>* entries);
   void RemoveSince(int height);
   std::optional<int> GetEarliestTailHeight() const;
   void CommitBefore(int height);
@@ -95,19 +95,19 @@ inline std::pair<std::vector<OutputDetail>, std::vector<uint8_t>> Table::Fetch(
   return Unpack(ids, staging);
 }
 
-inline std::vector<OutputKV> Table::AppendTail(const protocol::Block& block, int height) {
-  std::vector<OutputKV> kvs;
+inline int Table::AppendOutputs(const protocol::Block& block, int height, TiledVector<OutputKV>* entries) {
+  int count = 0;
   {
     std::unique_lock lock(tail_mutex_);
     const uint64_t offset = segments_.SizeBytes();
     for (const auto tx : block.Transactions()) {
-      for (int i = 0; i < tx.OutputCount(); ++i) {
+      for (int i = 0; i < tx.OutputCount(); ++i, ++count) {
         const OutputKV kv = tail_.Append({tx.GetHash(), i}, {height, 0, tx.Output(i).value}, tx.PkScript(i), offset);
-        kvs.push_back(kv);
+        entries->PushBack(kv);
       }
     }
   }
-  return kvs;
+  return count;
 }
 
 inline void Table::RemoveSince(int height) {

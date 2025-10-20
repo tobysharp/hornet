@@ -16,7 +16,6 @@ namespace hornet::data::utxo {
 class MemoryRun {
  public:
   struct Options {
-    int skip_bits = 3;  // #Bits to skip from the key (e.g. already used by the shard partitioning).
     int prefix_bits = 10;     // #Bits to use to index the run's directory.
     int tile_bits = 13;       // log_2 of the tile size in KV entries.
     bool is_mutable = false;  // Whether to preserve information for undo.
@@ -25,8 +24,11 @@ class MemoryRun {
   MemoryRun(const Options& options)
       : options_(options),
         entries_(options.tile_bits),
-        directory_(options.skip_bits, options.prefix_bits) {}
+        directory_(options.prefix_bits) {}
 
+  MemoryRun(const Options& options, TiledVector<OuptutKV>&& entries)
+      : options_(options), entries_(std::move(entries)), directory_(options.prefix_bits, entries_) {}
+    
   bool Empty() const { return entries_.Empty(); }
   size_t Size() const { return entries_.Size(); }
   bool IsMutable() const { return options_.is_mutable; }
@@ -155,7 +157,7 @@ inline MemoryRun MemoryRun::Merge(const Options& options, std::span<std::shared_
   return dst;
 }
 
-/* static */ inline MemoryRun MemoryRun::Create(const Options& options, std::span<const OutputKV> adds, std::span<const OutputKey> deletes, int height) {
+/* static */ inline MemoryRun MemoryRun::Create(const Options& options, TiledVector<OutputKV>&& entries, int height) {
   MemoryRun dst{options};
   for (const OutputKV& kv : adds) dst.entries_.PushBack(kv);
   for (const OutputKey& key : deletes) dst.entries_.PushBack({key, OutputKV::Delete});
