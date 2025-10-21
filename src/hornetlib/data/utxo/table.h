@@ -56,14 +56,16 @@ inline std::pair<std::span<const OutputId>, std::span<const OutputId>> Table::Sp
   return {segment_ids, tail_ids};
 }
 
-/* static */ inline std::pair<std::vector<OutputDetail>, std::vector<uint8_t>> Table::Unpack(
-    std::span<const OutputId> ids, std::span<const uint8_t> staging) {
-  std::vector<OutputDetail> outputs(ids.size());
-  std::vector<uint8_t> scripts(staging.size() - ids.size() * sizeof(OutputHeader));
+/* static */ inline int Table::Unpack(
+    std::span<const OutputId> rids, std::span<const uint8_t> staging, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts) {
+  int prev_script_size = std::ssize(*scripts);
+  scripts->resize(prev_script_size + staging.size() - ids.size() * sizeof(OutputHeader));
   auto staging_cursor = staging.begin();
-  auto script_cursor = scripts.begin();
-  for (int i = 0; i < std::ssize(ids); ++i) {
-    const auto length = IdCodec::Length(ids[i]);
+  auto script_cursor = scripts.begin() + prev_script_size;
+  int written = 0;
+  for (int i = 0; i < std::ssize(rids); ++i) {
+    if (rids[i] == kNullOutputId) continue;
+    const auto length = IdCodec::Length(rids[i]);
     const int script_length = length - sizeof(OutputHeader);
     Assert(staging_cursor + length <= staging.end());
     Assert(script_cursor + script_length <= scripts.end());
@@ -72,12 +74,12 @@ inline std::pair<std::span<const OutputId>, std::span<const OutputId>> Table::Sp
     outputs[i].script = {static_cast<int>(script_cursor - scripts.begin()), script_length};
     staging_cursor += length;
     script_cursor += script_length;
+    ++written;
   }
-  return {outputs, scripts};
+  return written;
 }
 
-inline std::pair<std::vector<OutputDetail>, std::vector<uint8_t>> Table::Fetch(
-    std::span<const OutputId> ids) const {
+inline int Table::Fetch(std::span<const OutputId> ids, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts) const {
   std::vector<uint8_t> staging(CountSizeBytes(ids));
 
   std::span<const OutputId> segment_ids, tail_ids;
@@ -92,7 +94,7 @@ inline std::pair<std::vector<OutputDetail>, std::vector<uint8_t>> Table::Fetch(
   }
   // Since the segments are append-only, we don't need to lock here.
   segments_.FetchData(segment_ids, staging.data(), segment_bytes);
-  return Unpack(ids, staging);
+  return Unpack(ids, staging, outputs, scripts);
 }
 
 inline int Table::AppendOutputs(const protocol::Block& block, int height, TiledVector<OutputKV>* entries) {

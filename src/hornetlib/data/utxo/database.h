@@ -25,11 +25,14 @@ class Database {
 
   // Queries the whole database for each prevout and writes their IDs into the equivalent slots of
   // ids. Returns the number of matches found.
-  int Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int height) const;
+  int Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int before) const {
+    return Query(keys, rids, 0, before, true).funded;
+  }
+
+  QueryResult Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int since, int before, bool skip_found) const;
 
   // Fetches the output headers and script bytes for each ID.
-  std::pair<std::vector<OutputDetail>, std::vector<uint8_t>> Fetch(
-      std::span<const uint64_t> ids) const;
+  int Fetch(std::span<const uint64_t> ids, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts) const;
 
   // Appends all spendable outputs of the given block at the given height.
   void Append(const protocol::Block& block, int height);
@@ -61,22 +64,21 @@ class Database {
 inline Database::Database(const std::filesystem::path& folder, int recent_window)
     : committed_(folder), recent_window_(recent_window) {}
 
-inline int Database::Query(std::span<const OutputKey> keys,
-                           std::span<OutputId> rids, int height) const {
+inline QueryResult Database::Query(std::span<const OutputKey> keys,
+                           std::span<OutputId> rids, int since, int before, bool skip_found) const {
   CheckRethrowFatal();
-  return index_.Query(keys, rids, height);
+  return index_.Query(keys, rids, since, before, skip_found);
 }
 
-inline std::pair<std::vector<OutputDetail>, std::vector<uint8_t>> Database::Fetch(
-    std::span<const uint64_t> ids) const {
+inline void Database::Fetch(std::span<const OutputId> rids, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts) const {
   CheckRethrowFatal();
-  return table_.Fetch(ids);
+  table_.Fetch(rids, outputs, scripts);
 }
 
 inline void Database::Append(const protocol::Block& block, int height) {
   CheckRethrowFatal();
   std::shared_lock lock(mutex_);
-  TiledVector<OutputKV> entries;
+  auto entries = index_.MakeAppendBuffer();
   table_.AppendOutputs(block, height, &entries);
   AppendSpends(block, height, &entries);
   ParallelSort(entries.begin(), entries.end());
