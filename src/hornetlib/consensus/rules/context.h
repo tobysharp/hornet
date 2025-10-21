@@ -14,7 +14,7 @@ struct BlockValidationContext {
   const protocol::BlockHeader& parent;
   const HeaderAncestryView& view;
   const int64_t current_time;
-  const UnspentTransactionsView& unspent;
+  const UnspentOutputsView& unspent;
 };
 
 struct HeaderValidationContext {

@@ -34,12 +34,20 @@ struct InputHeader {
 using OutputKey = protocol::OutPoint;
 using OutputId = uint64_t;
 
+static constexpr OutputId kNullOutputId = 0;
+
 struct OutputKV {
-  enum Operation { Delete = 0, Add = 1 };
+  enum Operation { Delete = -1, Add = 0 };
   
   std::strong_ordering operator <=>(const OutputKV& rhs) const noexcept {
     if (auto cmp = key <=> rhs.key; cmp != 0) return cmp;
     return rhs.data.height <=> data.height;
+  }
+  bool operator ==(const OutputKV& rhs) const {
+    return operator <=>(rhs) == 0;
+  }
+  bool operator !=(const OutputKV& rhs) const {
+    return operator <=>(rhs) != 0;
   }
   friend std::strong_ordering operator<=>(const OutputKV& lhs, const OutputKey& rhs) {
     return lhs.key <=> rhs;
@@ -49,6 +57,10 @@ struct OutputKV {
   }
   bool IsAdd() const { return data.op == Operation::Add; }
   bool IsDelete() const { return data.op == Operation::Delete; }
+
+  static OutputKV Tombstone(const OutputKey& key, int height) {
+    return { key, { height, Delete }, kNullOutputId };
+  }
 
   OutputKey key;
   struct {

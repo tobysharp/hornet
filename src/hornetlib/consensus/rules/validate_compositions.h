@@ -33,7 +33,7 @@ namespace hornet::consensus::rules {
                                         const protocol::BlockHeader& parent,
                                         const HeaderAncestryView& view,
                                         const int64_t current_time,
-                                        const UnspentTransactionsView& unspent) {
+                                        const UnspentOutputsView& unspent) {
   // clang-format off
   static const auto ruleset = std::make_tuple(
     Rule{ValidateHeader,          MakeHeaderContext},

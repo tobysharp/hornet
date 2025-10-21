@@ -10,7 +10,7 @@ namespace hornet::consensus::rules {
 
 struct BlockSpendingContext {
   const protocol::Block& block;
-  const UnspentTransactionsView& unspent;
+  const UnspentOutputsView& unspent;
   const int height;
 };
 
