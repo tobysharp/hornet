@@ -59,4 +59,12 @@ struct OutputKV {
 };
 static_assert(sizeof(OutputKV) == 48);
 
+struct QueryResult {
+  int funded = 0;
+  int spent = 0;
+  QueryResult operator +(const QueryResult& rhs) const { 
+    return { funded + rhs.funded, spent + rhs.spent };
+  }
+};
+
 }  // namespace hornet::data::utxo

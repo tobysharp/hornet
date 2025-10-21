@@ -136,6 +136,7 @@ inline void Segments::FetchData(std::span<const OutputId> ids, uint8_t* buffer, 
   requests.reserve(ids.size());
   int segment = 0;
   for (int i = 0; i < std::ssize(ids); ++i) {
+    if (ids[i] == kNullOutputId) continue;
     // Retrieves the section index, byte offset, and byte length from a packed address.
     const auto [offset, length] = IdCodec::Decode(ids[i]);
     if (cursor + length > size) break;

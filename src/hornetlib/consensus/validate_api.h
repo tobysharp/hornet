@@ -38,7 +38,7 @@ using rules::ValidateBlock;
 
 [[nodiscard]] inline Result ValidateSpending(  
                                 const protocol::Block& block,
-                                const UnspentTransactionsView& unspent,
+                                const UnspentOutputsView& unspent,
                                 const int height) {
   return rules::ValidateSpending(rules::BlockSpendingContext{block, unspent, height});
 }

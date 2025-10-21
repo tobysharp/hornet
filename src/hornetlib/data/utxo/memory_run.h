@@ -52,22 +52,25 @@ class MemoryRun {
   std::pair<int, int> height_range_ = { std::numeric_limits<int>::max(), std::numeric_limits<int>::min() };
 };
 
-inline int MemoryRun::Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int height) const {
-  if (!IsMutable() && height_range_.second > height) 
+inline QueryResult MemoryRun::Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int since, int before, bool skip_found) const {
+  if (before <= height_range_.first || height_range_.second <= since) return {0, 0};  // No overlap
+
+  // In an immutable run, we can only guarantee correct results if the entire run is contained within the queried time range.
+  if (!IsMutable() && before < height_range_.second) 
     util::ThrowInvalidArgument("Queried height already merged to immutable.");
 
   // TODO: Check Bloom filter for quick exit.
 
-  int rv = 0;
+  int adds = 0, deletes = 0;
   const int size = std::ssize(keys);
   const auto order = [](const auto& lhs, const auto& rhs) { return lhs <=> rhs; };
-  const auto match = [height](const OutputKey& key, const OutputKV& entry) { 
-    return key == entry.key && entry.height <= height;
+  const auto match = [since, before](const OutputKey& key, const OutputKV& entry) { 
+    return key == entry.key && since <= entry.height && entry.height < before;
   };
   auto lower = entries_.begin(), upper = entries_.end();
   for (int index = 0; index < size; ++index) {
     // Skip queries that are filtered out by the output destination.
-    if (rids[index] != kNullOutputId) continue;
+    if (skip_found && rids[index] != kNullOutputId) continue;
 
     // Get the key for this query.
     const auto& key = keys[index];
@@ -85,11 +88,14 @@ inline int MemoryRun::Query(std::span<const OutputKey> keys, std::span<OutputId>
 
     // Write the value to the output.
     if (found != upper) {
-      rids[index] = found->rid;
-      if (found->op == OutputKV::Add) ++rv;
+      if (found->op == OutputKV::Add) {
+        rids[index] = found->rid;
+        ++adds;
+      }
+      else ++deletes;
     }
   }
-  return rv;
+  return {adds, deletes};
 }
 
 inline void MemoryRun::EraseSince(int height) {

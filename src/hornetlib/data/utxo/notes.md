@@ -37,6 +37,58 @@
 ### APIs
 
 ```cpp
+// Simplest conceptual model
+if (consensus::ValidateBlock(block, utxos.View(height)))
+  utxos.Insert(block, height++);
+```
+
+```cpp
+// Removing sync point:
+utxos.Insert(block, height);
+if (!consensus::ValidateBlock(block, utxos.View(height)))
+  utxos.Erase(height);
+
+// UTXOs::Append(block, height):
+auto joiner = std::make_shared<SpendJoiner>(db_, block, height);
+scheduler_.Enqueue(joiner);
+registry_.Insert(std::move(joiner));
+
+// UTXOs::View(height):
+return DatabaseView{registry_.Find(height)};
+
+// UTXOS::Erase(height):
+database_.Erase(height);
+```
+
+```cpp
+// Append thread, when block arrives
+{ utxos.Append(block, height); }
+
+
+// UTXO scheduler threads:
+{ 
+  while (const auto joiner = Pop()) 
+    if (joiner->Advance()) Enqueue(joiner);
+}
+
+// Validation master thread, after Append
+{ 
+  if (consensus::ValidateBlock(block, utxos.View(height)))
+    validation_.SetStatus(height, Status::Validated);
+  else {
+    validation_.SetStatus(height, Status::Failed);
+    // Block pipeline from enqueueing later blocks, and wait for current blocks after height to finish.
+    const auto lock = pipeline_.RejectSince(height + 1);
+    // Undo the UTXO inserts for this invalid block.
+    db_.EraseSince(height);
+    // Reopen the pipeline on end of scope.
+  }
+} 
+```
+
+
+
+```cpp
 
 class Database;
 

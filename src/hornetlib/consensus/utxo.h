@@ -21,9 +21,9 @@ struct SpendRecord {
 };
 
 // This class represents an abstract view onto the whole set of unspent outputs.
-class UnspentTransactionsView {
+class UnspentOutputsView {
  public:
-  virtual ~UnspentTransactionsView() = default;
+  virtual ~UnspentOutputsView() = default;
 
   virtual Result QueryPrevoutsUnspent(const protocol::Block& block) const = 0;
 
