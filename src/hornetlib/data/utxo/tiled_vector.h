@@ -10,7 +10,7 @@ template <typename T>
 class TiledVector {
  public:
   using Tile = std::vector<T>;
-  template <typename T> class IteratorT;
+  template <typename Grid> class IteratorT;
   using Iterator = IteratorT<TiledVector>;
   using ConstIterator = IteratorT<const TiledVector>;
 
@@ -35,7 +35,7 @@ class TiledVector {
   // Append an entry to the last tile, starting a new tile if necessary.
   template <typename... Args>
   void EmplaceBack(Args&&... args) {
-    if (tiles_.empty() || tiles_.back().size() >= entries_per_tile_) {
+    if (tiles_.empty() || std::ssize(tiles_.back()) >= entries_per_tile_) {
       tiles_.emplace_back();
       tiles_.back().reserve(entries_per_tile_);
     }
@@ -43,7 +43,7 @@ class TiledVector {
   }
 
   void PushBack(const T& value) {
-    if (tiles_.empty() || tiles_.back().size() >= entries_per_tile_) {
+    if (tiles_.empty() || std::ssize(tiles_.back()) >= entries_per_tile_) {
       tiles_.emplace_back();
       tiles_.back().reserve(entries_per_tile_);
     }
@@ -72,16 +72,6 @@ class TiledVector {
     return entry_index + size <= tiles_[tile_index].size();
   }
 
-  std::span<const T> Span(size_t begin, size_t end) const {
-    const ssize_t size = end - begin;
-    const size_t tile_index = begin >> entry_bits_;
-    const Tile& tile = tiles_[tile_index];
-    const size_t entry_index = begin & entry_mask_;
-    if (entry_index + size > tile.size())
-      util::ThrowInvalidArgument("TiledVector::Span requested a non-contiguous range.");
-    return {&tile[entry_index], size};
-  }
-
   Iterator begin() { return {*this, 0}; }
   Iterator end() { return {*this, Size()}; }
   ConstIterator begin() const { return {*this, 0}; }
@@ -90,7 +80,7 @@ class TiledVector {
   ConstIterator cend() const { return {*this, Size()}; }
 
  protected:
-  friend class IteratorT;
+  template <typename Grid> friend class IteratorT;
   std::vector<Tile> tiles_;
   const int entry_bits_;
   const int entries_per_tile_;

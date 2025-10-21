@@ -10,6 +10,7 @@ add_executable(hornetlib_tests
    data/header_timechain_test.cpp
    data/keyframe_sidecar_test.cpp
    data/sidecar_test.cpp
+   data/utxo/tiled_vector_test.cpp
    data/utxo/outputs_table_test.cpp
    encoding/reader_test.cpp
    encoding/writer_test.cpp
