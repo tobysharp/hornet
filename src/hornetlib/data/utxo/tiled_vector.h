@@ -65,6 +65,12 @@ class TiledVector {
     return tiles_[tile_index][entry_index];
   }
 
+  T& operator[](size_t index) {
+    const size_t tile_index = index >> entry_bits_;
+    const size_t entry_index = index & entry_mask_;
+    return tiles_[tile_index][entry_index];
+  }
+
   bool IsContiguous(size_t begin, size_t end) const {
     const ssize_t size = end - begin;
     const size_t tile_index = begin >> entry_bits_;
@@ -94,10 +100,17 @@ class TiledVector<T>::IteratorT {
   using iterator_category = std::random_access_iterator_tag;
   using value_type        = typename Grid::Tile::value_type;
   using difference_type   = std::ptrdiff_t;
-  using pointer           = const value_type*;
-  using reference         = const value_type&;
+  using pointer           = std::conditional_t<std::is_const_v<Grid>, const value_type*, value_type*>;
+  using reference         = std::conditional_t<std::is_const_v<Grid>, const value_type&, value_type&>;
 
-  IteratorT(Grid& grid, size_t index) : grid_(grid), index_(index) {}
+  IteratorT() : grid_(nullptr), index_(0) {}
+  IteratorT(Grid& grid, size_t index) : grid_(&grid), index_(index) {}
+  IteratorT(const IteratorT&) = default;
+  IteratorT& operator =(const IteratorT& rhs) {
+    Assert(grid_ == rhs.grid_);
+    index_ = rhs.index_;
+    return *this;
+  }
 
   bool operator <(const IteratorT& rhs) const {
     return index_ < rhs.index_;
@@ -118,20 +131,27 @@ class TiledVector<T>::IteratorT {
     return !operator ==(rhs);
   }
   reference operator *() const {
-    return grid_[index_];
+    return (*grid_)[index_];
   }
   pointer operator ->() const {
-    return &grid_[index_];
+    return &(*grid_)[index_];
   }
   IteratorT& operator ++() {
     ++index_;
     return *this;
   }
+  Iterator& operator --() {
+    --index_;
+    return *this;
+  }
   IteratorT operator +(difference_type x) const {
-    return { grid_, index_ + x };
+    return { *grid_, index_ + x };
   }
   IteratorT operator -(difference_type x) const {
-    return { grid_, index_ - x };
+    return { *grid_, index_ - x };
+  }
+  difference_type operator -(IteratorT x) const {
+    return index_ - x.index_;
   }
   IteratorT& operator +=(difference_type x) {
     index_ += x;
@@ -141,9 +161,12 @@ class TiledVector<T>::IteratorT {
     index_ -= x;
     return *this;
   }
+  reference operator [](int index) const {
+    return (*grid_)[index_ + index];
+  }
 
  private:
-  Grid& grid_;
+  Grid* grid_;
   size_t index_;
 };
 
