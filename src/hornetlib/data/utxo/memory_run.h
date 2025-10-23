@@ -8,6 +8,7 @@
 
 #include "hornetlib/data/utxo/directory.h"
 #include "hornetlib/data/utxo/tiled_vector.h"
+#include "hornetlib/data/utxo/search.h"
 #include "hornetlib/data/utxo/types.h"
 #include "hornetlib/util/assert.h"
 
@@ -26,13 +27,13 @@ class MemoryRun {
         entries_(options.tile_bits),
         directory_(options.prefix_bits) {}
 
-  MemoryRun(const Options& options, TiledVector<OuptutKV>&& entries)
-      : options_(options), entries_(std::move(entries)), directory_(options.prefix_bits, entries_) {}
+  MemoryRun(const Options& options, TiledVector<OutputKV>&& entries)
+      : options_(options), entries_(std::move(entries)), directory_(options.prefix_bits, entries_.begin(), entries_.end()) {}
     
   bool Empty() const { return entries_.Empty(); }
   size_t Size() const { return entries_.Size(); }
   bool IsMutable() const { return options_.is_mutable; }
-  int Query(std::span<const OutputKey> keys, std::span<OutputId> rids) const;
+  QueryResult Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int since, int before, bool skip_found) const;
   std::pair<int, int> HeightRange() const { return height_range_; }
   bool ContainsHeight(int height) const {
     return height_range_.first <= height && height < height_range_.second;
@@ -40,7 +41,7 @@ class MemoryRun {
   void EraseSince(int height);
 
   static MemoryRun Merge(const Options& options, std::span<std::shared_ptr<const MemoryRun>> inputs);
-  static MemoryRun Create(const Options& options, std::span<const OutputKV> adds, std::span<const OutputKey> deletes, int height);
+  static MemoryRun Create(const Options& options, TiledVector<OutputKV>&& entries, int height);
 
  protected:
   int AddEntry(const OutputKV& kv, int next_bucket);
@@ -65,7 +66,7 @@ inline QueryResult MemoryRun::Query(std::span<const OutputKey> keys, std::span<O
   const int size = std::ssize(keys);
   const auto order = [](const auto& lhs, const auto& rhs) { return lhs <=> rhs; };
   const auto match = [since, before](const OutputKey& key, const OutputKV& entry) { 
-    return key == entry.key && since <= entry.height && entry.height < before;
+    return key == entry.key && since <= entry.data.height && entry.data.height < before;
   };
   auto lower = entries_.begin(), upper = entries_.end();
   for (int index = 0; index < size; ++index) {
@@ -88,7 +89,7 @@ inline QueryResult MemoryRun::Query(std::span<const OutputKey> keys, std::span<O
 
     // Write the value to the output.
     if (found != upper) {
-      if (found->op == OutputKV::Add) {
+      if (found->data.op == OutputKV::Add) {
         rids[index] = found->rid;
         ++adds;
       }
@@ -103,8 +104,8 @@ inline void MemoryRun::EraseSince(int height) {
   Assert(ContainsHeight(height));
 
   // Run partially overlaps with undo range.
-  entries_.EraseIf([&](const OutputKV& kv) { return kv.height >= height; });
-  directory_.Rebuild(entries_);
+  entries_.EraseIf([&](const OutputKV& kv) { return kv.data.height >= height; });
+  directory_.Rebuild(entries_.begin(), entries_.end());
   // TODO: Optionally rebuild Bloom filter.
   height_range_.second = height;
 }
@@ -129,7 +130,7 @@ inline MemoryRun MemoryRun::Merge(const Options& options, std::span<std::shared_
   MemoryRun dst{options};
 
   // Initialize heap and destination height range.
-  std::priority_queue<Cursor> heap{std::greater{}};
+  std::priority_queue<Cursor, std::vector<Cursor>, std::greater<Cursor>> heap;
   for (const auto& run : inputs) {
     heap.push({run->entries_.begin(), run->entries_.end()});
     dst.height_range_.first = std::min(dst.height_range_.first, run->height_range_.first);
@@ -144,17 +145,17 @@ inline MemoryRun MemoryRun::Merge(const Options& options, std::span<std::shared_
     if (prev.has_value()) {
       // If the current entry doesn't cancel out our deferred entry `prev`, then we add `prev` here.
       if (cur.current->IsDelete() || cur.current->key != (*prev)->key)
-        next_bucket = AddEntry(**prev, next_bucket);
+        next_bucket = dst.AddEntry(**prev, next_bucket);
       prev.reset();
     }
     if (!dst.IsMutable() && cur.current->IsDelete())
       prev = cur.current;  // Defer adding this record so delete/add pairs are skipped.
     else
-      next_bucket = AddEntry(*cur.current, next_bucket);
+      next_bucket = dst.AddEntry(*cur.current, next_bucket);
     if (++cur.current != cur.end) heap.push(cur);
   }
   // Flush any deferred value.
-  if (prev.has_value()) next_bucket = AddEntry(**prev, next_bucket);
+  if (prev.has_value()) next_bucket = dst.AddEntry(**prev, next_bucket);
 
   // Finish directory.
   while (next_bucket < dst.directory_.Size()) dst.directory_[next_bucket++] = dst.entries_.Size();
@@ -164,10 +165,11 @@ inline MemoryRun MemoryRun::Merge(const Options& options, std::span<std::shared_
 }
 
 /* static */ inline MemoryRun MemoryRun::Create(const Options& options, TiledVector<OutputKV>&& entries, int height) {
-  MemoryRun dst{options};
-  for (const OutputKV& kv : adds) dst.entries_.PushBack(kv);
-  for (const OutputKey& key : deletes) dst.entries_.PushBack({key, OutputKV::Delete});
-  dst.directory_.Rebuild(dst.entries_);
+  Assert(std::is_sorted(entries.begin(), entries.end()));
+
+  MemoryRun dst{options, std::move(entries)};
+  dst.height_range_ = { height, height + 1 };
+  dst.directory_.Rebuild(dst.entries_.begin(), dst.entries_.end());
   // TODO: Create Bloom filter.
   return dst;
 }

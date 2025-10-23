@@ -19,15 +19,15 @@ class SpendJoiner {
 
   SpendJoiner(Database& db, 
               std::shared_ptr<const protocol::Block> block, 
-              int height/*,
-              Callback callback*/) 
-              : state_(State::Init), db_(db), block_(block), height_(height)/*, callback_(callback) */ {
+              int height) 
+              : state_(State::Init), db_(db), block_(block), height_(height) {
     Parse();
   }
 
   explicit operator bool() const { return state_ != Error; }
   State GetState() const { return state_; }
   bool Advance();
+  bool IsJoinReady() const { return state_ == State::Fetched };
   consensus::Result Join(auto&& callback);
 
  private:
@@ -35,13 +35,11 @@ class SpendJoiner {
   void Append();
   bool Query();
   bool Fetch();
-  //void Join();
 
   State state_;
   Database& db_;
   std::shared_ptr<const protocol::Block> block_;
   const int height_;
-  //const Callback callback_;
   std::vector<InputHeader> inputs_;
   std::vector<OutputKey> keys_;
   std::vector<OutputId> rids_;
