@@ -15,7 +15,7 @@ class Index {
  public:
   Index(const std::filesystem::path& folder);
 
-  QueryResult Query(std::span<const OutputKey> keys, std::span<OutputId> ids, int since, int before, bool skip_found) const;
+  QueryResult Query(std::span<const OutputKey> keys, std::span<OutputId> ids, int since, int before) const;
   TiledVector<OuptutKV> MakeAppendBuffer() const { return ages_[0]->MakeEntries(); }
   void Append(TiledVector<OutputKV>&& entries, int height);
   void EraseSince(int height);
@@ -32,18 +32,18 @@ class Index {
   std::vector<std::unique_ptr<MemoryAge>> ages_;
 };
 
-inline QueryResult Index::Query(std::span<const OutputKey> keys, std::span<OutputId> ids, int since, int before, bool skip_found) const {
+inline QueryResult Index::Query(std::span<const OutputKey> keys, std::span<OutputId> ids, int since, int before) const {
   static constexpr int kRanges = 8;
   return ParallelSum(SplitQuery({keys, ids}, kRanges), [&](const auto& range) {
     return std::accumulate(ages_.begin(), ages_.end(), QueryResult{}, [&](const QueryResult& sum, const auto& age) {
       // Note: If the queried age is immutable, it will throw an exception if height is within its data range.
-      return sum + age->Query(range.keys, range.ids, since, before, skip_found);
+      return sum + age->Query(range.keys, range.ids, since, before);
     });
   });
 }
 
 inline void Index::Append(TiledVector<OutputKV>&& entries, int height) {
-  ages_[0]->Append(MemoryRun::Create(std::move(entries), height));
+  ages_[0]->Append(std::move(entries), height);
 }
 
 }  // namespace hornet::data::utxo

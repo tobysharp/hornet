@@ -22,15 +22,19 @@ class MemoryAge {
   MemoryAge(Options options, EnqueueFn enqueue = {}) : options_(std::move(options)), enqueue_(std::move(enqueue)) {}
 
   bool IsMutable() const { return options_.run.is_mutable; }
-  int Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int height) const;
+  QueryResult Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int since, int before) const;
   int Size() const { return std::ssize(*runs_); }
+  bool Empty() const { return runs_->empty(); }
   bool IsMergeReady() const;
-  TiledVector<OutputKV> MakeEntries() const { return { options_.run.tile_bits; }; }
+  TiledVector<OutputKV> MakeEntries() const { return { options_.run.tile_bits }; }
   void Append(MemoryRun&& run);
+  void Append(TiledVector<OutputKV>&& entries, const std::pair<int, int>& range);
   void Merge(MemoryAge* dst);
   void EraseSince(int height);
   void RetainSince(int height);
   
+  MemoryRunPtr RunSnapshot(int index) const { return (*runs_)[index]; }
+
  protected:
   int merged_to_ = 0;
   const Options options_;
@@ -39,27 +43,27 @@ class MemoryAge {
   SingleWriter<std::vector<MemoryRunPtr>> runs_;
 };
 
-inline QueryResult MemoryAge::Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int since, int before, bool skip_found) const {
+inline QueryResult MemoryAge::Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int since, int before) const {
   const auto snapshot = runs_.Snapshot();
   return std::accumulate(snapshot->rbegin(), snapshot->rend(), QueryResult{},
-        [&](const QueryResult& sum, const MemoryRunPtr& run) {
-          if (sum.funded + sum.spent == std::ssize(keys)) return sum;
-          return sum + run->Query(keys, rids, before, since, skip_found);
-        });
+    [&](const QueryResult& sum, const MemoryRunPtr& run) {
+      if (sum.funded + sum.spent == std::ssize(keys)) return sum;
+      return sum + run->Query(keys, rids, since, before);
+    }
+  );
 }
 
 inline bool MemoryAge::IsMergeReady() const {
-  const int keep = retain_height_;
-  const auto snapshot = runs_.Snapshot();
-  std::sort(snapshot->begin(), snapshot->end(), [](const MemoryRunPtr& lhs, const MemoryRunPtr& rhs) {
-    lhs->HeightRange().first < rhs->HeightRange().first;
+  const auto copy = runs_.Copy();
+  std::sort(copy->begin(), copy->end(), [](const MemoryRunPtr& lhs, const MemoryRunPtr& rhs) {
+    return lhs->HeightRange().first < rhs->HeightRange().first;
   });
   int ready = 0;
   int height_to = merged_to_;
-  for (int i = 0; i < options_.merge_fan_in; ++i) {
-    if (height_to != snapshot[i]->HeightRange().first)
+  for (int i = 0; i < std::min<int>(options_.merge_fan_in, std::ssize(*copy)); ++i) {
+    if (height_to != (*copy)[i]->HeightRange().first)
       return false;  // Non contiguous ranges don't merge.
-    height_to = snapshot[i]->HeightRange().second;
+    height_to = (*copy)[i]->HeightRange().second;
     if (height_to > retain_height_)
       return false;  // Must keep in this age for now.
     ++ready;
@@ -69,17 +73,17 @@ inline bool MemoryAge::IsMergeReady() const {
 
 inline void MemoryAge::RetainSince(int height) { 
   retain_height_ = height; 
-  if (IsMergeReady()) enqueue_(this); 
+  if (enqueue_ && IsMergeReady()) enqueue_(this); 
 }
 
-inline void MemoryAge::Append(TiledVector<OutputKV>&& entries) {
-  Append(MemoryRun{options_.run, std::move(entries)});
+inline void MemoryAge::Append(TiledVector<OutputKV>&& entries, const std::pair<int, int>& range) {
+  Append(MemoryRun{options_.run, std::move(entries), range});
 }
 
 inline void MemoryAge::Append(MemoryRun&& run) {
   const auto ptr = std::make_shared<MemoryRun>(std::move(run));
   runs_.Edit()->push_back(ptr);  // Publishes the new run set immediately.
-  if (IsMergeReady()) enqueue_(this);
+  if (enqueue_ && IsMergeReady()) enqueue_(this);
 }
 
 inline void MemoryAge::Merge(MemoryAge* dst) {
@@ -96,12 +100,12 @@ inline void MemoryAge::Merge(MemoryAge* dst) {
   // that it's worth the effort to implement. Meanwhile, everything here is safe, and the only 
   // slightly sub-optimal contention is during Append vs Merge in Age 0.
 
-  auto copy = dst->runs_.Edit();
+  auto copy = runs_.Edit();
   std::sort(copy->begin(), copy->end(), [](const MemoryRunPtr& lhs, const MemoryRunPtr& rhs) {
-    lhs->HeightRange().first < rhs->HeightRange().first;
+    return lhs->HeightRange().first < rhs->HeightRange().first;
   });
   const auto inputs = std::span{*copy}.first(options_.merge_fan_in);
-  dst->Append(MemoryRun::Merge(inputs, dst->options_.run));
+  dst->Append(MemoryRun::Merge(dst->options_.run, inputs));
   copy->erase(copy->begin(), copy->begin() + options_.merge_fan_in);
   merged_to_ = inputs.back()->HeightRange().second;
 }
@@ -112,7 +116,7 @@ inline void MemoryAge::EraseSince(int height) {
   auto copy = runs_.Edit();
   auto it = copy->begin();
   while (it != copy->end()) {
-    const auto [begin, end] = it->HeightRange();
+    const auto [begin, end] = (*it)->HeightRange();
     if (height <= begin) it = copy->erase(it);
     else if (height < end) {
       auto replace = std::make_shared<MemoryRun>(**it);

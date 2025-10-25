@@ -26,7 +26,7 @@ TEST(MemoryRunTest, TestCreate) {
   entries.PushBack(OutputKV::Tombstone({{0x43}}, height));
   entries.PushBack(Create(0xaf, 3, height));
 
-  const MemoryRun run = MemoryRun::Create(options, std::move(entries), height);
+  const MemoryRun run{options, std::move(entries), {height, height + 1}};
 
   EXPECT_FALSE(run.Empty());
   EXPECT_EQ(run.Size(), 4);

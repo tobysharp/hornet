@@ -26,10 +26,10 @@ class Database {
   // Queries the whole database for each prevout and writes their IDs into the equivalent slots of
   // ids. Returns the number of matches found.
   int Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int before) const {
-    return Query(keys, rids, 0, before, true).funded;
+    return Query(keys, rids, 0, before).funded;
   }
 
-  QueryResult Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int since, int before, bool skip_found) const;
+  QueryResult Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int since, int before) const;
 
   // Fetches the output headers and script bytes for each ID.
   int Fetch(std::span<const uint64_t> ids, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts) const;
@@ -65,9 +65,9 @@ inline Database::Database(const std::filesystem::path& folder, int recent_window
     : committed_(folder), recent_window_(recent_window) {}
 
 inline QueryResult Database::Query(std::span<const OutputKey> keys,
-                           std::span<OutputId> rids, int since, int before, bool skip_found) const {
+                           std::span<OutputId> rids, int since, int before) const {
   CheckRethrowFatal();
-  return index_.Query(keys, rids, since, before, skip_found);
+  return index_.Query(keys, rids, since, before);
 }
 
 inline void Database::Fetch(std::span<const OutputId> rids, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts) const {
