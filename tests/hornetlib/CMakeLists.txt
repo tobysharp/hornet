@@ -11,8 +11,10 @@ add_executable(hornetlib_tests
    data/keyframe_sidecar_test.cpp
    data/sidecar_test.cpp
    data/utxo/directory_test.cpp
+   data/utxo/memory_age_test.cpp
    data/utxo/memory_run_test.cpp
    data/utxo/outputs_table_test.cpp
+   data/utxo/single_writer_test.cpp
    data/utxo/tiled_vector_test.cpp
    encoding/reader_test.cpp
    encoding/writer_test.cpp
