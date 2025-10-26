@@ -31,7 +31,7 @@ inline OutputKV RandomAddKV(int height) {
 }
 
 TEST(MemoryAgeTest, TestAppendAge0Query) {
-  MemoryAge age{{{.is_mutable = true}}};
+  MemoryAge age{true};
   EXPECT_TRUE(age.IsMutable());
 
   constexpr int height = 1;
@@ -67,8 +67,7 @@ TEST(MemoryAgeTest, TestLaterSortedBeforeEarlier) {
 }
 
 TEST(MemoryAgeTest, TestAddAndDeleteInMutableAge) {
-  MemoryAge::Options options{{.is_mutable = true}};
-  MemoryAge age{options};  
+  MemoryAge age{true};  
   EXPECT_TRUE(age.IsMutable());
 
   TiledVector<OutputKV> entries;
@@ -76,7 +75,7 @@ TEST(MemoryAgeTest, TestAddAndDeleteInMutableAge) {
   entries.PushBack(Create(0x42, 10, 20));
   EXPECT_TRUE(std::is_sorted(entries.begin(), entries.end()));
 
-  age.Append(MemoryRun{options.run, std::move(entries), {20, 22}});
+  age.Append(MemoryRun{true, std::move(entries), {20, 22}});
   EXPECT_EQ(age.Size(), 1);
 
   std::vector<OutputKey> keys;
@@ -92,8 +91,7 @@ TEST(MemoryAgeTest, TestAddAndDeleteInMutableAge) {
 
 TEST(MemoryAgeTest, TestMergeMutableToMutable) {
   constexpr int kEntriesPerRun = 4;
-  MemoryAge::Options options{{.is_mutable = true}, 2};
-  MemoryAge age0{options}, age1{options};  
+  MemoryAge age0{true, 2}, age1{true};  
   for (int height = 0; height < 2; ++height) {
     TiledVector<OutputKV> entries;
     for (int i = 0; i < kEntriesPerRun; ++i)
@@ -118,8 +116,7 @@ TEST(MemoryAgeTest, TestMergeMutableToMutable) {
 
 TEST(MemoryAgeTest, TestMergeMutableToMutableWithDeletes) {
   constexpr int kEntriesPerRun = 4;
-  MemoryAge::Options options{{.is_mutable = true}, 2};
-  MemoryAge age0{options}, age1{options};  
+  MemoryAge age0{true, 2}, age1{true};  
  
   TiledVector<OutputKV> entries0, entries1;
   for (int i = 0; i < kEntriesPerRun; ++i) {
@@ -147,8 +144,7 @@ TEST(MemoryAgeTest, TestMergeMutableToMutableWithDeletes) {
 
 TEST(MemoryAgeTest, TestMergeMutableToImmutableWithDeletes) {
   constexpr int kEntriesPerRun = 4;
-  MemoryAge::Options options{{.is_mutable = true}, 2};
-  MemoryAge age0{options}, age1{{{.is_mutable = false}}};  
+  MemoryAge age0{true, 2}, age1{false};
  
   TiledVector<OutputKV> entries0, entries1;
   for (int i = 0; i < kEntriesPerRun; ++i) {
@@ -176,8 +172,7 @@ TEST(MemoryAgeTest, TestMergeMutableToImmutableWithDeletes) {
 
 TEST(MemoryAgeTest, TestEraseSince) {
   constexpr int kEntriesPerRun = 4;
-  MemoryAge::Options options{{.is_mutable = true}, 2};
-  MemoryAge age0{options};  
+  MemoryAge age0{true, 2};  
  
   TiledVector<OutputKV> entries;
   for (int i = 0; i < kEntriesPerRun; ++i) {
@@ -199,8 +194,7 @@ TEST(MemoryAgeTest, TestEraseSince) {
 
 TEST(MemoryAgeTest, TestRetainSince) {
   constexpr int kEntriesPerRun = 4;
-  MemoryAge::Options options{{.is_mutable = true}, 2};
-  MemoryAge age0{options};  
+  MemoryAge age0{true, 2};  
  
   TiledVector<OutputKV> entries0, entries1;
   for (int i = 0; i < kEntriesPerRun; ++i) {

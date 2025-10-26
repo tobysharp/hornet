@@ -10,9 +10,9 @@ namespace hornet::data::utxo {
 
 class Compacter {
  public:
-  Compacter(int count) {
-    threads_.reserve(count);
-    for (int i = 0; i < count; ++i)
+  Compacter(int ages) {
+    threads_.reserve(ages);
+    for (int i = 0; i < ages; ++i)
       threads_.emplace_back([this] { Run(); });
   }
   ~Compacter() {
@@ -26,15 +26,15 @@ class Compacter {
 
  private:
   struct Job {
-    MemoryAge* src_;
-    MemoryAge* dst_;
+    MemoryAge* src;
+    MemoryAge* dst;
   };
 
   void Run() {
-    while (auto job = jobs_.WaitPop()) job->src_->Merge(job->dst_);
+    while (auto job = jobs_.WaitPop()) job->src->Merge(job->dst);
   }
 
-  ThreadSafeQueue<Job> jobs_;
+  util::ThreadSafeQueue<Job> jobs_;
   std::vector<std::thread> threads_;
 };
 

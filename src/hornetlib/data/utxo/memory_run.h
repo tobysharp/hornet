@@ -1,5 +1,6 @@
 #pragma once
 
+#include <bit>
 #include <cstdint>
 #include <optional>
 #include <tuple>
@@ -16,25 +17,17 @@ namespace hornet::data::utxo {
 
 class MemoryRun {
  public:
-  struct Options {
-    int prefix_bits = 10;     // #Bits to use to index the run's directory.
-    int tile_bits = 13;       // log_2 of the tile size in KV entries.
-    bool is_mutable = false;  // Whether to preserve information for undo.
-  };
-
-  MemoryRun(const Options& options)
-      : options_(options),
-        entries_(options.tile_bits),
-        directory_(options.prefix_bits) {}
+  MemoryRun(bool is_mutable, int prefix_bits)
+      : is_mutable_(is_mutable), directory_(prefix_bits) {}
   MemoryRun(const MemoryRun& rhs);
-  MemoryRun(const Options& options, TiledVector<OutputKV>&& entries, const std::pair<int, int>& height_range)
-      : options_(options), entries_(std::move(entries)), directory_(options.prefix_bits, entries_.begin(), entries_.end()), height_range_(height_range) {
+  MemoryRun(bool is_mutable, TiledVector<OutputKV>&& entries, const std::pair<int, int>& height_range = { std::numeric_limits<int>::max(), std::numeric_limits<int>::min() })
+      : is_mutable_(is_mutable), entries_(std::move(entries)), directory_(ComputePrefixBits(entries_.Size()), entries_.begin(), entries_.end()), height_range_(height_range) {
         // TODO: Create Bloom filter.
       }
     
   bool Empty() const { return entries_.Empty(); }
   size_t Size() const { return entries_.Size(); }
-  bool IsMutable() const { return options_.is_mutable; }
+  bool IsMutable() const { return is_mutable_; }
   QueryResult Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int since, int before) const;
   std::pair<int, int> HeightRange() const { return height_range_; }
   bool ContainsHeight(int height) const {
@@ -45,14 +38,21 @@ class MemoryRun {
   auto Begin() const { return entries_.begin(); }
   auto End() const { return entries_.end(); }
 
-  static MemoryRun Merge(const Options& options, std::span<std::shared_ptr<const MemoryRun>> inputs);
+  static MemoryRun Merge(bool is_mutable, std::span<std::shared_ptr<const MemoryRun>> inputs);
 
  protected:
-  MemoryRun(const Options& options, TiledVector<OutputKV>&& entries)
-    : options_(options), entries_(std::move(entries)), directory_(options.prefix_bits, entries_.begin(), entries_.end()) {}
   int AddEntry(const OutputKV& kv, int next_bucket);
 
-  const Options options_;
+  static int ComputePrefixBits(int entries) {
+    constexpr int kMinPrefixBits = 4;
+    constexpr int kTargetBytesPerBucket = 4096;
+    constexpr int kEntriesPerBucket = kTargetBytesPerBucket / sizeof(OutputKV);
+    const int buckets = (entries + kEntriesPerBucket - 1) / kEntriesPerBucket;
+    const int prefix_bits = buckets <= 0 ? 0 : std::bit_width(static_cast<unsigned int>(buckets - 1));
+    return std::max(kMinPrefixBits, prefix_bits);
+  }
+
+  const bool is_mutable_;
   TiledVector<OutputKV> entries_;
   Directory directory_;
   // TODO: Bloom filter.
@@ -60,7 +60,7 @@ class MemoryRun {
 };
 
 inline MemoryRun::MemoryRun(const MemoryRun& rhs) 
-  : options_(rhs.options_), entries_(rhs.entries_), directory_(rhs.directory_), height_range_(rhs.height_range_) {
+  : is_mutable_(rhs.is_mutable_), entries_(rhs.entries_), directory_(rhs.directory_), height_range_(rhs.height_range_) {
 }
 
 inline QueryResult MemoryRun::Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int since, int before) const {
@@ -123,24 +123,30 @@ inline void MemoryRun::EraseSince(int height) {
   height_range_.second = height;
 }
 
-inline int MemoryRun::AddEntry(const OutputKV& kv, int next_bucket) {
+inline int MemoryRun::AddEntry(const OutputKV& kv, int bucket) {
   const int cur_bucket = directory_.GetBucket(kv.key);
   const int offset = entries_.Size();
-  while (next_bucket <= cur_bucket) directory_[next_bucket++] = offset;
+  while (bucket <= cur_bucket) directory_[bucket++] = offset;
   entries_.PushBack(kv);
-  return next_bucket;
+  return bucket;
 }
 
 // Multi-way streaming merge of sorted input runs to a single sorted output run.
-inline MemoryRun MemoryRun::Merge(const Options& options, std::span<std::shared_ptr<const MemoryRun>> inputs) {
+inline MemoryRun MemoryRun::Merge(bool is_mutable, std::span<std::shared_ptr<const MemoryRun>> inputs) {
   using Iterator = typename decltype(entries_)::ConstIterator;
   struct Cursor {
     Iterator current, end;
     bool operator >(const Cursor& rhs) const { return *rhs.current < *current; }
   };
 
+  // Compute the number of prefix bits to use for the directory, based on an upper bound for the size of the run.
+  const int approx_entries = std::accumulate(inputs.begin(), inputs.end(), 0, [&](int sum, const auto& run) {
+    return sum + run->Size();
+  });
+  const int prefix_bits = ComputePrefixBits(approx_entries);
+
   // Initialize output.
-  MemoryRun dst{options};
+  MemoryRun dst{is_mutable, prefix_bits};
 
   // Initialize heap and destination height range.
   std::priority_queue<Cursor, std::vector<Cursor>, std::greater<Cursor>> heap;
