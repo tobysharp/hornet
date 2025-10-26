@@ -14,19 +14,15 @@ class MemoryAge {
  public:
   using MemoryRunPtr = std::shared_ptr<const MemoryRun>;
   using EnqueueFn = std::function<void(MemoryAge*)>;
-  struct Options {
-    MemoryRun::Options run;
-    int merge_fan_in = 8;    // Runs per age.
-  };
 
-  MemoryAge(Options options, EnqueueFn enqueue = {}) : options_(std::move(options)), enqueue_(std::move(enqueue)) {}
+  MemoryAge(bool is_mutable, int merge_fan_in = 8, EnqueueFn enqueue = {}) : is_mutable_(is_mutable), merge_fan_in_(merge_fan_in), enqueue_(std::move(enqueue)) {}
 
-  bool IsMutable() const { return options_.run.is_mutable; }
+  bool IsMutable() const { return is_mutable_; }
   QueryResult Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int since, int before) const;
   int Size() const { return std::ssize(*runs_); }
   bool Empty() const { return runs_->empty(); }
   bool IsMergeReady() const;
-  TiledVector<OutputKV> MakeEntries() const { return { options_.run.tile_bits }; }
+  TiledVector<OutputKV> MakeEntries() const { return {kTileBits}; }
   void Append(MemoryRun&& run);
   void Append(TiledVector<OutputKV>&& entries, const std::pair<int, int>& range);
   void Merge(MemoryAge* dst);
@@ -36,9 +32,12 @@ class MemoryAge {
   MemoryRunPtr RunSnapshot(int index) const { return (*runs_)[index]; }
 
  protected:
-  int merged_to_ = 0;
-  const Options options_;
+  static constexpr int kTileBits = 13;
+
+  const bool is_mutable_ = false;
+  const int merge_fan_in_ = 8;
   const EnqueueFn enqueue_;
+  int merged_to_ = 0;
   std::atomic<int> retain_height_ = std::numeric_limits<int>::max();
   SingleWriter<std::vector<MemoryRunPtr>> runs_;
 };
@@ -60,7 +59,7 @@ inline bool MemoryAge::IsMergeReady() const {
   });
   int ready = 0;
   int height_to = merged_to_;
-  for (int i = 0; i < std::min<int>(options_.merge_fan_in, std::ssize(*copy)); ++i) {
+  for (int i = 0; i < std::min<int>(merge_fan_in_, std::ssize(*copy)); ++i) {
     if (height_to != (*copy)[i]->HeightRange().first)
       return false;  // Non contiguous ranges don't merge.
     height_to = (*copy)[i]->HeightRange().second;
@@ -68,7 +67,7 @@ inline bool MemoryAge::IsMergeReady() const {
       return false;  // Must keep in this age for now.
     ++ready;
   }
-  return ready >= options_.merge_fan_in;
+  return ready >= merge_fan_in_;
 }
 
 inline void MemoryAge::RetainSince(int height) { 
@@ -77,7 +76,7 @@ inline void MemoryAge::RetainSince(int height) {
 }
 
 inline void MemoryAge::Append(TiledVector<OutputKV>&& entries, const std::pair<int, int>& range) {
-  Append(MemoryRun{options_.run, std::move(entries), range});
+  Append(MemoryRun{is_mutable_, std::move(entries), range});
 }
 
 inline void MemoryAge::Append(MemoryRun&& run) {
@@ -104,9 +103,9 @@ inline void MemoryAge::Merge(MemoryAge* dst) {
   std::sort(copy->begin(), copy->end(), [](const MemoryRunPtr& lhs, const MemoryRunPtr& rhs) {
     return lhs->HeightRange().first < rhs->HeightRange().first;
   });
-  const auto inputs = std::span{*copy}.first(options_.merge_fan_in);
-  dst->Append(MemoryRun::Merge(dst->options_.run, inputs));
-  copy->erase(copy->begin(), copy->begin() + options_.merge_fan_in);
+  const auto inputs = std::span{*copy}.first(merge_fan_in_);
+  dst->Append(MemoryRun::Merge(dst->is_mutable_, inputs));
+  copy->erase(copy->begin(), copy->begin() + merge_fan_in_);
   merged_to_ = inputs.back()->HeightRange().second;
 }
 

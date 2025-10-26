@@ -13,11 +13,6 @@ inline OutputKV Create(uint8_t hash, uint64_t rid, int height) {
 }
 
 TEST(MemoryRunTest, TestCreate) {
-  const MemoryRun::Options options {
-    .prefix_bits = 8,
-    .tile_bits = 8,
-    .is_mutable = true
-  };
   constexpr int height = 1;
 
   TiledVector<OutputKV> entries;
@@ -26,7 +21,7 @@ TEST(MemoryRunTest, TestCreate) {
   entries.PushBack(OutputKV::Tombstone({{0x43}}, height));
   entries.PushBack(Create(0xaf, 3, height));
 
-  const MemoryRun run{options, std::move(entries), {height, height + 1}};
+  const MemoryRun run{true, std::move(entries), {height, height + 1}};
 
   EXPECT_FALSE(run.Empty());
   EXPECT_EQ(run.Size(), 4);
