@@ -20,6 +20,9 @@ class TiledVector {
   TiledVector(TiledVector&& rhs) : tiles_(std::move(rhs.tiles_)), entry_bits_(rhs.entry_bits_), entries_per_tile_(rhs.entries_per_tile_), entry_mask_(rhs.entry_mask_) {}
   TiledVector(const TiledVector& rhs) : tiles_(rhs.tiles_), entry_bits_(rhs.entry_bits_), entries_per_tile_(rhs.entries_per_tile_), entry_mask_(rhs.entry_mask_) {}
 
+  TiledVector& operator =(const TiledVector&) = default;
+  TiledVector& operator =(TiledVector&&) = default;
+
   // Returns the number of entries across all tiles.
   size_t Size() const { 
     return tiles_.empty() ? 0 : (tiles_.size() - 1) * entries_per_tile_ + tiles_.back().size(); 
@@ -89,9 +92,9 @@ class TiledVector {
  protected:
   template <typename Grid> friend class IteratorT;
   std::vector<Tile> tiles_;
-  const int entry_bits_;
-  const int entries_per_tile_;
-  const int entry_mask_;
+  int entry_bits_;
+  int entries_per_tile_;
+  int entry_mask_;
 };
 
 template <typename T>

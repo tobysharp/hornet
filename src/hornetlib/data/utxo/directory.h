@@ -55,7 +55,8 @@ template <typename Iter>
 inline void Directory::Rebuild(Iter kv_begin, Iter kv_end) {
   auto it = kv_begin;
   for (int i = 0; i < std::ssize(entries_); ++i) {
-    // Find the first entry for which the bucket index >= i.
+    // We want the bucket to index the first kv pair whose key prefix falls into this bucket.
+    // If there are no such entries, the bucket is empty.
     it = std::lower_bound(it, kv_end, i, [&](const OutputKV& kv, int bucket) {
       return GetBucket(kv.key) < bucket;
     });
