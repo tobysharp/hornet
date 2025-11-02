@@ -33,10 +33,4 @@ inline void SortTogether(Iter1 begin, Iter1 end, Iter2 secondary) {
   }
 }
 
-template <typename Iter>
-inline void ParallelSort(Iter begin, Iter end) {
-  // TODO: Parallelism.
-  std::sort(begin, end);
-}
-
 }  // namespace hornet::data::utxo

@@ -7,6 +7,7 @@
 #include "hornetlib/data/utxo/tiled_vector.h"
 #include "hornetlib/data/utxo/single_writer.h"
 #include "hornetlib/data/utxo/types.h"
+#include "hornetlib/util/log.h"
 
 namespace hornet::data::utxo {
 
@@ -38,6 +39,7 @@ class MemoryAge {
   const int merge_fan_in_ = 8;
   const EnqueueFn enqueue_;
   int merged_to_ = 0;
+  std::atomic_bool is_merging_ = false;
   std::atomic<int> retain_height_ = std::numeric_limits<int>::max();
   SingleWriter<std::vector<MemoryRunPtr>> runs_;
 };
@@ -80,6 +82,7 @@ inline void MemoryAge::Append(TiledVector<OutputKV>&& entries, const std::pair<i
 }
 
 inline void MemoryAge::Append(MemoryRun&& run) {
+  LogInfo("Appending run #", runs_->size(), " with ", run.Size(), " entries, heights [", run.HeightRange().first, ", ", run.HeightRange().second, ").");
   const auto ptr = std::make_shared<MemoryRun>(std::move(run));
   runs_.Edit()->push_back(ptr);  // Publishes the new run set immediately.
   if (enqueue_ && IsMergeReady()) enqueue_(this);
@@ -88,25 +91,39 @@ inline void MemoryAge::Append(MemoryRun&& run) {
 inline void MemoryAge::Merge(MemoryAge* dst) {
   if (!IsMergeReady()) return;  // Nothing to do.
 
-  // NOTE: Here we take a copy-on-write lock, and hold it until the end of this function.
-  // In age 0, that excludes Append from completing concurrently. That's not terrible, because
-  // age 0 is small, with at most ~3 MiB data for this merge, which only runs once per merge_fan_in
-  // Append calls. But later, if we see in profiling that the lock contention is non-zero, we can
-  // improve the situation by taking a Snapshot here and only calling Edit when we do the final erase.
-  // That in turn requires us to guarantee that EraseSince cannot be called concurrently, which
-  // means we would have to pause the compacter thread when the shard's EraseSince method is called.
-  // Since that's more complexity for a probably marginal return, we'll wait until profiling indicates
-  // that it's worth the effort to implement. Meanwhile, everything here is safe, and the only 
-  // slightly sub-optimal contention is during Append vs Merge in Age 0.
+  bool expected = false;
+  if (!is_merging_.compare_exchange_strong(expected, true))
+    return;
+  {
+    struct Guard { MemoryAge* a; ~Guard() { a->is_merging_ = false; } } guard{this};
 
-  auto copy = runs_.Edit();
-  std::sort(copy->begin(), copy->end(), [](const MemoryRunPtr& lhs, const MemoryRunPtr& rhs) {
-    return lhs->HeightRange().first < rhs->HeightRange().first;
-  });
-  const auto inputs = std::span{*copy}.first(merge_fan_in_);
-  dst->Append(MemoryRun::Merge(dst->is_mutable_, inputs));
-  copy->erase(copy->begin(), copy->begin() + merge_fan_in_);
-  merged_to_ = inputs.back()->HeightRange().second;
+    // NOTE: Here we take a copy-on-write lock, and hold it until the end of this function.
+    // In age 0, that excludes Append from completing concurrently. That's not terrible, because
+    // age 0 is small, with at most ~3 MiB data for this merge, which only runs once per merge_fan_in
+    // Append calls. But later, if we see in profiling that the lock contention is non-zero, we can
+    // improve the situation by taking a Snapshot here and only calling Edit when we do the final erase.
+    // That in turn requires us to guarantee that EraseSince cannot be called concurrently, which
+    // means we would have to pause the compacter thread when the shard's EraseSince method is called.
+    // Since that's more complexity for a probably marginal return, we'll wait until profiling indicates
+    // that it's worth the effort to implement. Meanwhile, everything here is safe, and the only 
+    // slightly sub-optimal contention is during Append vs Merge in Age 0.
+    auto copy = runs_.Edit();
+    std::sort(copy->begin(), copy->end(), [](const MemoryRunPtr& lhs, const MemoryRunPtr& rhs) {
+      return lhs->HeightRange().first < rhs->HeightRange().first;
+    });
+    if (std::ssize(*copy) < merge_fan_in_ || (*copy)[merge_fan_in_ - 1]->HeightRange().second > retain_height_)
+      return;
+    const auto inputs = std::span{*copy}.first(merge_fan_in_);
+    const int end_merge_height = inputs.back()->HeightRange().second;
+    LogInfo("Merging upward heights [", inputs.front()->HeightRange().first, ", ", inputs.back()->HeightRange().second,
+            "), remaining ", copy->size() - inputs.size(), " runs.");
+    dst->Append(MemoryRun::Merge(dst->is_mutable_, inputs));
+    copy->erase(copy->begin(), copy->begin() + merge_fan_in_);
+    merged_to_ = end_merge_height;
+  }
+
+  // Requeue if more merges are possible.
+  if (enqueue_ && IsMergeReady()) enqueue_(this);
 }
 
 inline void MemoryAge::EraseSince(int height) {
