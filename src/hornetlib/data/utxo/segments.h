@@ -9,6 +9,11 @@
 #include <tuple>
 #include <vector>
 
+#include <fcntl.h>
+
+#include "hornetlib/data/utxo/codec.h"
+#include "hornetlib/data/utxo/io.h"
+#include "hornetlib/data/utxo/types.h"
 #include "hornetlib/data/utxo/unique_fd.h"
 
 namespace hornet::data::utxo {
@@ -101,7 +106,7 @@ inline int Segments::EnsureWriteFD(size_t bytes_to_write) {
 
 inline int Segments::GetReadFD(uint64_t offset) const {
   Assert(!items_.empty() && offset < size_bytes_);
-  const auto segment_it =
+  auto segment_it =
       std::upper_bound(items_.begin(), items_.end(), offset,
                        [](uint64_t offset, const Item& item) { return offset < item.offset; });
   --segment_it;

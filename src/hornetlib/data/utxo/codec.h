@@ -1,21 +1,30 @@
 #pragma once
 
-#include <cstdint.h>
+#include <cstdint>
 #include <tuple>
 
 namespace hornet::data::utxo {
 
 class IdCodec {
  public:
-  inline static std::pair<uint64_t, int> Decode(uint64_t id) {
-    return {id >> kLengthBits, id & kLengthMask};
+  struct Span {
+    uint64_t offset;
+    int length;
+  };
+
+  inline static Span Decode(uint64_t id) {
+    return {id >> kLengthBits, static_cast<int>(id & kLengthMask) };
   }
   inline static uint64_t Encode(uint64_t offset, int length) {
     return (offset << kLengthBits) | (length & kLengthMask);
   }
-  inline static int Length(uint64_t id) {
-    return Decode(id).second;
+  inline static uint64_t Offset(uint64_t id) {
+    return Decode(id).offset;
   }
+  inline static int Length(uint64_t id) {
+    return Decode(id).length;
+  }
+
  private:
   static constexpr int kLengthBits = 20;
   static constexpr int kLengthMask = (1 << kLengthBits) - 1;

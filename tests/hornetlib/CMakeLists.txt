@@ -16,6 +16,8 @@ add_executable(hornetlib_tests
    data/utxo/memory_run_test.cpp
    data/utxo/outputs_table_test.cpp
    data/utxo/single_writer_test.cpp
+   data/utxo/table_tail_test.cpp
+   data/utxo/table_test.cpp
    data/utxo/tiled_vector_test.cpp
    encoding/reader_test.cpp
    encoding/writer_test.cpp
