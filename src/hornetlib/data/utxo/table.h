@@ -11,7 +11,9 @@
 
 #include "hornetlib/data/utxo/segments.h"
 #include "hornetlib/data/utxo/table_tail.h"
+#include "hornetlib/data/utxo/tiled_vector.h"
 #include "hornetlib/data/utxo/types.h"
+#include "hornetlib/protocol/block.h"
 
 namespace hornet::data::utxo {
 
@@ -19,8 +21,7 @@ class Table {
  public:
   Table(const std::filesystem::path& folder);
 
-  std::pair<std::vector<OutputDetail>, std::vector<uint8_t>> Fetch(
-      std::span<const OutputId> ids) const;
+  int Fetch(std::span<const OutputId> ids, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts) const;
   int AppendOutputs(const protocol::Block& block, int height, TiledVector<OutputKV>* entries);
   void RemoveSince(int height);
   std::optional<int> GetEarliestTailHeight() const;
@@ -30,13 +31,16 @@ class Table {
   std::pair<std::span<const OutputId>, std::span<const OutputId>> Split(
       std::span<const OutputId> ids) const;
   static uint64_t CountSizeBytes(std::span<const OutputId> ids);
-  static std::pair<std::vector<OutputDetail>, std::vector<uint8_t>> Unpack(
-    std::span<const OutputId> ids, std::span<const uint8_t> staging);
+  static int Unpack(
+    std::span<const OutputId> rids, std::span<const uint8_t> staging, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts);
 
   Segments segments_;
   TableTail tail_;
   mutable std::shared_mutex tail_mutex_;
 };
+
+Table::Table(const std::filesystem::path& folder) : segments_(folder), tail_(segments_.SizeBytes()) {
+}
 
 /* static */ inline uint64_t Table::CountSizeBytes(std::span<const OutputId> ids) {
   uint64_t bytes = 0;
@@ -59,19 +63,19 @@ inline std::pair<std::span<const OutputId>, std::span<const OutputId>> Table::Sp
 /* static */ inline int Table::Unpack(
     std::span<const OutputId> rids, std::span<const uint8_t> staging, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts) {
   int prev_script_size = std::ssize(*scripts);
-  scripts->resize(prev_script_size + staging.size() - ids.size() * sizeof(OutputHeader));
+  scripts->resize(prev_script_size + staging.size() - rids.size() * sizeof(OutputHeader));
   auto staging_cursor = staging.begin();
-  auto script_cursor = scripts.begin() + prev_script_size;
+  auto script_cursor = scripts->begin() + prev_script_size;
   int written = 0;
   for (int i = 0; i < std::ssize(rids); ++i) {
     if (rids[i] == kNullOutputId) continue;
     const auto length = IdCodec::Length(rids[i]);
     const int script_length = length - sizeof(OutputHeader);
     Assert(staging_cursor + length <= staging.end());
-    Assert(script_cursor + script_length <= scripts.end());
+    Assert(script_cursor + script_length <= scripts->end());
     std::memcpy(&outputs[i].header, &*staging_cursor, sizeof(OutputHeader));
     std::memcpy(&*script_cursor, &*staging_cursor + sizeof(OutputHeader), script_length);
-    outputs[i].script = {static_cast<int>(script_cursor - scripts.begin()), script_length};
+    outputs[i].script = {static_cast<int>(script_cursor - scripts->begin()), script_length};
     staging_cursor += length;
     script_cursor += script_length;
     ++written;
@@ -101,12 +105,9 @@ inline int Table::AppendOutputs(const protocol::Block& block, int height, TiledV
   int count = 0;
   {
     std::unique_lock lock(tail_mutex_);
-    const uint64_t offset = segments_.SizeBytes();
     for (const auto tx : block.Transactions()) {
-      for (int i = 0; i < tx.OutputCount(); ++i, ++count) {
-        const OutputKV kv = tail_.Append({tx.GetHash(), i}, {height, 0, tx.Output(i).value}, tx.PkScript(i), offset);
-        entries->PushBack(kv);
-      }
+      for (int i = 0; i < tx.OutputCount(); ++i, ++count)
+        entries->PushBack(tail_.Append(tx, i, height));
     }
   }
   return count;
@@ -114,7 +115,7 @@ inline int Table::AppendOutputs(const protocol::Block& block, int height, TiledV
 
 inline void Table::RemoveSince(int height) {
   std::unique_lock lock(tail_mutex_);
-  tail_.RemoveSince(height);
+  tail_.EraseSince(height);
 }
 
 inline std::optional<int> Table::GetEarliestTailHeight() const {
@@ -124,12 +125,12 @@ inline std::optional<int> Table::GetEarliestTailHeight() const {
 
 inline void Table::CommitBefore(int height) {
   const auto staging = tail_.CopyDataBefore(height);
-  segments_.Append(staging, height);
+  segments_.Append(staging);
   {
     // This is where elements are removed from the tail. We need this not to overlap with the
     // part of Fetch that is trying to read these entries from the tail.
     std::unique_lock lock(tail_mutex_);
-    tail_.RemoveBefore(height);
+    tail_.OnCommitBefore(height);
   }
 }
 

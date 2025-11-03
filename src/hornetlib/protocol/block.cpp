@@ -45,7 +45,7 @@ static Block CreateGenesisBlock() {
     encoding::Writer writer;
     block.Serialize(writer);
     const auto& serialized = writer.Buffer();
-  const auto& original = genesis::kRawBytes;
+    const auto& original = genesis::kRawBytes;
     if (serialized.size() != original.size() ||
         !std::equal(serialized.begin(), serialized.end(), original.begin()))
       util::ThrowRuntimeError("CreateGenesisBlock serialization mismatch.");
