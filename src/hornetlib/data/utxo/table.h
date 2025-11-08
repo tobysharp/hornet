@@ -24,7 +24,7 @@ class Table {
 
   int Fetch(std::span<const OutputId> ids, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts) const;
   int AppendOutputs(const protocol::Block& block, int height, TiledVector<OutputKV>* entries);
-  void RemoveSince(int height);
+  void EraseSince(int height);
   void CommitBefore(int height);
   void SetMutableWindow(int duration) noexcept;
 
@@ -33,18 +33,19 @@ class Table {
   static int Unpack(
     std::span<const OutputId> rids, std::span<const uint8_t> staging, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts);
 
-  Flusher flusher_;
   Segments segments_;
   std::atomic<int> mutable_window_;
   AtomicVector<BlockOutputs> tail_;
   std::atomic<uint64_t> next_offset_;
+
+  Flusher flusher_;  // Constructed last, destroyed first.
 };
 
-Table::Table(const std::filesystem::path& folder) : 
-  flusher_([this](int height) { CommitBefore(height); }), 
+inline Table::Table(const std::filesystem::path& folder) : 
   segments_(folder), 
   mutable_window_(0),
-  next_offset_(segments_.SizeBytes()) {
+  next_offset_(segments_.SizeBytes()),
+  flusher_([this](int height) { CommitBefore(height); }) {
 }
 
 /* static */ inline int Table::Unpack(
@@ -177,7 +178,7 @@ inline int Table::AppendOutputs(const protocol::Block& block, int height, TiledV
   return count;
 }
 
-inline void Table::RemoveSince(int height) {
+inline void Table::EraseSince(int height) {
   std::erase_if(*tail_.Edit(), [=](const std::shared_ptr<const BlockOutputs>& ptr) {
     return ptr->Height() >= height;
   });

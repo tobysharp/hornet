@@ -15,7 +15,7 @@ class Flusher {
 
   ~Flusher() {
     Abort();
-    if (thread_.joinable()) thread_.join();
+    thread_.join();
   }
 
   void Abort() {
@@ -25,6 +25,7 @@ class Flusher {
 
   void Enqueue(int height) {
     int old = height_;
+    if (old == kAbort) return;
     while (old < height && !height_.compare_exchange_weak(old, height));
     if (old < height_) height_.notify_one();
   }

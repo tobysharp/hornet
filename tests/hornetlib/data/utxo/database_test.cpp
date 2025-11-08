@@ -1,5 +1,8 @@
 #include "hornetlib/data/utxo/database.h"
 
+#include <chrono>
+#include <thread>
+
 #include <gtest/gtest.h>
 
 #include "hornetlib/protocol/block.h"
@@ -8,12 +11,10 @@
 namespace hornet::data::utxo {
 namespace {
 
-TEST(DatabaseTest, TestAppend) {
+TEST(DatabaseTest, TestAppendGenesis) {
   test::TempFolder dir;
   Database database{dir.Path()};
-
-  const auto& genesis = protocol::Block::Genesis();
-  database.Append(genesis, 0);
+  database.Append(protocol::Block::Genesis(), 0);
 }
 
 }  // namespace
