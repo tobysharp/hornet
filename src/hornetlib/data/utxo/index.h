@@ -42,16 +42,16 @@ class Index {
   void EnqueueMerge(int index) { compacter_.Enqueue(index); }
   void DoMerge(int index);
 
-  std::vector<std::unique_ptr<MemoryAge>> ages_;
-  Compacter compacter_;
-
   static constexpr int kAges = 7;
   static constexpr int kMutableAges = 3;
   static constexpr int kCompacterThreads = kAges;
   static constexpr int kMergeFanIn = 8;
+  
+  std::vector<std::unique_ptr<MemoryAge>> ages_;
+  Compacter compacter_;  // Constructed last, destroyed first.
 };
 
-Index::Index() : compacter_(kCompacterThreads, [this](int index) { DoMerge(index); }) {
+inline Index::Index() : compacter_(kCompacterThreads, [this](int index) { DoMerge(index); }) {
   for (int i = 0; i < kAges; ++i)
     ages_.emplace_back(std::make_unique<MemoryAge>(i < kMutableAges, kMergeFanIn, 
       [this, index=i](MemoryAge*) { EnqueueMerge(index); })

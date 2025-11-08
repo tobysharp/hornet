@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <shared_mutex>
 #include <span>
@@ -40,7 +41,7 @@ class Database {
   // Removes all outputs at heights greater than or equal to the given height. The given height
   // must be within the recent window compared to the highest block added. Otherwise the data
   // will already have been flushed to the permanently committed store.
-  void RemoveSince(int height);
+  void EraseSince(int height);
 
   void SetUndoDuration(int blocks);
 
@@ -55,14 +56,14 @@ class Database {
 
   Table table_;
   Index index_;
-  int undo_duration_;
+  //int undo_duration_;
   std::atomic_bool has_fatal_exception_ = false;
   std::exception_ptr fatal_exception_;
   mutable std::shared_mutex mutex_;
 };
 
-inline Database::Database(const std::filesystem::path& folder, int recent_window)
-    : committed_(folder), recent_window_(recent_window) {}
+inline Database::Database(const std::filesystem::path& folder)
+    : table_(folder) {}
 
 inline QueryResult Database::Query(std::span<const OutputKey> keys,
                            std::span<OutputId> rids, int since, int before) const {
@@ -70,9 +71,9 @@ inline QueryResult Database::Query(std::span<const OutputKey> keys,
   return index_.Query(keys, rids, since, before);
 }
 
-inline void Database::Fetch(std::span<const OutputId> rids, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts) const {
+inline int Database::Fetch(std::span<const OutputId> rids, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts) const {
   CheckRethrowFatal();
-  table_.Fetch(rids, outputs, scripts);
+  return table_.Fetch(rids, outputs, scripts);
 }
 
 inline void Database::Append(const protocol::Block& block, int height) {
@@ -85,17 +86,17 @@ inline void Database::Append(const protocol::Block& block, int height) {
   index_.Append(std::move(entries), height);
 }
 
-inline void Database::RemoveSince(int height) {
+inline void Database::EraseSince(int height) {
   CheckRethrowFatal();
   std::unique_lock lock(mutex_);
-  index_.RemoveSince(height);
-  table_.RemoveSince(height);
+  index_.EraseSince(height);
+  table_.EraseSince(height);
 }
 
 /* static */ inline void Database::AppendSpends(const protocol::Block& block, int height, TiledVector<OutputKV>* entries) {
   for (const auto tx : block.Transactions())
-    for (int i = 0; i < tx.OutputCount(); +++i) 
-      entries->PushBack(OutputKV::Tombstone({tx.GetHash(), i}));
+    for (int i = 0; i < tx.OutputCount(); ++i) 
+      entries->PushBack(OutputKV::Tombstone({tx.GetHash(), static_cast<uint32_t>(i)}, height));
 }
 
 }  // namespace hornet::data::utxo

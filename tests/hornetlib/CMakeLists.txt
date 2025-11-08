@@ -10,8 +10,11 @@ add_executable(hornetlib_tests
    data/header_timechain_test.cpp
    data/keyframe_sidecar_test.cpp
    data/sidecar_test.cpp
-   data/utxo/index_test.cpp
+   data/utxo/atomic_vector_test.cpp
+   data/utxo/block_outputs_test.cpp
+   data/utxo/database_test.cpp
    data/utxo/directory_test.cpp
+   data/utxo/index_test.cpp
    data/utxo/memory_age_test.cpp
    data/utxo/memory_run_test.cpp
    data/utxo/outputs_table_test.cpp
