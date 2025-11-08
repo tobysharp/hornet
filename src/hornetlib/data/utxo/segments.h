@@ -129,9 +129,16 @@ inline int Segments::GetReadFD(uint64_t offset) const {
 
 inline void Segments::Append(std::span<const uint8_t> bytes) {
   if (bytes.empty()) return;
-  Write(EnsureWriteFD(bytes.size()), bytes);
-  items_.back().length += bytes.size();
-  size_bytes_ = items_.back().offset + items_.back().length;
+  int fd = EnsureWriteFD(bytes.size());
+  try {
+    Write(fd, bytes);
+    items_.back().length += bytes.size();
+    size_bytes_ = items_.back().offset + items_.back().length;
+  } catch (...) {
+    // Roll back partial write.
+    ::ftruncate(fd, size_bytes_);
+    throw;
+  }
 }
 
 inline void Segments::FetchData(std::span<const OutputId> ids, uint8_t* buffer, size_t size) const {

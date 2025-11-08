@@ -3,9 +3,9 @@
 #include <atomic>
 #include <memory>
 
+#include "hornetlib/data/utxo/atomic_vector.h"
 #include "hornetlib/data/utxo/memory_run.h"
 #include "hornetlib/data/utxo/tiled_vector.h"
-#include "hornetlib/data/utxo/single_writer.h"
 #include "hornetlib/data/utxo/types.h"
 #include "hornetlib/util/log.h"
 
@@ -13,15 +13,14 @@ namespace hornet::data::utxo {
 
 class MemoryAge {
  public:
-  using MemoryRunPtr = std::shared_ptr<const MemoryRun>;
   using EnqueueFn = std::function<void(MemoryAge*)>;
 
   MemoryAge(bool is_mutable, int merge_fan_in = 8, EnqueueFn enqueue = {}) : is_mutable_(is_mutable), merge_fan_in_(merge_fan_in), enqueue_(std::move(enqueue)) {}
 
   bool IsMutable() const { return is_mutable_; }
   QueryResult Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int since, int before) const;
-  int Size() const { return std::ssize(*runs_); }
-  bool Empty() const { return runs_->empty(); }
+  int Size() const { return runs_.Size(); }
+  bool Empty() const { return runs_.Empty(); }
   bool IsMergeReady() const;
   TiledVector<OutputKV> MakeEntries() const { return {kTileBits}; }
   void Append(MemoryRun&& run);
@@ -30,9 +29,10 @@ class MemoryAge {
   void EraseSince(int height);
   void RetainSince(int height);
   
-  MemoryRunPtr RunSnapshot(int index) const { return (*runs_)[index]; }
+  auto RunSnapshot(int index) const { return runs_[index]; }
 
  protected:
+  using MemoryRunPtr = AtomicVector<MemoryRun>::Ptr;
   static constexpr int kTileBits = 13;
 
   const bool is_mutable_ = false;
@@ -41,7 +41,7 @@ class MemoryAge {
   int merged_to_ = 0;
   std::atomic_bool is_merging_ = false;
   std::atomic<int> retain_height_ = std::numeric_limits<int>::max();
-  SingleWriter<std::vector<MemoryRunPtr>> runs_;
+  AtomicVector<MemoryRun> runs_;
 };
 
 inline QueryResult MemoryAge::Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int since, int before) const {
@@ -82,9 +82,8 @@ inline void MemoryAge::Append(TiledVector<OutputKV>&& entries, const std::pair<i
 }
 
 inline void MemoryAge::Append(MemoryRun&& run) {
-  LogInfo("Appending run #", runs_->size(), " with ", run.Size(), " entries, heights [", run.HeightRange().first, ", ", run.HeightRange().second, ").");
-  const auto ptr = std::make_shared<MemoryRun>(std::move(run));
-  runs_.Edit()->push_back(ptr);  // Publishes the new run set immediately.
+  LogInfo("Appending run #", runs_.Size(), " with ", run.Size(), " entries, heights [", run.HeightRange().first, ", ", run.HeightRange().second, ").");
+  runs_.EmplaceBack(std::move(run));  // Publishes the new run set immediately.
   if (enqueue_ && IsMergeReady()) enqueue_(this);
 }
 

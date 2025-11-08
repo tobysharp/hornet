@@ -15,6 +15,7 @@ namespace hornet::data::utxo {
 class TableTail {
  public:
   TableTail(uint64_t begin_offset = 0);
+  TableTail(TableTail&&) = default;
 
   OutputKV Append(protocol::TransactionConstView tx, int output, int height);
   void FetchData(std::span<const OutputId> ids, uint8_t* buffer, size_t size) const;

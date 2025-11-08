@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <span>
 
+#include "hornetlib/util/throw.h"
+
 namespace hornet::data::utxo {
 
 struct IORequest {
@@ -42,8 +44,9 @@ void Read(Engine& io, std::span<const IORequest> requests) {
     int ready = io.Reap(results);
     if (ready == 0) {
       results[0] = io.WaitOne();
-      ready = 1;
+      ready = results[0] != nullptr;
     }
+    completed += ready;
   }
 }
 
@@ -95,8 +98,14 @@ class UringIOEngine {
   }
 
   const IORequest* WaitOne() {
-    io_uring_cqe* cqe;
-    ::io_uring_wait_cqe(&ring_, &cqe);
+    io_uring_cqe* cqe = nullptr;
+    int ret;
+    do {
+      ret = ::io_uring_wait_cqe(&ring_, &cqe);
+    } while (ret == -EINTR);  // Retry on interrupt.
+    if (ret < 0)
+      util::ThrowRuntimeError("io_uring_wait_cqe failed: ", std::strerror(-ret));
+  
     const IORequest* rv = static_cast<const IORequest*>(::io_uring_cqe_get_data(cqe));
     ::io_uring_cqe_seen(&ring_, cqe);
     return rv;
