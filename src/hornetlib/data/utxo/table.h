@@ -1,16 +1,17 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
-#include <shared_mutex>
 #include <span>
-#include <tuple>
 #include <vector>
 
+#include "hornetlib/data/utxo/atomic_vector.h"
+#include "hornetlib/data/utxo/block_outputs.h"
+#include "hornetlib/data/utxo/flusher.h"
 #include "hornetlib/data/utxo/segments.h"
-#include "hornetlib/data/utxo/table_tail.h"
 #include "hornetlib/data/utxo/tiled_vector.h"
 #include "hornetlib/data/utxo/types.h"
 #include "hornetlib/protocol/block.h"
@@ -24,46 +25,33 @@ class Table {
   int Fetch(std::span<const OutputId> ids, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts) const;
   int AppendOutputs(const protocol::Block& block, int height, TiledVector<OutputKV>* entries);
   void RemoveSince(int height);
-  std::optional<int> GetEarliestTailHeight() const;
   void CommitBefore(int height);
+  void SetMutableWindow(int duration) noexcept;
 
  private:
-  std::pair<std::span<const OutputId>, std::span<const OutputId>> Split(
-      std::span<const OutputId> ids) const;
-  static uint64_t CountSizeBytes(std::span<const OutputId> ids);
+  void EnqueueReadyCommits() noexcept;
   static int Unpack(
     std::span<const OutputId> rids, std::span<const uint8_t> staging, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts);
 
+  Flusher flusher_;
   Segments segments_;
-  TableTail tail_;
-  mutable std::shared_mutex tail_mutex_;
+  std::atomic<int> mutable_window_;
+  AtomicVector<BlockOutputs> tail_;
+  std::atomic<uint64_t> next_offset_;
 };
 
-Table::Table(const std::filesystem::path& folder) : segments_(folder), tail_(segments_.SizeBytes()) {
-}
-
-/* static */ inline uint64_t Table::CountSizeBytes(std::span<const OutputId> ids) {
-  uint64_t bytes = 0;
-  for (OutputId id : ids) bytes += IdCodec::Length(id);
-  return bytes;
-}
-
-inline std::pair<std::span<const OutputId>, std::span<const OutputId>> Table::Split(
-    std::span<const OutputId> ids) const {
-  const uint64_t tail_offset = segments_.SizeBytes();
-  const auto tail_it =
-      std::lower_bound(ids.begin(), ids.end(), tail_offset,
-                       [](OutputId id, uint64_t offset) { return IdCodec::Offset(id) < offset; });
-  const auto tail_index = std::distance(ids.begin(), tail_it);
-  const auto segment_ids = ids.subspan(0, tail_index);
-  const auto tail_ids = ids.subspan(tail_index);
-  return {segment_ids, tail_ids};
+Table::Table(const std::filesystem::path& folder) : 
+  flusher_([this](int height) { CommitBefore(height); }), 
+  segments_(folder), 
+  mutable_window_(0),
+  next_offset_(segments_.SizeBytes()) {
 }
 
 /* static */ inline int Table::Unpack(
     std::span<const OutputId> rids, std::span<const uint8_t> staging, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts) {
   int prev_script_size = std::ssize(*scripts);
-  scripts->resize(prev_script_size + staging.size() - rids.size() * sizeof(OutputHeader));
+  const size_t script_bytes = staging.size() - rids.size() * sizeof(OutputHeader);
+  scripts->resize(prev_script_size + script_bytes);
   auto staging_cursor = staging.begin();
   auto script_cursor = scripts->begin() + prev_script_size;
   int written = 0;
@@ -80,58 +68,149 @@ inline std::pair<std::span<const OutputId>, std::span<const OutputId>> Table::Sp
     script_cursor += script_length;
     ++written;
   }
+  Assert(staging_cursor == staging.end());
+  Assert(script_cursor == scripts->end());
   return written;
 }
 
-inline int Table::Fetch(std::span<const OutputId> ids, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts) const {
-  std::vector<uint8_t> staging(CountSizeBytes(ids));
+inline int Table::Fetch(std::span<const OutputId> rids, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts) const {
+  Assert(std::is_sorted(rids.begin(), rids.end(), [](OutputId lhs, OutputId rhs) { return IdCodec::Offset(lhs) < IdCodec::Offset(rhs); }));
+  if (rids.empty()) return 0;
 
-  std::span<const OutputId> segment_ids, tail_ids;
-  uint64_t segment_bytes = 0;
-  {
-    // Take a read lock on the tail to prevent a commit removing items from the tail after
-    // we got a value for segments_.SizeBytes() and before we fetched the items out of the tail.
-    std::shared_lock lock(tail_mutex_);
-    std::tie(segment_ids, tail_ids) = Split(ids);
-    segment_bytes = CountSizeBytes(segment_ids);
-    tail_.FetchData(tail_ids, staging.data() + segment_bytes, staging.size() - segment_bytes);
+  // Determines the total byte count for sizing the staging buffer.
+  size_t size = 0;
+  for (const OutputId id : rids) size += IdCodec::Length(id);
+
+  // Allocates the staging buffer.
+  std::vector<uint8_t> staging(size);
+
+  // Takes a snapshot of the tail now. Anything that's already been removed from the tail will be found in the main segments.
+  const auto snapshot = tail_.Snapshot();
+  Assert(IdCodec::Offset(rids.back()) < next_offset_);
+  if (snapshot->empty()) {
+    segments_.FetchData(rids, staging.data(), size);
+    return Unpack(rids, staging, outputs, scripts);
   }
-  // Since the segments are append-only, we don't need to lock here.
-  segments_.FetchData(segment_ids, staging.data(), segment_bytes);
-  return Unpack(ids, staging, outputs, scripts);
+  
+  // Initializes local variables for iterating over rids.
+  size_t begin_rid = 0;
+  size_t cursor = 0;
+  size_t block_bytes = 0;
+  auto next_block = snapshot->begin();
+  const BlockOutputs* cur_block = nullptr;
+  uint64_t next_boundary = snapshot->front()->BeginOffset();  // Start of first tail block.
+
+  // Dispatches one FetchData call to the table segments or to a tail block.
+  const auto dispatch_batch = [&](size_t rid) {
+    if (block_bytes > 0) {
+      const auto subspan = rids.subspan(begin_rid, rid - begin_rid);
+      uint8_t* dst = staging.data() + cursor;
+      if (cur_block == nullptr)
+        segments_.FetchData(subspan, dst, block_bytes);
+      else
+        cur_block->FetchData(subspan, dst, block_bytes);
+    }
+  };
+
+  // Iterates over the rid's and the tail blocks, dispatching to FetchData at the appropriate boundaries.
+  for (size_t i = 0; i < rids.size(); ++i) {
+    if (IdCodec::Offset(rids[i]) >= next_boundary) {
+      // Move on to the next block.
+      Assert(next_block != snapshot->end());
+      dispatch_batch(i);
+      cursor += block_bytes;
+      block_bytes = 0;
+      begin_rid = i;
+      cur_block = next_block->get();
+      ++next_block;
+      next_boundary = cur_block->EndOffset();
+    }
+    block_bytes += IdCodec::Length(rids[i]);
+  }
+  dispatch_batch(rids.size());
+  Assert(cursor + block_bytes == size);
+
+  // Unpacks the staged data into the output format.
+  return Unpack(rids, staging, outputs, scripts);
 }
 
 inline int Table::AppendOutputs(const protocol::Block& block, int height, TiledVector<OutputKV>* entries) {
+  // Calculates the number of bytes requires for this block's outputs.
+  size_t bytes = 0;
+  for (const auto tx : block.Transactions())
+    for (int i = 0; i < tx.OutputCount(); ++i)
+      bytes += sizeof(OutputHeader) + tx.PkScript(i).size();
+
+  // Builds a local buffer holding the outputs.
   int count = 0;
-  {
-    std::unique_lock lock(tail_mutex_);
-    for (const auto tx : block.Transactions()) {
-      for (int i = 0; i < tx.OutputCount(); ++i, ++count)
-        entries->PushBack(tail_.Append(tx, i, height));
+  std::vector<uint8_t> data;
+  data.reserve(bytes);
+  const uint64_t offset = next_offset_.fetch_add(bytes);
+  for (const auto tx : block.Transactions()) {
+    for (int output = 0; output < tx.OutputCount(); ++output, ++count) {
+      const protocol::OutPoint prevout{tx.GetHash(), static_cast<uint32_t>(output)};
+      const OutputHeader header{height, 0, tx.Output(output).value};
+      const auto pk_script = tx.PkScript(output);
+      const uint8_t* pheader = reinterpret_cast<const uint8_t*>(&header);
+      const uint64_t address = offset + data.size();
+      data.insert(data.end(), pheader, pheader + sizeof(header));
+      data.insert(data.end(), pk_script.begin(), pk_script.end());
+      const int length = sizeof(header) + std::ssize(pk_script);
+      const OutputKV kv{prevout, {height, OutputKV::Add}, IdCodec::Encode(address, length)};
+      entries->PushBack(kv);
     }
   }
+
+  // Publishes a new tail with the local buffer inserted in order.
+  {
+    auto edit = tail_.Edit();
+    auto it = std::lower_bound(edit->begin(), edit->end(), offset, [](const std::shared_ptr<const BlockOutputs>& ptr, uint64_t base) {
+      return ptr->BeginOffset() < base;
+    });
+    edit->insert(it, std::make_shared<BlockOutputs>(offset, height, std::move(data)));
+  }
+
+  // Enqueues a commit if the tail length is at least that of the mutable window size.
+  EnqueueReadyCommits();
+
+  // Returns the number of appended outputs.
   return count;
 }
 
 inline void Table::RemoveSince(int height) {
-  std::unique_lock lock(tail_mutex_);
-  tail_.EraseSince(height);
-}
-
-inline std::optional<int> Table::GetEarliestTailHeight() const {
-  std::shared_lock lock(tail_mutex_);
-  return tail_.GetEarliestHeight();
+  std::erase_if(*tail_.Edit(), [=](const std::shared_ptr<const BlockOutputs>& ptr) {
+    return ptr->Height() >= height;
+  });
 }
 
 inline void Table::CommitBefore(int height) {
-  const auto staging = tail_.CopyDataBefore(height);
-  segments_.Append(staging);
-  {
-    // This is where elements are removed from the tail. We need this not to overlap with the
-    // part of Fetch that is trying to read these entries from the tail.
-    std::unique_lock lock(tail_mutex_);
-    tail_.OnCommitBefore(height);
+  int blocks = 0;
+  try {
+    for (const auto& ptr : *tail_.Snapshot()) {
+      if (ptr->Height() >= height) break;
+      segments_.Append(ptr->Data());
+      ++blocks;
+    }
+  } catch (const std::exception& e) { 
+    LogError() << "Table::CommitBefore caught exception for height " << height 
+               << ": \"" << e.what() << "\".";
+  } catch (...) { 
+    LogError() << "Table::CommitBefore caught exception for height " << height << ".";
   }
+  tail_.EraseFront(blocks);
+}
+
+inline void Table::EnqueueReadyCommits() noexcept {
+  const auto snapshot = tail_.Snapshot();
+  if (snapshot->empty()) return;
+  const int height = snapshot->back()->Height();
+  if (snapshot->front()->Height() + mutable_window_ <= height)
+    flusher_.Enqueue(height + 1 - mutable_window_);
+}
+
+inline void Table::SetMutableWindow(int duration) noexcept {
+  mutable_window_ = duration;
+  EnqueueReadyCommits();
 }
 
 }  // namespace hornet::data::utxo

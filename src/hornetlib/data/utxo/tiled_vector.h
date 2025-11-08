@@ -4,6 +4,8 @@
 #include <iterator>
 #include <vector>
 
+#include "hornetlib/util/assert.h"
+
 namespace hornet::data::utxo {
 
 template <typename T>
@@ -66,12 +68,16 @@ class TiledVector {
   const T& operator[](size_t index) const {
     const size_t tile_index = index >> entry_bits_;
     const size_t entry_index = index & entry_mask_;
+    Assert(tile_index < tiles_.size());
+    Assert(entry_index < tiles_[tile_index].size());
     return tiles_[tile_index][entry_index];
   }
 
   T& operator[](size_t index) {
     const size_t tile_index = index >> entry_bits_;
     const size_t entry_index = index & entry_mask_;
+    Assert(tile_index < tiles_.size());
+    Assert(entry_index < tiles_[tile_index].size());
     return tiles_[tile_index][entry_index];
   }
 
