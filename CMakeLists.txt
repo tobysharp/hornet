@@ -12,13 +12,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# --- Use libc++ if compiling with Clang ---
-if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    message(STATUS "Clang detected: using libc++")
-    add_compile_options(-stdlib=libc++)
-    add_link_options(-stdlib=libc++)
-endif()
-
 # --- Set compile options that apply to ALL build types ---
 # (We put compiler-independent warnings here if possible, or use generator expressions)
 add_compile_options(-Wall -Wextra -Wpedantic -Wredundant-move -Wself-move)
@@ -32,6 +25,10 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
     add_compile_options(-O3 -DNDEBUG)
 endif()
+
+# Force external subprojects to use libc++
+set(GTEST_USE_LIBCXX ON CACHE BOOL "" FORCE)
+set(BENCHMARK_ENABLE_LIBCXX ON CACHE BOOL "" FORCE)
 
 add_subdirectory(extern/googletest)
 target_compile_options(gtest PRIVATE -Wno-deprecated-declarations)
