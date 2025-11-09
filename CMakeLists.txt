@@ -26,6 +26,10 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
     add_compile_options(-O3 -DNDEBUG)
 endif()
 
+# Force external subprojects to use libc++
+set(GTEST_USE_LIBCXX ON CACHE BOOL "" FORCE)
+set(BENCHMARK_ENABLE_LIBCXX ON CACHE BOOL "" FORCE)
+
 add_subdirectory(extern/googletest)
 target_compile_options(gtest PRIVATE -Wno-deprecated-declarations)
 set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "Disable benchmark tests")
