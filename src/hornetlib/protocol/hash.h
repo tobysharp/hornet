@@ -7,6 +7,7 @@
 #include <array>
 #include <cassert>
 #include <compare>
+#include <cstring>
 #include <iomanip>
 #include <ios>
 #include <ostream>
