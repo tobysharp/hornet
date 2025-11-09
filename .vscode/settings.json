@@ -130,6 +130,13 @@
     },
     "cmake.showCTestOutput": false,
     "cmake.showTestExplorer": false,
+
+    "testMate.cpp.test.advancedExecutables": [
+        {
+         "pattern": "${command:cmake.buildDirectory}/*_tests"
+        }
+    ],
+
     "[hornetdsl]": {
         "editor.fontFamily": "Fira Code, Menlo, Monaco, 'Courier New', monospace",
         "editor.fontSize": 14,
