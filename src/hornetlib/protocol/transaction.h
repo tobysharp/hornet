@@ -573,3 +573,5 @@ using TransactionIterator = TransactionIteratorT<TransactionData>;
 using TransactionConstIterator = TransactionIteratorT<const TransactionData>;
 
 }  // namespace hornet::protocol
+
+#include "hornetlib/protocol/txid.h"
