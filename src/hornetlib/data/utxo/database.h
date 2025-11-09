@@ -4,6 +4,8 @@
 #include "hornetlib/data/utxo/table.h"
 #include "hornetlib/data/utxo/tiled_vector.h"
 #include "hornetlib/data/utxo/types.h"
+#include "hornetlib/protocol/block.h"
+#include "hornetlib/protocol/transaction.h"
 
 #include <atomic>
 #include <cstdint>
