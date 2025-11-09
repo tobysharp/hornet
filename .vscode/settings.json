@@ -129,5 +129,13 @@
         "CMAKE_TOOLCHAIN_FILE": "${workspaceFolder}/clang20.toolchain.cmake"
     },
     "cmake.showCTestOutput": false,
-    "cmake.showTestExplorer": false
+    "cmake.showTestExplorer": false,
+
+    "testMate.cpp.test.advancedExecutables": [
+        {
+         "pattern": "${command:cmake.buildDirectory}/*_tests"
+        }
+    ]
+
+
 }
