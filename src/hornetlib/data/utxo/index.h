@@ -21,6 +21,7 @@ class Index {
   void Append(TiledVector<OutputKV>&& entries, int height);
   void EraseSince(int height);
 
+  static constexpr int GetMutableWindow();
   static void SortKeys(std::span<OutputKey> keys);
   static void SortEntries(TiledVector<OutputKV>* entries);
 
@@ -31,13 +32,6 @@ class Index {
   };
 
   static std::vector<QueryRange> SplitQuery(std::span<const OutputKey> keys, std::span<OutputId> ids, int splits);
-
-  // Called with each Append according to the mutability window.
-  void SetMutableSince(int height) {
-    // Set the merge policy for the last mutable age before immutability occurs.
-    for (auto it = ages_.rbegin(); it != ages_.rend(); ++it)
-      if ((*it)->IsMutable()) (*it)->RetainSince(height);
-  }
 
   void EnqueueMerge(int index) { compacter_.Enqueue(index); }
   void DoMerge(int index);
@@ -91,12 +85,27 @@ inline void Index::Append(TiledVector<OutputKV>&& entries, int height) {
   ages_[0]->Append(std::move(entries), {height, height + 1});
 }
 
+inline void Index::EraseSince(int height) {
+  for (const auto& ptr : ages_)
+    if (ptr->IsMutable()) ptr->EraseSince(height);
+}
+
 /* static */ inline void Index::SortKeys(std::span<OutputKey> keys) {
   ParallelSort(keys.begin(), keys.end());
 }
 
 /* static */ inline void Index::SortEntries(TiledVector<OutputKV>* entries) {
   ParallelSort(entries->begin(), entries->end());
+}
+
+/* static */ inline constexpr int Index::GetMutableWindow() { 
+  int count = 0;
+  int k = kMergeFanIn;
+  for (int i = 0; i < kMutableAges; ++i) {
+    count += k;
+    k *= kMergeFanIn;
+  }
+  return count;
 }
 
 }  // namespace hornet::data::utxo

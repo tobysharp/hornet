@@ -45,7 +45,7 @@ class Database {
   // will already have been flushed to the permanently committed store.
   void EraseSince(int height);
 
-  void SetUndoDuration(int blocks);
+  void SetMutableWindow(int heights);
 
  private:
   std::vector<uint8_t> Stage(std::span<const uint64_t> ids) const;
@@ -58,7 +58,6 @@ class Database {
 
   Table table_;
   Index index_;
-  //int undo_duration_;
   std::atomic_bool has_fatal_exception_ = false;
   std::exception_ptr fatal_exception_;
   mutable std::shared_mutex mutex_;
@@ -99,6 +98,12 @@ inline void Database::EraseSince(int height) {
   for (const auto tx : block.Transactions())
     for (int i = 0; i < tx.OutputCount(); ++i) 
       entries->PushBack(OutputKV::Tombstone({tx.GetHash(), static_cast<uint32_t>(i)}, height));
+}
+
+inline void Database::SetMutableWindow(int heights) {
+  if (heights > Index::GetMutableWindow()) 
+    util::ThrowInvalidArgument("SetMutableWindow: ", heights, " exceeds Index geometry.");
+  table_.SetMutableWindow(heights);
 }
 
 }  // namespace hornet::data::utxo
