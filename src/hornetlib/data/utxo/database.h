@@ -95,9 +95,13 @@ inline void Database::EraseSince(int height) {
 }
 
 /* static */ inline void Database::AppendSpends(const protocol::Block& block, int height, TiledVector<OutputKV>* entries) {
-  for (const auto tx : block.Transactions())
-    for (int i = 0; i < tx.OutputCount(); ++i) 
-      entries->PushBack(OutputKV::Tombstone({tx.GetHash(), static_cast<uint32_t>(i)}, height));
+  for (const auto tx : block.Transactions()) {
+    for (int i = 0; i < tx.InputCount(); ++i) {
+      const auto& prevout = tx.Input(i).previous_output;
+      if (!prevout.IsNull())
+        entries->PushBack(OutputKV::Tombstone(prevout, height));
+    }
+  }
 }
 
 inline void Database::SetMutableWindow(int heights) {
