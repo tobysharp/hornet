@@ -19,6 +19,8 @@ class SingleWriter {
     T* operator->() { return EnsureCopy(); }
     T& operator*() { return *EnsureCopy(); }
 
+    void Cancel() { copy_.reset(); }
+  
    private:
     T* EnsureCopy() {
       if (!copy_) copy_ = target_.Copy();
