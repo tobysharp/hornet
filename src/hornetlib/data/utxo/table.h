@@ -204,9 +204,15 @@ inline void Table::CommitBefore(int height) {
 inline void Table::EnqueueReadyCommits() noexcept {
   const auto snapshot = tail_.Snapshot();
   if (snapshot->empty()) return;
-  const int height = snapshot->back()->Height();
-  if (snapshot->front()->Height() + mutable_window_ <= height)
-    flusher_.Enqueue(height + 1 - mutable_window_);
+  int min_height = snapshot->front()->Height();
+  int max_height = min_height;
+  for (const auto& ptr : *snapshot) {
+    const int height = ptr->Height();
+    if (height < min_height) min_height = height;
+    if (height > max_height) max_height = height;
+  }
+  if (min_height + mutable_window_ <= max_height)
+    flusher_.Enqueue(max_height + 1 - mutable_window_);
 }
 
 inline void Table::SetMutableWindow(int duration) noexcept {

@@ -27,7 +27,6 @@ class MemoryAge {
   void Append(TiledVector<OutputKV>&& entries, const std::pair<int, int>& range);
   void Merge(MemoryAge* dst);
   void EraseSince(int height);
-  void RetainSince(int height);
   
   auto RunSnapshot(int index) const { return runs_[index]; }
 
@@ -40,7 +39,6 @@ class MemoryAge {
   const EnqueueFn enqueue_;
   int merged_to_ = 0;
   std::atomic_bool is_merging_ = false;
-  std::atomic<int> retain_height_ = std::numeric_limits<int>::max();
   AtomicVector<MemoryRun> runs_;
 };
 
@@ -65,17 +63,11 @@ inline bool MemoryAge::IsMergeReady() const {
     if (height_to != (*copy)[i]->HeightRange().first)
       return false;  // Non contiguous ranges don't merge.
     height_to = (*copy)[i]->HeightRange().second;
-    if (height_to > retain_height_)
-      return false;  // Must keep in this age for now.
     ++ready;
   }
   return ready >= merge_fan_in_;
 }
 
-inline void MemoryAge::RetainSince(int height) { 
-  retain_height_ = height; 
-  if (enqueue_ && IsMergeReady()) enqueue_(this); 
-}
 
 inline void MemoryAge::Append(TiledVector<OutputKV>&& entries, const std::pair<int, int>& range) {
   Append(MemoryRun{is_mutable_, std::move(entries), range});
@@ -107,11 +99,10 @@ inline void MemoryAge::Merge(MemoryAge* dst) {
     // that it's worth the effort to implement. Meanwhile, everything here is safe, and the only 
     // slightly sub-optimal contention is during Append vs Merge in Age 0.
     auto copy = runs_.Edit();
+    if (std::ssize(*copy) < merge_fan_in_) return copy.Cancel();
     std::sort(copy->begin(), copy->end(), [](const MemoryRunPtr& lhs, const MemoryRunPtr& rhs) {
       return lhs->HeightRange().first < rhs->HeightRange().first;
     });
-    if (std::ssize(*copy) < merge_fan_in_ || (*copy)[merge_fan_in_ - 1]->HeightRange().second > retain_height_)
-      return;
     const auto inputs = std::span{*copy}.first(merge_fan_in_);
     const int end_merge_height = inputs.back()->HeightRange().second;
     LogInfo("Merging upward heights [", inputs.front()->HeightRange().first, ", ", inputs.back()->HeightRange().second,

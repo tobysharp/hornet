@@ -192,34 +192,5 @@ TEST(MemoryAgeTest, TestEraseSince) {
   EXPECT_EQ(run->HeightRange(), std::make_pair(0, 1));
 }
 
-TEST(MemoryAgeTest, TestRetainSince) {
-  constexpr int kEntriesPerRun = 4;
-  MemoryAge age0{true, 2};  
- 
-  TiledVector<OutputKV> entries0, entries1;
-  for (int i = 0; i < kEntriesPerRun; ++i) {
-    entries0.PushBack(RandomAddKV(0));
-    entries1.PushBack(OutputKV::Tombstone(entries0[i].key, 1));
-  }
-  std::sort(entries0.begin(), entries0.end());
-  std::sort(entries1.begin(), entries1.end());
-  age0.Append(std::move(entries0), {0, 1});
-  age0.Append(std::move(entries1), {1, 2});
-
-  age0.RetainSince(1);
-  EXPECT_FALSE(age0.IsMergeReady());
-
-  TiledVector<OutputKV> entries2;
-  for (int i = 0; i < kEntriesPerRun; ++i) {
-    entries2.PushBack(RandomAddKV(2));
-  }
-  std::sort(entries2.begin(), entries2.end());
-  age0.Append(std::move(entries2), {2, 3});
-  EXPECT_FALSE(age0.IsMergeReady());
-
-  age0.RetainSince(2);
-  EXPECT_TRUE(age0.IsMergeReady());
-}
-
 }  // namespace
 }  // namespace hornet::data::utxo
