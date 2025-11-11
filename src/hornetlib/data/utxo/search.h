@@ -8,11 +8,12 @@ namespace hornet::data::utxo {
 
 template <typename RandomIt, typename T>
 inline RandomIt BinarySearchFirst(RandomIt begin, RandomIt end, const T& value, auto&& order, auto&& match) {
-  const auto it = std::lower_bound(begin, end, value, [&](const auto& lhs, const T& rhs) {
-    return order(lhs, rhs) == std::strong_ordering::less;
+  const auto start = std::lower_bound(begin, end, value, [&](const auto& lhs, const T& rhs) {
+          return order(lhs, rhs) == std::strong_ordering::less; 
   });
-  if (it == end || !match(value, *it)) return end;
-  return it;
+  for (auto it = start; it != end && order(*it, value) == std::strong_ordering::equal; ++it)
+    if (match(value, *it)) return it;
+  return end;
 }
 
 template <typename RandomIt, typename T>

@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include "hornetlib/data/utxo/codec.h"
+
 namespace hornet::data::utxo {
 namespace {
 
@@ -52,6 +54,36 @@ TEST(IndexTest, TestAppend) {
 
   EXPECT_EQ(result.funded, std::ssize(keys));
   EXPECT_EQ(result.spent, 0);
+}
+
+TEST(IndexTest, TestQuery) {
+  constexpr int kBytesPerRow = 40;
+  Index index;
+  // Block 0
+  {
+    TiledVector<OutputKV> entries;
+    entries.PushBack(OutputKV::Unspent(OutputKey{{0x01}, 0u}, 0, 0));
+    index.Append(std::move(entries), 0);
+  }
+  // Block 1
+  {
+    TiledVector<OutputKV> entries;
+    entries.PushBack(OutputKV::Tombstone(OutputKey{{0x01}, 0u}, 1));
+    entries.PushBack(OutputKV::Unspent(OutputKey{{0x02}, 0u}, 1, IdCodec::Encode(1 * kBytesPerRow, kBytesPerRow)));
+    entries.PushBack(OutputKV::Unspent(OutputKey{{0x02}, 1u}, 1, IdCodec::Encode(2 * kBytesPerRow, kBytesPerRow)));
+    entries.PushBack(OutputKV::Unspent(OutputKey{{0x02}, 2u}, 1, IdCodec::Encode(3 * kBytesPerRow, kBytesPerRow)));
+    entries.PushBack(OutputKV::Unspent(OutputKey{{0x02}, 3u}, 1, IdCodec::Encode(4 * kBytesPerRow, kBytesPerRow)));
+    index.Append(std::move(entries), 0);
+  }
+
+  std::vector<OutputKey> keys(4);
+  for (int i = 0; i < 4; ++i)
+    keys[i] = {{0x02}, static_cast<uint32_t>(i)};
+  std::vector<OutputId> rids(keys.size());
+  auto query = index.Query(keys, rids, 0, 2);
+
+  EXPECT_EQ(query.funded, std::ssize(keys));
+  EXPECT_EQ(query.spent, 0);
 }
 
 }  // namespace

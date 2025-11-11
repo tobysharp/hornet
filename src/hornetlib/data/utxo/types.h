@@ -57,9 +57,14 @@ struct OutputKV {
   }
   bool IsAdd() const { return data.op == Operation::Add; }
   bool IsDelete() const { return data.op == Operation::Delete; }
+  int Height() const { return data.height; }
 
   static OutputKV Tombstone(const OutputKey& key, int height) {
     return { key, { height, Delete }, kNullOutputId };
+  }
+
+  static OutputKV Unspent(const OutputKey& key, int height, OutputId rid) {
+    return { key, { height, Add }, rid };
   }
 
   OutputKey key;
