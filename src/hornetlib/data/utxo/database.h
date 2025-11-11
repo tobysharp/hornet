@@ -26,6 +26,9 @@ class Database {
   // window, i.e. the period during which outputs may be removed before being permanently committed.
   Database(const std::filesystem::path& folder);
 
+  static void SortKeys(std::span<OutputKey> keys);
+  static void SortIds(std::span<OutputId> rids);
+
   // Queries the whole database for each prevout and writes their IDs into the equivalent slots of
   // ids. Returns the number of matches found.
   int Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int before) const {
@@ -85,6 +88,14 @@ inline void Database::Append(const protocol::Block& block, int height) {
   AppendSpends(block, height, &entries);
   ParallelSort(entries.begin(), entries.end());
   index_.Append(std::move(entries), height);
+}
+
+/* static */ void Database::SortKeys(std::span<OutputKey> keys) {
+  Index::SortKeys(keys);
+}
+
+/* static */ void Database::SortIds(std::span<OutputId> rids) {
+  Table::SortIds(rids);
 }
 
 inline void Database::EraseSince(int height) {

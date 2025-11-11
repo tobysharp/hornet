@@ -466,6 +466,8 @@ class TransactionViewT {
       ResizeComponents(i, rhs.Witness(i).Size());
       for (int j = 0; j < Witness(i).Size(); ++j) SetWitnessScript(i, j, rhs.WitnessScript(i, j));
     }
+    detail_.txid = rhs.detail_.txid;
+    detail_.wtxid = rhs.detail_.wtxid;
   }
 
  protected:

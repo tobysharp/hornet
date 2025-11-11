@@ -11,6 +11,7 @@
 #include "hornetlib/data/utxo/atomic_vector.h"
 #include "hornetlib/data/utxo/block_outputs.h"
 #include "hornetlib/data/utxo/flusher.h"
+#include "hornetlib/data/utxo/parallel.h"
 #include "hornetlib/data/utxo/segments.h"
 #include "hornetlib/data/utxo/tiled_vector.h"
 #include "hornetlib/data/utxo/types.h"
@@ -21,6 +22,8 @@ namespace hornet::data::utxo {
 class Table {
  public:
   Table(const std::filesystem::path& folder);
+
+  static void SortIds(std::span<OutputId> rids);
 
   int Fetch(std::span<const OutputId> ids, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts) const;
   int AppendOutputs(const protocol::Block& block, int height, TiledVector<OutputKV>* entries);
@@ -46,6 +49,10 @@ inline Table::Table(const std::filesystem::path& folder) :
   mutable_window_(0),
   next_offset_(segments_.SizeBytes()),
   flusher_([this](int height) { CommitBefore(height); }) {
+}
+
+/* static */ inline void Table::SortIds(std::span<OutputId> rids) {
+  ParallelSort(rids.begin(), rids.end());
 }
 
 /* static */ inline int Table::Unpack(
@@ -94,15 +101,12 @@ inline int Table::Fetch(std::span<const OutputId> rids, std::span<OutputDetail> 
   }
   
   // Initializes local variables for iterating over rids.
-  size_t begin_rid = 0;
-  size_t cursor = 0;
-  size_t block_bytes = 0;
   auto next_block = snapshot->begin();
   const BlockOutputs* cur_block = nullptr;
   uint64_t next_boundary = snapshot->front()->BeginOffset();  // Start of first tail block.
 
   // Dispatches one FetchData call to the table segments or to a tail block.
-  const auto dispatch_batch = [&](size_t rid) {
+  const auto dispatch_batch = [&](size_t begin_rid, size_t rid, size_t cursor, size_t block_bytes) {
     if (block_bytes > 0) {
       const auto subspan = rids.subspan(begin_rid, rid - begin_rid);
       uint8_t* dst = staging.data() + cursor;
@@ -114,21 +118,28 @@ inline int Table::Fetch(std::span<const OutputId> rids, std::span<OutputDetail> 
   };
 
   // Iterates over the rid's and the tail blocks, dispatching to FetchData at the appropriate boundaries.
+  size_t begin_rid = 0;
+  size_t cursor = 0;
+  size_t block_bytes = 0;  
   for (size_t i = 0; i < rids.size(); ++i) {
-    if (IdCodec::Offset(rids[i]) >= next_boundary) {
-      // Move on to the next block.
-      Assert(next_block != snapshot->end());
-      dispatch_batch(i);
+    if (IdCodec::Offset(rids[i]) >= next_boundary)
+    {
+      // Dispatch to the newly completed block.
+      dispatch_batch(begin_rid, i, cursor, block_bytes);
       cursor += block_bytes;
       block_bytes = 0;
       begin_rid = i;
+    }
+    while (IdCodec::Offset(rids[i]) >= next_boundary) {
+      // Advance to the next block.
+      Assert(next_block != snapshot->end());
       cur_block = next_block->get();
       ++next_block;
       next_boundary = cur_block->EndOffset();
     }
     block_bytes += IdCodec::Length(rids[i]);
   }
-  dispatch_batch(rids.size());
+  dispatch_batch(begin_rid, rids.size(), cursor, block_bytes);
   Assert(cursor + block_bytes == size);
 
   // Unpacks the staged data into the output format.

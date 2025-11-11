@@ -19,16 +19,18 @@ inline void SortTogether(Iter1 begin, Iter1 end, Iter2 secondary) {
   // Cycle rotation.
   for (int dst = 0; dst < size; ++dst) {
     if (p[dst] == dst) continue;
-    int j = dst, src = p[j], next = p[src];
-    const auto ta = std::move(a[src]);
-    const auto tb = std::move(b[src]);
-    for (; src != dst; j = src, src = next, next = p[src]) {
+    auto va = std::move(a[dst]);
+    auto vb = std::move(b[dst]);
+
+    int j = dst;
+    for (int next = p[j]; next != dst; j = next, next = p[j]) {
       a[j] = std::move(a[next]);
       b[j] = std::move(b[next]);
-      p[j] = j;
+      p[j] = j;       // mark done
     }
-    a[j] = std::move(ta);
-    b[j] = std::move(tb);
+
+    a[j] = std::move(va);
+    b[j] = std::move(vb);
     p[j] = j;
   }
 }

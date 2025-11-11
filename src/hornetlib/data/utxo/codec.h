@@ -5,6 +5,9 @@
 
 namespace hornet::data::utxo {
 
+// Note that we intentionally store the offset in the high bits so that we can sort by offset
+// simply by doing a numerical sort on the encoded uint64_t.
+
 class IdCodec {
  public:
   struct Span {

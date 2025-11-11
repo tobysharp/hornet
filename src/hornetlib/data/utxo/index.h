@@ -6,7 +6,6 @@
 
 #include "hornetlib/data/utxo/compacter.h"
 #include "hornetlib/data/utxo/memory_age.h"
-#include "hornetlib/data/utxo/parallel.h"
 #include "hornetlib/data/utxo/tiled_vector.h"
 #include "hornetlib/data/utxo/types.h"
 
@@ -26,13 +25,6 @@ class Index {
   static void SortEntries(TiledVector<OutputKV>* entries);
 
  private:
-  struct QueryRange {
-    std::span<const OutputKey> keys;
-    std::span<OutputId> rids;
-  };
-
-  static std::vector<QueryRange> SplitQuery(std::span<const OutputKey> keys, std::span<OutputId> ids, int splits);
-
   void EnqueueMerge(int index) { compacter_.Enqueue(index); }
   void DoMerge(int index);
 
@@ -58,30 +50,15 @@ inline void Index::DoMerge(int index) {
 }
 
 inline QueryResult Index::Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int since, int before) const {
-  static constexpr int kRanges = 8;
-  return ParallelSum<QueryResult>(SplitQuery(keys, rids, kRanges), {}, [&](const QueryRange& range) {
-    return std::accumulate(ages_.begin(), ages_.end(), QueryResult{}, [&](const QueryResult& sum, const auto& age) {
-      // Note: If the queried age is immutable, it will throw an exception if height is within its data range.
-      return sum + age->Query(range.keys, range.rids, since, before);
-    });
+  Assert(std::is_sorted(keys.begin(), keys.end()));
+  return std::accumulate(ages_.begin(), ages_.end(), QueryResult{}, [&](const QueryResult& sum, const auto& age) {
+    // Note: If the queried age is immutable, it will throw an exception if height is within its data range.
+    return sum + age->Query(keys, rids, since, before);
   });
 }
 
-/* static */ inline std::vector<Index::QueryRange> Index::SplitQuery(std::span<const OutputKey> keys, std::span<OutputId> rids, int splits) {
-  Assert(keys.size() == rids.size());
-  std::vector<QueryRange> ranges(splits);
-  const size_t size = keys.size();
-  size_t cursor = 0;
-  for (int i = 0; i < splits; ++i)
-  {
-    const size_t next = (i + 1) * size / splits;
-    ranges[i] = { keys.subspan(cursor, next - cursor), rids.subspan(cursor, next - cursor) };
-    cursor = next;
-  }
-  return ranges;
-}
-
 inline void Index::Append(TiledVector<OutputKV>&& entries, int height) {
+  Assert(std::is_sorted(entries.begin(), entries.end()));
   ages_[0]->Append(std::move(entries), {height, height + 1});
 }
 

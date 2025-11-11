@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "hornetlib/data/utxo/directory.h"
+#include "hornetlib/data/utxo/parallel.h"
 #include "hornetlib/data/utxo/tiled_vector.h"
 #include "hornetlib/data/utxo/search.h"
 #include "hornetlib/data/utxo/types.h"
@@ -40,8 +41,15 @@ class MemoryRun {
 
   static MemoryRun Merge(bool is_mutable, std::span<std::shared_ptr<const MemoryRun>> inputs);
 
- protected:
+ private:
+   struct QueryRange {
+    std::span<const OutputKey> keys;
+    std::span<OutputId> rids;
+  };
+
   int AddEntry(const OutputKV& kv, int next_bucket);
+  static std::vector<QueryRange> SplitQuery(std::span<const OutputKey> keys, std::span<OutputId> rids, int splits);
+  QueryResult QueryImpl(std::span<const OutputKey> keys, std::span<OutputId> rids, int since, int before) const;
 
   static int ComputePrefixBits(int entries) {
     constexpr int kMinPrefixBits = 4;
@@ -72,6 +80,27 @@ inline QueryResult MemoryRun::Query(std::span<const OutputKey> keys, std::span<O
 
   // TODO: Check Bloom filter for quick exit.
 
+  static constexpr int kRanges = 8;
+  return ParallelSum<QueryResult>(SplitQuery(keys, rids, kRanges), {}, [&](const QueryRange& range) {
+    return QueryImpl(range.keys, range.rids, since, before);
+  });
+}
+
+/* static */ inline std::vector<MemoryRun::QueryRange> MemoryRun::SplitQuery(std::span<const OutputKey> keys, std::span<OutputId> rids, int splits) {
+  Assert(keys.size() == rids.size());
+  std::vector<QueryRange> ranges(splits);
+  const size_t size = keys.size();
+  size_t cursor = 0;
+  for (int i = 0; i < splits; ++i)
+  {
+    const size_t next = (i + 1) * size / splits;
+    ranges[i] = { keys.subspan(cursor, next - cursor), rids.subspan(cursor, next - cursor) };
+    cursor = next;
+  }
+  return ranges;
+}
+
+inline QueryResult MemoryRun::QueryImpl(std::span<const OutputKey> keys, std::span<OutputId> rids, int since, int before) const {
   int adds = 0, deletes = 0;
   const int size = std::ssize(keys);
   const auto order = [](const auto& lhs, const auto& rhs) { return lhs <=> rhs; };
