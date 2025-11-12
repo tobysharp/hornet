@@ -7,6 +7,7 @@
 #include <queue>
 #include <vector>
 
+#include "hornetlib/data/utxo/codec.h"
 #include "hornetlib/data/utxo/directory.h"
 #include "hornetlib/data/utxo/parallel.h"
 #include "hornetlib/data/utxo/tiled_vector.h"
@@ -81,7 +82,8 @@ inline QueryResult MemoryRun::Query(std::span<const OutputKey> keys, std::span<O
   // TODO: Check Bloom filter for quick exit.
 
   static constexpr int kRanges = 8;
-  return ParallelSum<QueryResult>(SplitQuery(keys, rids, kRanges), {}, [&](const QueryRange& range) {
+  return ParallelSum<QueryResult>(SplitQuery(keys, rids, kRanges), {}, [&](const QueryRange& range) -> QueryResult {
+    if (range.keys.empty()) return {};
     return QueryImpl(range.keys, range.rids, since, before);
   });
 }
@@ -101,12 +103,17 @@ inline QueryResult MemoryRun::Query(std::span<const OutputKey> keys, std::span<O
 }
 
 inline QueryResult MemoryRun::QueryImpl(std::span<const OutputKey> keys, std::span<OutputId> rids, int since, int before) const {
+#if UTXO_LOG
+  LogDebug() << "Searching in [" << since << ", " << before << "), run contains:";
+  for (const auto& kv : entries_)
+      LogDebug() << "   key: {" << kv.key.hash << ", " << kv.key.index << "}, height: " << kv.Height() << ", op: " << (kv.IsAdd() ? "+" : "-");
+  LogDebug() << "for query keys:";
+  for (int i = 0; i < std::ssize(keys); ++i)
+      LogDebug() << "   {" << keys[i].hash << ", " << keys[i].index << "}, rid.offset = " << IdCodec::Offset(rids[i]);
+#endif
+
   int adds = 0, deletes = 0;
   const int size = std::ssize(keys);
-  const auto order = [](const auto& lhs, const auto& rhs) { return lhs <=> rhs; };
-  const auto match = [since, before](const OutputKey& key, const OutputKV& entry) { 
-    return key == entry.key && since <= entry.data.height && entry.data.height < before;
-  };
   // We can skip over previously found rid's if we can guarantee we won't find a newer entry here
   // than one that was found previously, i.e. if we're searching from genesis.
   const bool skip_found = since == 0;
@@ -124,20 +131,23 @@ inline QueryResult MemoryRun::QueryImpl(std::span<const OutputKey> keys, std::sp
     upper = entries_.begin() + hi;                   // while upper bound resets for each key.
 
     // Tighten bounds again by galloping forwards until we pass over the key.
-    std::tie(lower, upper) = GallopingRangeSearch(lower, upper, key, order);
+    std::tie(lower, upper) = GallopingRangeSearch(lower, upper, key);
 
-    // Binary search within the tighter window for the first exact match, if any.
-    const auto found = BinarySearchFirst(lower, upper, key, order, match);
-
-    // Write the value to the output.
-    if (found != upper) {
-      if (found->data.op == OutputKV::Add) {
-        rids[index] = found->rid;
-        ++adds;
+    // Binary search in the remaining range for the first item that's ordered >= the query key.
+    auto it = std::lower_bound(lower, upper, key);
+  
+    // Check at most two equal-key entries (the lower_bound result and its immediate successor) for an exact match.
+    for (int i = 0; i < 2 && it != upper && it->key == key; ++i, ++it) {
+      if (since <= it->data.height && it->data.height < before) {
+        rids[index] = it->IsAdd() ? it->rid : kSpentOutputId;
+        ++(it->IsAdd() ? adds : deletes);
+        break;
       }
-      else ++deletes;
     }
   }
+#if UTXO_LOG
+  LogDebug() << "Found " << adds << " + and " << deletes << " -.";
+#endif
   return {adds, deletes};
 }
 

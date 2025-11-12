@@ -62,17 +62,17 @@ TEST(IndexTest, TestQuery) {
   // Block 0
   {
     TiledVector<OutputKV> entries;
-    entries.PushBack(OutputKV::Unspent(OutputKey{{0x01}, 0u}, 0, 0));
+    entries.PushBack(OutputKV::Funded(OutputKey{{0x01}, 0u}, 0, 0));
     index.Append(std::move(entries), 0);
   }
   // Block 1
   {
     TiledVector<OutputKV> entries;
-    entries.PushBack(OutputKV::Tombstone(OutputKey{{0x01}, 0u}, 1));
-    entries.PushBack(OutputKV::Unspent(OutputKey{{0x02}, 0u}, 1, IdCodec::Encode(1 * kBytesPerRow, kBytesPerRow)));
-    entries.PushBack(OutputKV::Unspent(OutputKey{{0x02}, 1u}, 1, IdCodec::Encode(2 * kBytesPerRow, kBytesPerRow)));
-    entries.PushBack(OutputKV::Unspent(OutputKey{{0x02}, 2u}, 1, IdCodec::Encode(3 * kBytesPerRow, kBytesPerRow)));
-    entries.PushBack(OutputKV::Unspent(OutputKey{{0x02}, 3u}, 1, IdCodec::Encode(4 * kBytesPerRow, kBytesPerRow)));
+    entries.PushBack(OutputKV::Spent(OutputKey{{0x01}, 0u}, 1));
+    entries.PushBack(OutputKV::Funded(OutputKey{{0x02}, 0u}, 1, IdCodec::Encode(1 * kBytesPerRow, kBytesPerRow)));
+    entries.PushBack(OutputKV::Funded(OutputKey{{0x02}, 1u}, 1, IdCodec::Encode(2 * kBytesPerRow, kBytesPerRow)));
+    entries.PushBack(OutputKV::Funded(OutputKey{{0x02}, 2u}, 1, IdCodec::Encode(3 * kBytesPerRow, kBytesPerRow)));
+    entries.PushBack(OutputKV::Funded(OutputKey{{0x02}, 3u}, 1, IdCodec::Encode(4 * kBytesPerRow, kBytesPerRow)));
     index.Append(std::move(entries), 0);
   }
 

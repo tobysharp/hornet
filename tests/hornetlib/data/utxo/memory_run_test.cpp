@@ -18,7 +18,7 @@ TEST(MemoryRunTest, TestCreate) {
   TiledVector<OutputKV> entries;
   entries.PushBack(Create(0x42, 1, height));
   entries.PushBack(Create(0x43, 2, height));
-  entries.PushBack(OutputKV::Tombstone({{0x43}}, height));
+  entries.PushBack(OutputKV::Spent({{0x43}}, height));
   entries.PushBack(Create(0xaf, 3, height));
 
   const MemoryRun run{true, std::move(entries), {height, height + 1}};
