@@ -38,9 +38,9 @@ TEST(MemoryAgeTest, TestAppendAge0Query) {
   TiledVector<OutputKV> entries;
   entries.PushBack(Create(0x42, 1, height));
   entries.PushBack(Create(0x43, 2, height));
-  entries.PushBack(OutputKV::Tombstone({{0x50}}, height));
+  entries.PushBack(OutputKV::Spent({{0x50}}, height));
   entries.PushBack(Create(0xaf, 3, height));
-  entries.PushBack(OutputKV::Tombstone({{0xff}}, height));
+  entries.PushBack(OutputKV::Spent({{0xff}}, height));
   EXPECT_TRUE(std::is_sorted(entries.begin(), entries.end()));
 
   age.Append(std::move(entries), {height, height + 1});
@@ -55,13 +55,13 @@ TEST(MemoryAgeTest, TestAppendAge0Query) {
   EXPECT_EQ(results.funded, 1);
   EXPECT_EQ(results.spent, 1);
   EXPECT_EQ(rids[0], 2);
-  EXPECT_EQ(rids[1], kNullOutputId);
+  EXPECT_EQ(rids[1], kSpentOutputId);
 }
 
 TEST(MemoryAgeTest, TestLaterSortedBeforeEarlier) {
   TiledVector<OutputKV> entries;
   entries.PushBack(Create(0x42, 10, 20));
-  entries.PushBack(OutputKV::Tombstone({{0x42}}, 21));
+  entries.PushBack(OutputKV::Spent({{0x42}}, 21));
   EXPECT_LT(entries[1], entries[0]);
   EXPECT_FALSE(std::is_sorted(entries.begin(), entries.end()));
 }
@@ -71,22 +71,22 @@ TEST(MemoryAgeTest, TestAddAndDeleteInMutableAge) {
   EXPECT_TRUE(age.IsMutable());
 
   TiledVector<OutputKV> entries;
-  entries.PushBack(OutputKV::Tombstone({{0x42}}, 21));
-  entries.PushBack(Create(0x42, 10, 20));
+  entries.PushBack(OutputKV::Spent({{0x42}}, 21));
+  entries.PushBack(OutputKV::Funded({{0x42}}, 20, 10));
   EXPECT_TRUE(std::is_sorted(entries.begin(), entries.end()));
 
   age.Append(MemoryRun{true, std::move(entries), {20, 22}});
   EXPECT_EQ(age.Size(), 1);
 
   std::vector<OutputKey> keys;
-  keys.push_back({ {0x42}, 0 });
+  keys.push_back({{0x42}});
 
   std::vector<OutputId> rids(keys.size(), kNullOutputId);
   const auto results = age.Query(keys, rids, 0, 22);
 
   EXPECT_EQ(results.funded, 0);
   EXPECT_EQ(results.spent, 1);
-  EXPECT_EQ(rids[0], kNullOutputId);
+  EXPECT_EQ(rids[0], kSpentOutputId);
 }
 
 TEST(MemoryAgeTest, TestMergeMutableToMutable) {
@@ -121,7 +121,7 @@ TEST(MemoryAgeTest, TestMergeMutableToMutableWithDeletes) {
   TiledVector<OutputKV> entries0, entries1;
   for (int i = 0; i < kEntriesPerRun; ++i) {
     entries0.PushBack(RandomAddKV(0));
-    entries1.PushBack(OutputKV::Tombstone(entries0[i].key, 1));
+    entries1.PushBack(OutputKV::Spent(entries0[i].key, 1));
   }
   std::sort(entries0.begin(), entries0.end());
   std::sort(entries1.begin(), entries1.end());
@@ -149,7 +149,7 @@ TEST(MemoryAgeTest, TestMergeMutableToImmutableWithDeletes) {
   TiledVector<OutputKV> entries0, entries1;
   for (int i = 0; i < kEntriesPerRun; ++i) {
     entries0.PushBack(RandomAddKV(0));
-    entries1.PushBack(OutputKV::Tombstone(entries0[i].key, 1));
+    entries1.PushBack(OutputKV::Spent(entries0[i].key, 1));
   }
   std::sort(entries0.begin(), entries0.end());
   std::sort(entries1.begin(), entries1.end());
@@ -177,7 +177,7 @@ TEST(MemoryAgeTest, TestEraseSince) {
   TiledVector<OutputKV> entries;
   for (int i = 0; i < kEntriesPerRun; ++i) {
     entries.PushBack(RandomAddKV(0));
-    entries.PushBack(OutputKV::Tombstone(entries[i].key, 1));
+    entries.PushBack(OutputKV::Spent(entries[i].key, 1));
   }
   std::sort(entries.begin(), entries.end());
   age0.Append(std::move(entries), {0, 2});

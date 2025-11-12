@@ -7,6 +7,8 @@
 #include "hornetlib/protocol/transaction.h"
 #include "hornetlib/util/subarray.h"
 
+// #define UTXO_LOG 1
+
 namespace hornet::data::utxo {
 
 struct OutputHeader {
@@ -35,6 +37,7 @@ using OutputKey = protocol::OutPoint;
 using OutputId = uint64_t;
 
 static constexpr OutputId kNullOutputId = 0;
+static constexpr OutputId kSpentOutputId = -1;
 
 struct OutputKV {
   enum Operation { Delete = -1, Add = 0 };
@@ -59,11 +62,11 @@ struct OutputKV {
   bool IsDelete() const { return data.op == Operation::Delete; }
   int Height() const { return data.height; }
 
-  static OutputKV Tombstone(const OutputKey& key, int height) {
+  static OutputKV Spent(const OutputKey& key, int height) {
     return { key, { height, Delete }, kNullOutputId };
   }
 
-  static OutputKV Unspent(const OutputKey& key, int height, OutputId rid) {
+  static OutputKV Funded(const OutputKey& key, int height, OutputId rid) {
     return { key, { height, Add }, rid };
   }
 

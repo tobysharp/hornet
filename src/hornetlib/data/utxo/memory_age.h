@@ -74,7 +74,9 @@ inline void MemoryAge::Append(TiledVector<OutputKV>&& entries, const std::pair<i
 }
 
 inline void MemoryAge::Append(MemoryRun&& run) {
-  LogInfo("Appending run #", runs_.Size(), " with ", run.Size(), " entries, heights [", run.HeightRange().first, ", ", run.HeightRange().second, ").");
+#if UTXO_LOG
+  LogDebug("Appending run #", runs_.Size(), " with ", run.Size(), " entries, heights [", run.HeightRange().first, ", ", run.HeightRange().second, ").");
+#endif
   runs_.EmplaceBack(std::move(run));  // Publishes the new run set immediately.
   if (enqueue_ && IsMergeReady()) enqueue_(this);
 }
@@ -105,8 +107,10 @@ inline void MemoryAge::Merge(MemoryAge* dst) {
     });
     const auto inputs = std::span{*copy}.first(merge_fan_in_);
     const int end_merge_height = inputs.back()->HeightRange().second;
-    LogInfo("Merging upward heights [", inputs.front()->HeightRange().first, ", ", inputs.back()->HeightRange().second,
+#if UTXO_LOG
+    LogDebug("Merging upward heights [", inputs.front()->HeightRange().first, ", ", inputs.back()->HeightRange().second,
             "), remaining ", copy->size() - inputs.size(), " runs.");
+#endif
     dst->Append(MemoryRun::Merge(dst->is_mutable_, inputs));
     copy->erase(copy->begin(), copy->begin() + merge_fan_in_);
     merged_to_ = end_merge_height;

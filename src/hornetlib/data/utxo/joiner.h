@@ -52,8 +52,11 @@ inline void SpendJoiner::Parse() {
   for (int i = 0; i < block_->GetTransactionCount(); ++i) {
     const auto tx = block->Transaction(i);
     for (int j = 0; j < tx.InputCount(); ++j) {
-      inputs_.push_back({i, j});
-      keys_.push_back(tx.Input(j).previous_output);
+      const auto& prevout = tx.Input(j).previous_output;
+      if (!prevout.IsNull()) {
+        inputs_.push_back({i, j});
+        keys_.push_back(tx.Input(j).previous_output);
+      }
     }
   }
   // Sort by keys, ready for query.

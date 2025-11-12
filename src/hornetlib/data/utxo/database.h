@@ -26,7 +26,10 @@ class Database {
   // window, i.e. the period during which outputs may be removed before being permanently committed.
   Database(const std::filesystem::path& folder);
 
+  static std::vector<OutputKey> ExtractSpentKeys(const protocol::Block& block);
+
   static void SortKeys(std::span<OutputKey> keys);
+
   static void SortIds(std::span<OutputId> rids);
 
   // Queries the whole database for each prevout and writes their IDs into the equivalent slots of
@@ -69,6 +72,24 @@ class Database {
 inline Database::Database(const std::filesystem::path& folder)
     : table_(folder) {}
 
+/* static */ inline std::vector<OutputKey> Database::ExtractSpentKeys(const protocol::Block& block) {
+  // Sizing pre-pass for single allocation.
+  size_t size = 0;
+  for (const auto tx : block.Transactions())
+    for (const auto& input : tx.Inputs())
+      size += !input.previous_output.IsNull();
+
+  // Key extraction pass.
+  std::vector<OutputKey> keys(size);
+  auto pkey = keys.begin();
+  for (const auto tx : block.Transactions())
+    for (const auto& input : tx.Inputs())
+      if (!input.previous_output.IsNull())
+        *pkey++ = input.previous_output;
+
+  return keys;  // Returns unsorted.
+}
+
 inline QueryResult Database::Query(std::span<const OutputKey> keys,
                            std::span<OutputId> rids, int since, int before) const {
   CheckRethrowFatal();
@@ -86,6 +107,10 @@ inline void Database::Append(const protocol::Block& block, int height) {
   auto entries = index_.MakeAppendBuffer();
   table_.AppendOutputs(block, height, &entries);
   AppendSpends(block, height, &entries);
+#if UTXO_LOG
+  for (const auto& entry : entries)
+    LogDebug() << "Append {" << entry.key.hash << ", " << entry.key.index << "}, height " << entry.Height() << ", " << (entry.IsAdd() ? "+" : "-");
+#endif
   ParallelSort(entries.begin(), entries.end());
   index_.Append(std::move(entries), height);
 }
@@ -110,7 +135,7 @@ inline void Database::EraseSince(int height) {
     for (int i = 0; i < tx.InputCount(); ++i) {
       const auto& prevout = tx.Input(i).previous_output;
       if (!prevout.IsNull())
-        entries->PushBack(OutputKV::Tombstone(prevout, height));
+        entries->PushBack(OutputKV::Spent(prevout, height));
     }
   }
 }

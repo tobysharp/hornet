@@ -42,10 +42,16 @@ struct Hash : public std::array<uint8_t, 32> {
   std::strong_ordering operator<=>(const Hash& b) const {
     return std::memcmp(data(), b.data(), sizeof(Hash)) <=> 0;
   }
+  bool operator ==(const Hash& rhs) const {
+    return (*this <=> rhs) == 0;
+  }
+  bool operator !=(const Hash& rhs) const {
+    return (*this <=> rhs) != 0;
+  }
   friend std::ostream& operator <<(std::ostream& os, const protocol::Hash& hash) {
     os << "\"";
     for (int i = sizeof(hash) - 1; i >= 0; --i)
-      os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(hash[i]);
+      os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(hash[i]) << std::dec;
     os << "\"";
     return os;
   }
