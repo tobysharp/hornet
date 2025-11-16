@@ -40,7 +40,7 @@ class MemoryRun {
   auto Begin() const { return entries_.begin(); }
   auto End() const { return entries_.end(); }
 
-  static MemoryRun Merge(bool is_mutable, std::span<std::shared_ptr<const MemoryRun>> inputs);
+  static MemoryRun Merge(bool is_mutable, std::span<const std::shared_ptr<const MemoryRun>> inputs);
 
  private:
    struct QueryRange {
@@ -116,12 +116,12 @@ inline QueryResult MemoryRun::QueryImpl(std::span<const OutputKey> keys, std::sp
   const int size = std::ssize(keys);
   // We can skip over previously found rid's if we can guarantee we won't find a newer entry here
   // than one that was found previously, i.e. if we're searching from genesis.
-  const bool skip_found = since == 0;
+  const bool overwrite = since > 0;
   auto lower = entries_.begin(), upper = entries_.end();
   for (int index = 0; index < size; ++index) {
-    // Skip queries that are filtered out by the output destination.
-    if (skip_found && rids[index] != kNullOutputId) continue;
-
+    if (rids[index] == kSpentOutputId || (!overwrite && rids[index] != kNullOutputId))
+      continue;  // If the key was already found spent or we're not overwriting previous rid's, we can continue.
+    
     // Get the key for this query.
     const auto& key = keys[index];
     
@@ -138,7 +138,8 @@ inline QueryResult MemoryRun::QueryImpl(std::span<const OutputKey> keys, std::sp
   
     // Check at most two equal-key entries (the lower_bound result and its immediate successor) for an exact match.
     for (int i = 0; i < 2 && it != upper && it->key == key; ++i, ++it) {
-      if (since <= it->data.height && it->data.height < before) {
+      if ((since <= it->data.height && it->data.height < before)) {
+        if (rids[index] != kNullOutputId) --adds;  // A Delete overwriting an Add.
         rids[index] = it->IsAdd() ? it->rid : kSpentOutputId;
         ++(it->IsAdd() ? adds : deletes);
         break;
@@ -171,7 +172,7 @@ inline int MemoryRun::AddEntry(const OutputKV& kv, int bucket) {
 }
 
 // Multi-way streaming merge of sorted input runs to a single sorted output run.
-inline MemoryRun MemoryRun::Merge(bool is_mutable, std::span<std::shared_ptr<const MemoryRun>> inputs) {
+/* static */ inline MemoryRun MemoryRun::Merge(bool is_mutable, std::span<const std::shared_ptr<const MemoryRun>> inputs) {
   using Iterator = typename decltype(entries_)::ConstIterator;
   struct Cursor {
     Iterator current, end;

@@ -174,13 +174,9 @@ inline int Table::AppendOutputs(const protocol::Block& block, int height, TiledV
   }
 
   // Publishes a new tail with the local buffer inserted in order.
-  {
-    auto edit = tail_.Edit();
-    auto it = std::lower_bound(edit->begin(), edit->end(), offset, [](const std::shared_ptr<const BlockOutputs>& ptr, uint64_t base) {
-      return ptr->BeginOffset() < base;
-    });
-    edit->insert(it, std::make_shared<BlockOutputs>(offset, height, std::move(data)));
-  }
+  tail_.Insert(BlockOutputs{offset, height, std::move(data)}, [](const BlockOutputs& lhs, const BlockOutputs& rhs) {
+    return lhs.BeginOffset() < rhs.BeginOffset();
+  });
 
   // Enqueues a commit if the tail length is at least that of the mutable window size.
   EnqueueReadyCommits();

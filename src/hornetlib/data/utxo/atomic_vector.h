@@ -45,6 +45,14 @@ class AtomicVector {
     Edit()->emplace_back(std::make_shared<T>(std::forward<U>(obj)));
   }
 
+  void Insert(T&& obj, auto&& compare) {
+    auto edit = Edit();
+    const auto it = std::lower_bound(edit->begin(), edit->end(), obj, [&](const Ptr& lhs, const T& rhs) {
+      return compare(*lhs, rhs);
+    });
+    edit->insert(it, std::make_shared<T>(std::move(obj)));
+  }
+
   void EraseFront(int count) {
     if (count <= 0) return;
     auto edit = Edit();

@@ -81,7 +81,7 @@ TEST(DatabaseTest, TestValidateUnspent_InOrderSerial) {
   }
 }
 
-TEST(DatabaseTest, TestValidateFetch_InOrderSerial) {
+TEST(DatabaseTest, TestPipeline_InOrderSerial) {
   constexpr int kLength = 100;
   constexpr int kMaxTransactions = 10;
 
@@ -127,8 +127,237 @@ TEST(DatabaseTest, TestValidateFetch_InOrderSerial) {
     // Update the UTXO database.
     database.Append(block, height);
 
+    // After appending the new block, all the keys that were previously funded should now be spent.
+    std::fill(rids.begin(), rids.end(), kNullOutputId);
+    queried = database.Query(keys, rids, 0, height + 1);
+    EXPECT_EQ(queried.funded, 0);
+    EXPECT_EQ(queried.spent, keys.size());
+    for (OutputId rid : rids) EXPECT_EQ(rid, kSpentOutputId);
+
     // Update the test chain.
     chain.Append(std::move(block));
+  }
+}
+
+TEST(DatabaseTest, TestPipeline_PreemptiveSerial) {
+  constexpr int kLength = 100;
+  constexpr int kMaxTransactions = 10;
+
+  test::TempFolder dir;
+  Database database{dir.Path()};
+
+  test::Blockchain chain;
+  for (int height = 0; height < kLength; ++height) {
+    // Generate a new block to propose for the test chain.
+    auto block = chain.Sample(kMaxTransactions);
+
+    // Start by preemptively appending the block the UTXO database, 
+    // anticipating that all spends will prove valid.
+    database.Append(block, height);
+    
+    // Query all input prevouts at the previous height to check they were indeed unspent.
+    std::vector<OutputKey> keys = database.ExtractSpentKeys(block);
+    std::vector<OutputId> rids(keys.size(), kNullOutputId);
+    int64_t total_spend = 0;  // Total block output
+    for (const auto tx : block.Transactions())
+      for (const auto& output : tx.Outputs())
+        total_spend += output.value;
+    database.SortKeys(keys);
+    auto queried = database.Query(keys, rids, 0, height);
+    EXPECT_EQ(queried.funded, keys.size());
+    EXPECT_EQ(queried.spent, 0);
+    for (OutputId rid : rids) EXPECT_NE(rid, kNullOutputId);
+
+    // Fetch all funding output data and validate.
+    std::vector<OutputDetail> outputs(keys.size());
+    std::vector<uint8_t> scripts;
+    database.SortIds(rids);
+    int fetched = database.Fetch(rids, outputs, &scripts);
+    EXPECT_EQ(fetched, rids.size());
+    int64_t total_funding = 0;
+    for (const auto& detail : outputs) {
+      total_funding += detail.header.amount;
+      EXPECT_LT(detail.header.height, height);
+      const auto pk_script = detail.script.Span(scripts);
+      EXPECT_EQ(pk_script.size(), 24u);
+      EXPECT_EQ(pk_script.front(), 0x01);
+      EXPECT_EQ(pk_script.back(), 0x18);
+    }
+    int64_t supply_growth = total_spend - total_funding;
+    EXPECT_EQ(supply_growth, 50ll * 100'000'000);  // Every test block adds 50 BTC to supply.
+
+    // After appending the new block, all the keys that were previously funded should now be spent.
+    std::fill(rids.begin(), rids.end(), kNullOutputId);
+    queried = database.Query(keys, rids, 0, height + 1);
+    EXPECT_EQ(queried.funded, 0);
+    EXPECT_EQ(queried.spent, keys.size());
+    for (OutputId rid : rids) EXPECT_EQ(rid, kSpentOutputId);
+
+    // Update the test chain.
+    chain.Append(std::move(block));
+  }
+}
+
+TEST(DatabaseTest, TestAppend_OutOfOrderSerial) {
+  constexpr int kLength = 100;
+  constexpr int kMaxTransactions = 10;
+
+  test::TempFolder dir;
+  Database database{dir.Path()};
+
+  // Create the chain as though known to a peer.
+  test::Blockchain chain;
+  for (int height = 0; height < kLength; ++height)
+    chain.Append(chain.Sample(kMaxTransactions));
+
+  for (int i = 0; i < kLength; i += 2) {
+    database.Append(chain[i + 1], i + 1);
+    database.Append(chain[i], i);
+  }
+}
+
+TEST(DatabaseTest, TestPipeline_UnorderedSerial) {
+  constexpr int kLength = 100;
+  constexpr int kMaxTransactions = 10;
+
+  test::TempFolder dir;
+  Database database{dir.Path()};
+
+  // Create the chain as though known to a peer.
+  test::Blockchain chain;
+  for (int height = 0; height < kLength; ++height)
+    chain.Append(chain.Sample(kMaxTransactions));
+
+  std::vector<OutputKey> prev_keys;
+  std::vector<OutputId> prev_rids;
+  bool incomplete = false;
+  QueryResult prev_query;
+
+  for (int i = 0; i < kLength; i += 2) {
+    // Usualy we would append and process the even block (0) followed by the odd block (1).
+    // In this test we process them in the opposite order to check out-of-order operation.
+    
+    // Block i+1 arrives before block i, and we process it as far as possible.
+    {
+      const int height = i + 1;
+      const auto& block = chain[height];
+
+      // Start by preemptively appending the block the UTXO database, 
+      // anticipating that all spends will prove valid.
+      database.Append(block, height);
+    
+      // Partial query all input prevouts before height - 1 to check they were indeed unspent.
+      std::vector<OutputKey> keys = database.ExtractSpentKeys(block);
+      std::vector<OutputId> rids(keys.size(), kNullOutputId);
+      database.SortKeys(keys);
+      auto queried = database.Query(keys, rids, 0, height - 1);
+      EXPECT_LE(queried.funded, keys.size());
+      EXPECT_EQ(queried.spent, 0);
+
+      // Cannot process block i+1 further until block i arrives. Save for later.
+      incomplete = queried.funded < std::ssize(keys);
+      prev_keys = std::move(keys);
+      prev_rids = std::move(rids);
+      prev_query = std::move(queried);
+    }
+
+    // Later, block i arrives out of order.
+    {
+      const int height = i;
+      const auto& block = chain[height];
+
+      // Preemptive out-of-order append.
+      database.Append(block, height);
+      
+      // Full query since we have all contiguous blocks up to this point.
+      std::vector<OutputKey> keys = database.ExtractSpentKeys(block);
+      std::vector<OutputId> rids(keys.size(), kNullOutputId);
+      int64_t total_spend = 0;  // Total block output
+      for (const auto tx : block.Transactions())
+        for (const auto& output : tx.Outputs())
+          total_spend += output.value;
+      database.SortKeys(keys);
+      auto queried = database.Query(keys, rids, 0, height);
+      EXPECT_EQ(queried.funded, keys.size());
+      EXPECT_EQ(queried.spent, 0);
+    
+      // Fetch all funding output data and validate.
+      std::vector<OutputDetail> outputs(keys.size());
+      std::vector<uint8_t> scripts;
+      database.SortIds(rids);
+      int fetched = database.Fetch(rids, outputs, &scripts);
+      EXPECT_EQ(fetched, rids.size());
+      int64_t total_funding = 0;
+      for (const auto& detail : outputs) {
+        total_funding += detail.header.amount;
+        EXPECT_LT(detail.header.height, height);
+        const auto pk_script = detail.script.Span(scripts);
+        EXPECT_EQ(pk_script.size(), 24u);
+        EXPECT_EQ(pk_script.front(), 0x01);
+        EXPECT_EQ(pk_script.back(), 0x18);
+      }
+      int64_t supply_growth = total_spend - total_funding;
+      EXPECT_EQ(supply_growth, 50ll * 100'000'000);  // Every test block adds 50 BTC to supply.
+
+      // After appending the new block, all the keys that were previously funded should now be spent.
+      std::fill(rids.begin(), rids.end(), kNullOutputId);
+      queried = database.Query(keys, rids, 0, height + 1);
+      EXPECT_EQ(queried.funded, 0);
+      EXPECT_EQ(queried.spent, keys.size());
+      for (OutputId rid : rids) EXPECT_EQ(rid, kSpentOutputId);
+    }
+
+    // Finally, we can return to finishing the odd height that was begun first.
+    {
+      int height = i + 1;
+      const auto& block = chain[height];
+      
+      std::vector<OutputKey> keys(std::move(prev_keys));
+      std::vector<OutputId> rids(std::move(prev_rids));
+      QueryResult queried = prev_query;
+
+      // Remainder query.
+      if (incomplete) {
+        queried += database.Query(keys, rids, height - 1, height);
+        EXPECT_EQ(queried.funded, keys.size());
+        EXPECT_EQ(queried.spent, 0);
+      }
+
+      // All rid's should now be valid for this block's funding.
+      for (OutputId rid : rids) {
+        EXPECT_NE(rid, kNullOutputId);
+        EXPECT_NE(rid, kSpentOutputId);
+      }
+
+      // Fetch all funding output data and validate.
+      std::vector<OutputDetail> outputs(keys.size());
+      std::vector<uint8_t> scripts;
+      database.SortIds(rids);
+      int fetched = database.Fetch(rids, outputs, &scripts);
+      EXPECT_EQ(fetched, rids.size());
+      int64_t total_funding = 0;
+      for (const auto& detail : outputs) {
+        total_funding += detail.header.amount;
+        EXPECT_LT(detail.header.height, height);
+        const auto pk_script = detail.script.Span(scripts);
+        EXPECT_EQ(pk_script.size(), 24u);
+        EXPECT_EQ(pk_script.front(), 0x01);
+        EXPECT_EQ(pk_script.back(), 0x18);
+      }
+      int64_t total_spend = 0;  // Total block output
+      for (const auto tx : block.Transactions())
+        for (const auto& output : tx.Outputs())
+          total_spend += output.value;
+      int64_t supply_growth = total_spend - total_funding;
+      EXPECT_EQ(supply_growth, 50ll * 100'000'000);  // Every test block adds 50 BTC to supply.
+
+      // After appending the new block, all the keys that were previously funded should now be spent.
+      std::fill(rids.begin(), rids.end(), kNullOutputId);
+      queried = database.Query(keys, rids, 0, height + 1);
+      EXPECT_EQ(queried.funded, 0);
+      EXPECT_EQ(queried.spent, keys.size());
+      for (OutputId rid : rids) EXPECT_EQ(rid, kSpentOutputId);
+    }
   }
 }
 

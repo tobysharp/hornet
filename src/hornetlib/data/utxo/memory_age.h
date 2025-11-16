@@ -37,8 +37,8 @@ class MemoryAge {
   const bool is_mutable_ = false;
   const int merge_fan_in_ = 8;
   const EnqueueFn enqueue_;
-  int merged_to_ = 0;
-  std::atomic_bool is_merging_ = false;
+  std::atomic<int> merged_to_ = 0;
+  std::atomic<bool> is_merging_ = false;
   AtomicVector<MemoryRun> runs_;
 };
 
@@ -53,10 +53,10 @@ inline QueryResult MemoryAge::Query(std::span<const OutputKey> keys, std::span<O
 }
 
 inline bool MemoryAge::IsMergeReady() const {
-  const auto copy = runs_.Copy();
-  std::sort(copy->begin(), copy->end(), [](const MemoryRunPtr& lhs, const MemoryRunPtr& rhs) {
+  const auto copy = runs_.Snapshot();
+  Assert(std::is_sorted(copy->begin(), copy->end(), [](const MemoryRunPtr& lhs, const MemoryRunPtr& rhs) {
     return lhs->HeightRange().first < rhs->HeightRange().first;
-  });
+  }));
   int ready = 0;
   int height_to = merged_to_;
   for (int i = 0; i < std::min<int>(merge_fan_in_, std::ssize(*copy)); ++i) {
@@ -68,7 +68,6 @@ inline bool MemoryAge::IsMergeReady() const {
   return ready >= merge_fan_in_;
 }
 
-
 inline void MemoryAge::Append(TiledVector<OutputKV>&& entries, const std::pair<int, int>& range) {
   Append(MemoryRun{is_mutable_, std::move(entries), range});
 }
@@ -77,7 +76,9 @@ inline void MemoryAge::Append(MemoryRun&& run) {
 #if UTXO_LOG
   LogDebug("Appending run #", runs_.Size(), " with ", run.Size(), " entries, heights [", run.HeightRange().first, ", ", run.HeightRange().second, ").");
 #endif
-  runs_.EmplaceBack(std::move(run));  // Publishes the new run set immediately.
+  runs_.Insert(std::move(run), [](const auto& lhs, const auto& rhs) {
+    return lhs.HeightRange().first < rhs.HeightRange().first;
+  });
   if (enqueue_ && IsMergeReady()) enqueue_(this);
 }
 
@@ -90,21 +91,20 @@ inline void MemoryAge::Merge(MemoryAge* dst) {
   {
     struct Guard { MemoryAge* a; ~Guard() { a->is_merging_ = false; } } guard{this};
 
-    // NOTE: Here we take a copy-on-write lock, and hold it until the end of this function.
-    // In age 0, that excludes Append from completing concurrently. That's not terrible, because
-    // age 0 is small, with at most ~3 MiB data for this merge, which only runs once per merge_fan_in
-    // Append calls. But later, if we see in profiling that the lock contention is non-zero, we can
-    // improve the situation by taking a Snapshot here and only calling Edit when we do the final erase.
-    // That in turn requires us to guarantee that EraseSince cannot be called concurrently, which
-    // means we would have to pause the compacter thread when the shard's EraseSince method is called.
-    // Since that's more complexity for a probably marginal return, we'll wait until profiling indicates
-    // that it's worth the effort to implement. Meanwhile, everything here is safe, and the only 
-    // slightly sub-optimal contention is during Append vs Merge in Age 0.
-    auto copy = runs_.Edit();
-    if (std::ssize(*copy) < merge_fan_in_) return copy.Cancel();
-    std::sort(copy->begin(), copy->end(), [](const MemoryRunPtr& lhs, const MemoryRunPtr& rhs) {
+    // NOTE: Here we could take a copy-on-write lock, and hold it until the end of this function.
+    // However, observe that we only perform the merge and publish a change to runs_ if we have enough
+    // contiguous data at the front of the runs_ vector. Holes are not permitted in merged runs.
+    // Any concurrent appends will therefore necessarily be inserted *after* the data being merged.
+    // Therefore we don't have a race for the elements being merged at the head of runs_. Consequently,
+    // we don't need to hold the lock during the merge, and can just erase the correct number of items
+    // from the front of runs_ after the merge. Since Merge operations are serialized by the is_merging_
+    // variable, and cannot overlap with EraseSince because of explicit Pause/Resume in the Compacter,
+    // there are no other writers to consider.
+    const auto copy = runs_.Snapshot();
+    if (std::ssize(*copy) < merge_fan_in_) return;
+    Assert(std::is_sorted(copy->begin(), copy->end(), [](const MemoryRunPtr& lhs, const MemoryRunPtr& rhs) {
       return lhs->HeightRange().first < rhs->HeightRange().first;
-    });
+    }));
     const auto inputs = std::span{*copy}.first(merge_fan_in_);
     const int end_merge_height = inputs.back()->HeightRange().second;
 #if UTXO_LOG
@@ -112,7 +112,7 @@ inline void MemoryAge::Merge(MemoryAge* dst) {
             "), remaining ", copy->size() - inputs.size(), " runs.");
 #endif
     dst->Append(MemoryRun::Merge(dst->is_mutable_, inputs));
-    copy->erase(copy->begin(), copy->begin() + merge_fan_in_);
+    runs_.EraseFront(merge_fan_in_);
     merged_to_ = end_merge_height;
   }
 
@@ -122,6 +122,7 @@ inline void MemoryAge::Merge(MemoryAge* dst) {
 
 inline void MemoryAge::EraseSince(int height) {
   Assert(IsMutable());
+  Assert(!is_merging_);
 
   auto copy = runs_.Edit();
   auto it = copy->begin();

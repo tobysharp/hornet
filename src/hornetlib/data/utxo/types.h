@@ -85,6 +85,9 @@ struct QueryResult {
   QueryResult operator +(const QueryResult& rhs) const { 
     return { funded + rhs.funded, spent + rhs.spent };
   }
+  QueryResult& operator +=(const QueryResult& rhs) {
+    return *this = *this + rhs;
+  }
 };
 
 }  // namespace hornet::data::utxo
