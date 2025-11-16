@@ -29,6 +29,7 @@ class Blockchain {
   const Spend& Unspent(int index) const { return unspent_[index]; }
   int SpentSize() const { return std::ssize(spent_); }
   const Spend& Spent(int index) const { return spent_[index]; }
+  auto& Rng() const { return rng_; }
 
   protocol::Block Sample(int max_transactions = 1'000, int max_fan_in = 2, int max_fan_out = 4) const;
 

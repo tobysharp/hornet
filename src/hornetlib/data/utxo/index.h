@@ -63,6 +63,7 @@ inline void Index::Append(TiledVector<OutputKV>&& entries, int height) {
 }
 
 inline void Index::EraseSince(int height) {
+  const auto lock = compacter_.Lock();  // Serializes EraseSince with Merge calls.
   for (const auto& ptr : ages_)
     if (ptr->IsMutable()) ptr->EraseSince(height);
 }
