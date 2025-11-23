@@ -5,7 +5,7 @@ body {
   background-color: #1e1e1e;
   color: #dddddd;
   max-width: 900px;
-  width: 100%
+  width: 100%;
   margin-left: auto;
   margin-right: auto;
   margin-top: 2em;
@@ -70,6 +70,18 @@ blockquote {
   color: #aaa;
   font-style: italic;
 }
+
+/* -------------------------------------
+   Hornet DSL – Subtle Specification Theme
+   ------------------------------------- */
+.hljs-number   { color: #f36e39ff; }   /* your existing code color, soft orange */
+.hljs-operator { color: #6ab0f3; }   /* gentle blue (same as your links)      */
+.hljs-variable { color: #dddddd; }   /* same as your body text                */
+/* Keywords – soft gold */
+.hljs-keyword {
+  color: #d2a141ff;
+}
+
 </style>
 
 ![](banner.png)

@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -ne 1 ]; then
+  echo "Usage: $0 <file.md>"
+  exit 1
+fi
+
+INPUT="$1"
+
+# Directory containing this script
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Headers and config are stored next to the script
+HEADER_HTML="${SCRIPT_DIR}/header_html.md"
+HEADER_PDF="${SCRIPT_DIR}/header_pdf.md"
+CONFIG_JS="${SCRIPT_DIR}/config.js"
+
+# Work in current directory
+DIR="$(pwd)"
+BASE="$(basename "$INPUT" .md)"
+
+HTML_MD="${DIR}/${BASE}_html.md"
+PDF_MD="${DIR}/${BASE}_pdf.md"
+HTML_OUT="${DIR}/${BASE}.html}"
+PDF_OUT="${DIR}/${BASE}.pdf"
+
+# Build HTML
+cat "$HEADER_HTML" "$INPUT" > "$HTML_MD"
+npx md-to-pdf "$HTML_MD" \
+  --as-html \
+  --config-file "$CONFIG_JS" \
+  --launch-options '{ "args": ["--no-sandbox", "--disable-setuid-sandbox"] }'
+mv "${BASE}_html.html" "$DIR/$BASE.html"
+
+# Build PDF
+cat "$HEADER_PDF" "$INPUT" > "$PDF_MD"
+npx md-to-pdf "$PDF_MD" \
+  --launch-options '{ "args": ["--no-sandbox", "--disable-setuid-sandbox"] }'
+mv "${BASE}_pdf.pdf" "$DIR/$BASE.pdf"
+
+# Clean up
+rm "$HTML_MD" "$PDF_MD"
+
+echo "✓ Generated:"
+echo "  $DIR/$BASE.html"
+echo "  $DIR/$BASE.pdf"
