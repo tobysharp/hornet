@@ -37,7 +37,7 @@ TEST(DatabaseTest, TestSpentOutputsNotFound_MutableSerial) {
 
   // Appends the blocks to the database, serially in order.
   for (int i = 0; i < chain.Length(); ++i)
-    database.Append(chain[i], i);
+    database.Append(*chain[i], i);
   
   // Query everything that was spent already and check it is unfound.
   std::vector<OutputKey> keys(chain.SpentSize());
@@ -211,8 +211,8 @@ TEST(DatabaseTest, TestAppend_OutOfOrderSerial) {
     chain.Append(chain.Sample(kMaxTransactions));
 
   for (int i = 0; i < kLength; i += 2) {
-    database.Append(chain[i + 1], i + 1);
-    database.Append(chain[i], i);
+    database.Append(*chain[i + 1], i + 1);
+    database.Append(*chain[i], i);
   }
 }
 
@@ -234,13 +234,13 @@ TEST(DatabaseTest, TestPipeline_UnorderedSerial) {
   QueryResult prev_query;
 
   for (int i = 0; i < kLength; i += 2) {
-    // Usualy we would append and process the even block (0) followed by the odd block (1).
+    // Usually we would append and process the even block (0) followed by the odd block (1).
     // In this test we process them in the opposite order to check out-of-order operation.
     
     // Block i+1 arrives before block i, and we process it as far as possible.
     {
       const int height = i + 1;
-      const auto& block = chain[height];
+      const auto& block = *chain[height];
 
       // Start by preemptively appending the block the UTXO database, 
       // anticipating that all spends will prove valid.
@@ -264,7 +264,7 @@ TEST(DatabaseTest, TestPipeline_UnorderedSerial) {
     // Later, block i arrives out of order.
     {
       const int height = i;
-      const auto& block = chain[height];
+      const auto& block = *chain[height];
 
       // Preemptive out-of-order append.
       database.Append(block, height);
@@ -310,7 +310,7 @@ TEST(DatabaseTest, TestPipeline_UnorderedSerial) {
     // Finally, we can return to finishing the odd height that was begun first.
     {
       int height = i + 1;
-      const auto& block = chain[height];
+      const auto& block = *chain[height];
       
       std::vector<OutputKey> keys(std::move(prev_keys));
       std::vector<OutputId> rids(std::move(prev_rids));
@@ -373,11 +373,11 @@ TEST(DatabaseTest, TestAppendMutableSerial) {
 
   // Appends the blocks to the database, serially in order.
   for (int height = 0; height < chain.Length(); ++height) {
-    database.Append(chain[height], height);
+    database.Append(*chain[height], height);
   
     {
       // Query for the most recent block's coinbase output, which should exist at the current height.
-      std::vector<OutputKey> keys(1, {chain[height].Transaction(0).GetHash(), 0u});
+      std::vector<OutputKey> keys(1, {chain[height]->Transaction(0).GetHash(), 0u});
       std::vector<OutputId> rids(1, kNullOutputId);
       int query = database.Query(keys, rids, height + 1);
       EXPECT_EQ(query, 1);
@@ -386,7 +386,7 @@ TEST(DatabaseTest, TestAppendMutableSerial) {
 
     {
       // Similary perform the same query at one specific height.
-      std::vector<OutputKey> keys(1, {chain[height].Transaction(0).GetHash(), 0u});
+      std::vector<OutputKey> keys(1, {chain[height]->Transaction(0).GetHash(), 0u});
       std::vector<OutputId> rids(1, kNullOutputId);
       auto query = database.Query(keys, rids, height, height + 1);
       EXPECT_EQ(query.funded, 1);
@@ -447,7 +447,7 @@ TEST(DatabaseTest, TestAppendGeneratedParallel) {
 
   // Appends the blocks to the database.
   ParallelFor(0, chain.Length(), [&](int i) {
-    database.Append(chain[i], i);
+    database.Append(*chain[i], i);
   });
 }
 

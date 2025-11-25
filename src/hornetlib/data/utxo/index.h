@@ -19,6 +19,7 @@ class Index {
   TiledVector<OutputKV> MakeAppendBuffer() const { return ages_[0]->MakeEntries(); }
   void Append(TiledVector<OutputKV>&& entries, int height);
   void EraseSince(int height);
+  int GetContiguousLength() const;
 
   static constexpr int GetMutableWindow();
   static void SortKeys(std::span<OutputKey> keys);
@@ -66,6 +67,25 @@ inline void Index::EraseSince(int height) {
   const auto lock = compacter_.Lock();  // Serializes EraseSince with Merge calls.
   for (const auto& ptr : ages_)
     if (ptr->IsMutable()) ptr->EraseSince(height);
+}
+
+inline int Index::GetContiguousLength() const {
+  int length = 0;
+  // Holes don't get merged upward, so the end height in the first non-empty age is a lower bound.
+  for (int i = 1; i < std::ssize(ages_); ++i) {
+    if (!ages_[i]->Empty()) {
+      length = ages_[i]->RunSnapshot(ages_[i]->Size() - 1)->HeightRange().second;
+      break;
+    }
+  }
+  // Then we can visit each height in age 0, which are always in height order, stopping
+  // when any height is non-contiguous.
+  for (int i = 0; i < ages_[0]->Size(); ++i, ++length) {
+    const auto run = ages_[0]->RunSnapshot(i);
+    if (run->HeightRange().first != length)
+      break;
+  }
+  return length;
 }
 
 /* static */ inline void Index::SortKeys(std::span<OutputKey> keys) {
