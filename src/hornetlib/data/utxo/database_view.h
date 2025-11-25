@@ -14,7 +14,7 @@ class DatabaseView : public consensus::UnspentOutputsView {
   DatabaseView(std::shared_ptr<SpendJoiner> ptr) : joiner_(std::move(ptr)) {}
 
   consensus::Result QueryPrevoutsUnspent(const protocol::Block&) const override {
-    if (!joiner_->WaitForState(SpendJoiner::State::Queried)) 
+    if (!joiner_->WaitForQuery()) 
       return consensus::Error::Transaction_NotUnspent;
     return {};
   }
@@ -22,7 +22,7 @@ class DatabaseView : public consensus::UnspentOutputsView {
  protected:
   Result EnumerateSpends(const protocol::Block&, const Callback cb,
                          const void* user) const override {
-    if (!joiner_->WaitForState(SpendJoiner::State::Fetched))
+    if (!joiner_->WaitForFetch())
       return consensus::Error::Transaction_NotUnspent;
     
     return joiner_->Join([&](const consensus::SpendRecord& spend) { 

@@ -53,6 +53,8 @@ class Database {
 
   void SetMutableWindow(int heights);
 
+  int GetContiguousLength() const;
+
  private:
   std::vector<uint8_t> Stage(std::span<const uint64_t> ids) const;
   static std::pair<std::vector<OutputDetail>, std::vector<uint8_t>> Unzip(
@@ -115,11 +117,11 @@ inline void Database::Append(const protocol::Block& block, int height) {
   index_.Append(std::move(entries), height);
 }
 
-/* static */ void Database::SortKeys(std::span<OutputKey> keys) {
+/* static */ inline void Database::SortKeys(std::span<OutputKey> keys) {
   Index::SortKeys(keys);
 }
 
-/* static */ void Database::SortIds(std::span<OutputId> rids) {
+/* static */ inline void Database::SortIds(std::span<OutputId> rids) {
   Table::SortIds(rids);
 }
 
@@ -144,6 +146,10 @@ inline void Database::SetMutableWindow(int heights) {
   if (heights > Index::GetMutableWindow()) 
     util::ThrowInvalidArgument("SetMutableWindow: ", heights, " exceeds Index geometry.");
   table_.SetMutableWindow(heights);
+}
+
+inline int Database::GetContiguousLength() const {
+  return index_.GetContiguousLength();
 }
 
 }  // namespace hornet::data::utxo

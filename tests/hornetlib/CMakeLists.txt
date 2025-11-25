@@ -15,6 +15,7 @@ add_executable(hornetlib_tests
    data/utxo/database_test.cpp
    data/utxo/directory_test.cpp
    data/utxo/index_test.cpp
+   data/utxo/joiner_test.cpp
    data/utxo/memory_age_test.cpp
    data/utxo/memory_run_test.cpp
    data/utxo/outputs_table_test.cpp

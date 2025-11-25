@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <memory>
 #include <random>
 #include <unordered_set>
 #include <vector>
@@ -23,7 +24,7 @@ class Blockchain {
   
   bool Empty() const { return blocks_.empty(); }
   int Length() const { return std::ssize(blocks_); }
-  const protocol::Block& operator[](int index) const { return blocks_[index]; }
+  const std::shared_ptr<const protocol::Block>& operator[](int index) const { return blocks_[index]; }
   void Append(protocol::Block&& block);
   int UnspentSize() const { return std::ssize(unspent_); }
   const Spend& Unspent(int index) const { return unspent_[index]; }
@@ -41,7 +42,7 @@ class Blockchain {
   mutable std::mt19937 rng_;
   std::vector<Spend> unspent_;
   std::vector<Spend> spent_;
-  std::vector<protocol::Block> blocks_;
+  std::vector<std::shared_ptr<const protocol::Block>> blocks_;
 };
 
 // Add a simulated block to the chain.
@@ -73,7 +74,7 @@ inline void Blockchain::Append(protocol::Block&& block) {
     unspent_.pop_back();
   }
 
-  blocks_.emplace_back(std::move(block));
+  blocks_.emplace_back(std::make_shared<const protocol::Block>(std::move(block)));
 }
 
 // Add a simulated block to the chain.
@@ -161,7 +162,7 @@ inline std::vector<int> Blockchain::SampleWithoutReplacement(int count, int end)
   return std::vector<int>{s.begin(), s.end()};
 }
 
-/* static */ Blockchain Blockchain::Generate(int length, int transactions_per_block /* = 1'000 */, int max_fan_in /* = 2 */, int max_fan_out /* = 4 */) {
+/* static */ inline Blockchain Blockchain::Generate(int length, int transactions_per_block /* = 1'000 */, int max_fan_in /* = 2 */, int max_fan_out /* = 4 */) {
   Blockchain chain;
   for (int i = 0; i < length; ++i)
     chain.Append(chain.Sample(transactions_per_block, max_fan_in, max_fan_out));

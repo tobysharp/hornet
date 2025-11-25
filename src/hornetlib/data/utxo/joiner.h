@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "hornetlib/consensus/types.h"
+#include "hornetlib/consensus/utxo.h"
 #include "hornetlib/data/utxo/database.h"
 #include "hornetlib/data/utxo/sort.h"
 #include "hornetlib/data/utxo/types.h"
@@ -24,22 +26,32 @@ class SpendJoiner {
     Parse();
   }
 
-  explicit operator bool() const { return state_ != Error; }
+  explicit operator bool() const { return state_ != State::Error; }
   State GetState() const { return state_; }
+  
+  bool IsAdvanceReady() const;
   bool Advance();
-  bool IsJoinReady() const { return state_ == State::Fetched };
+  
+  bool IsJoinReady() const { return state_ == State::Fetched; }
   consensus::Result Join(auto&& callback);
+
+  bool WaitForQuery() const;
+  bool WaitForFetch() const;
 
  private:
   void Parse();
   void Append();
-  bool Query();
-  bool Fetch();
+  void Query();
+  void Fetch();
+  void GotoError() { state_ = State::Error; }
 
   State state_;
   Database& db_;
   std::shared_ptr<const protocol::Block> block_;
   const int height_;
+  int query_before_ = 0;
+  int found_funded_ = 0;
+  int fetch_count_ = 0;
   std::vector<InputHeader> inputs_;
   std::vector<OutputKey> keys_;
   std::vector<OutputId> rids_;
@@ -50,7 +62,7 @@ class SpendJoiner {
 inline void SpendJoiner::Parse() {
   Assert(state_ == State::Init);
   for (int i = 0; i < block_->GetTransactionCount(); ++i) {
-    const auto tx = block->Transaction(i);
+    const auto tx = block_->Transaction(i);
     for (int j = 0; j < tx.InputCount(); ++j) {
       const auto& prevout = tx.Input(j).previous_output;
       if (!prevout.IsNull()) {
@@ -124,7 +136,7 @@ inline consensus::Result SpendJoiner::Join(auto&& callback) {
   Assert(inputs_.size() == outputs_.size());
 
   consensus::Result rv = {};
-  ParallelFor(0, std::ssize(outputs_), [&](int index) {
+  ParallelFor<int>(0, std::ssize(outputs_), [&](int index) {
     if (!rv) return;
     const OutputDetail& detail = outputs_[index];
     const OutputHeader& header = detail.header;
@@ -137,17 +149,17 @@ inline consensus::Result SpendJoiner::Join(auto&& callback) {
       .spend_input_index = inputs_[index].input_index
     };
     if (const consensus::Result result = callback(spend); !result)
-      rv = result;
+      rv = result;  // TODO: What about atomicity?
   });
   inputs_.clear();
   outputs_.clear();
   scripts_.clear();
   block_.reset();
-  state_ = Joined;
+  state_ = State::Joined;
   return rv;
 }
 
-inline bool SpendJoiner::IsReady() const {
+inline bool SpendJoiner::IsAdvanceReady() const {
   switch (state_) {
     case State::Init:           
     case State::Parsed:         
