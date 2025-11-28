@@ -138,8 +138,8 @@ inline void HeaderSync::Process() {
       RequestHeadersFrom(item->weak_peer);
 
       // Locates the parent of this header in the timechain.
-      auto headers = timechain_.ReadHeaders();
-      auto parent = headers->Search(item->batch[0].GetPreviousBlockHash());
+      auto headers = timechain_.WriteHeaders();
+      data::HeaderTimechain::ConstIterator parent = headers->Search(item->batch[0].GetPreviousBlockHash());
       if (!parent) {
         HandleError(*item, item->batch[0], consensus::Error::Header_ParentNotFound);
         continue;
