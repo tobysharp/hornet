@@ -6,7 +6,9 @@
 #include <unordered_set>
 #include <vector>
 
+#include "hornetlib/consensus/merkle.h"
 #include "hornetlib/protocol/block.h"
+#include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/script/writer.h"
 #include "hornetlib/protocol/transaction.h"
 #include "hornetlib/util/log.h"
@@ -79,6 +81,7 @@ inline void Blockchain::Append(protocol::Block&& block) {
 
 // Add a simulated block to the chain.
 inline protocol::Block Blockchain::Sample(int max_transactions /* = 1000 */, int max_fan_in /* = 2 */, int max_fan_out /* = 4 */) const {
+
   constexpr int64_t kBlockReward = 50ll * 100'000'000;
   constexpr std::array<uint8_t, 24> pk_script = {
     0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
@@ -97,7 +100,8 @@ inline protocol::Block Blockchain::Sample(int max_transactions /* = 1000 */, int
     coinbase.ResizeInputs(1);
     coinbase.ResizeOutputs(1);
     coinbase.Input(0).previous_output = protocol::OutPoint::Null();
-    coinbase.SetSignatureScript(0, protocol::script::Writer{}.PushInt(Length()).Release());
+    // Coinbase script must be between 2 and 100 bytes.
+    coinbase.SetSignatureScript(0, protocol::script::Writer{}.PushInt(Length()).PushInt(0).Release());
     coinbase.Output(0).value = kBlockReward;
     coinbase.SetPkScript(0, pk_script);
     input_counts.push_back(1);
@@ -147,6 +151,14 @@ inline protocol::Block Blockchain::Sample(int max_transactions /* = 1000 */, int
 
     block.AddTransaction(tx);
   }
+  
+  // Set the header.
+  protocol::BlockHeader header;
+  header.SetMerkleRoot(consensus::ComputeMerkleRoot(block).hash);
+  if (!blocks_.empty())
+    header.SetPreviousBlockHash(blocks_.back()->Header().ComputeHash());
+  block.SetHeader(header);
+
   return block;
 }
 
