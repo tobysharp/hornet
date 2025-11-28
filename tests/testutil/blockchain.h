@@ -81,7 +81,6 @@ inline void Blockchain::Append(protocol::Block&& block) {
 
 // Add a simulated block to the chain.
 inline protocol::Block Blockchain::Sample(int max_transactions /* = 1000 */, int max_fan_in /* = 2 */, int max_fan_out /* = 4 */) const {
-  if (Empty()) return protocol::Block::Genesis();
 
   constexpr int64_t kBlockReward = 50ll * 100'000'000;
   constexpr std::array<uint8_t, 24> pk_script = {
@@ -156,7 +155,8 @@ inline protocol::Block Blockchain::Sample(int max_transactions /* = 1000 */, int
   // Set the header.
   protocol::BlockHeader header;
   header.SetMerkleRoot(consensus::ComputeMerkleRoot(block).hash);
-  header.SetPreviousBlockHash(blocks_.back()->Header().ComputeHash());
+  if (!blocks_.empty())
+    header.SetPreviousBlockHash(blocks_.back()->Header().ComputeHash());
   block.SetHeader(header);
 
   return block;
