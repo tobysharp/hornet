@@ -2,7 +2,7 @@
 
 #include <gtest/gtest.h>
 
-#include "hornetlib/data/utxo/blockchain.h"
+#include "testutil/blockchain.h"
 #include "testutil/temp_folder.h"
 
 namespace hornet::data::utxo {
@@ -17,7 +17,7 @@ TEST(SpendJoinerTest, TestConstruct) {
   const auto block = std::make_shared<protocol::Block>(chain.Sample());
   SpendJoiner joiner{db, block, 0};
 
-  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Parsed);
+  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Init);
   EXPECT_FALSE(joiner.IsJoinReady());
   EXPECT_TRUE(joiner.IsAdvanceReady());
 }
@@ -33,7 +33,7 @@ TEST(SpendJoinerTest, TestPreemptiveSerial) {
     {
       SpendJoiner joiner{db, block, i};
 
-      EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Parsed);
+      EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Init);
       EXPECT_FALSE(joiner.IsJoinReady());
       EXPECT_TRUE(joiner.IsAdvanceReady());
 
@@ -67,7 +67,7 @@ TEST(SpendJoinerTest, TestPreemptiveInvalidBlock) {
     {
       SpendJoiner joiner{db, block, i};
 
-      EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Parsed);
+      EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Init);
       EXPECT_FALSE(joiner.IsJoinReady());
       EXPECT_TRUE(joiner.IsAdvanceReady());
 
@@ -95,7 +95,7 @@ TEST(SpendJoinerTest, TestPreemptiveInvalidBlock) {
   {
       SpendJoiner joiner{db, block, kLength / 2};
 
-      EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Parsed);
+      EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Init);
       EXPECT_FALSE(joiner.IsJoinReady());
       EXPECT_TRUE(joiner.IsAdvanceReady());
 
@@ -115,7 +115,7 @@ TEST(SpendJoinerTest, TestPreemptiveInvalidBlock) {
     {
       SpendJoiner joiner{db, block, i};
 
-      EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Parsed);
+      EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Init);
       EXPECT_FALSE(joiner.IsJoinReady());
       EXPECT_TRUE(joiner.IsAdvanceReady());
 

@@ -20,7 +20,7 @@ class DatabaseView : public consensus::UnspentOutputsView {
   }
 
  protected:
-  Result EnumerateSpends(const protocol::Block&, const Callback cb,
+  consensus::Result EnumerateSpends(const protocol::Block&, const Callback cb,
                          const void* user) const override {
     if (!joiner_->WaitForFetch())
       return consensus::Error::Transaction_NotUnspent;

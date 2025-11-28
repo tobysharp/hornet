@@ -9,7 +9,7 @@
 
 #include <gtest/gtest.h>
 
-#include "hornetlib/data/utxo/blockchain.h"
+#include "testutil/blockchain.h"
 #include "hornetlib/data/utxo/sort.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/script/writer.h"

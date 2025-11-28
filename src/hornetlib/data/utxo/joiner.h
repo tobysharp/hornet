@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <vector>
 
@@ -22,12 +23,11 @@ class SpendJoiner {
   SpendJoiner(Database& db, 
               std::shared_ptr<const protocol::Block> block, 
               int height) 
-              : state_(State::Init), db_(db), block_(block), height_(height) {
-    Parse();
-  }
+              : state_(State::Init), db_(db), block_(block), height_(height) {}
 
   explicit operator bool() const { return state_ != State::Error; }
   State GetState() const { return state_; }
+  int GetHeight() const { return height_; }
   
   bool IsAdvanceReady() const;
   bool Advance();
@@ -43,9 +43,14 @@ class SpendJoiner {
   void Append();
   void Query();
   void Fetch();
-  void GotoError() { state_ = State::Error; }
+  void GotoError();
+  void ReleaseQuery();
+  void ReleaseFetch();
 
-  State state_;
+  std::atomic<State> state_;
+  std::atomic<bool> release_query_ = false;
+  std::atomic<bool> release_fetch_ = false;
+
   Database& db_;
   std::shared_ptr<const protocol::Block> block_;
   const int height_;
@@ -105,6 +110,7 @@ inline void SpendJoiner::Query() {
     keys_.clear();
     SortTogether(rids_.begin(), rids_.end(), inputs_.begin());
     state_ = State::Queried;
+    ReleaseQuery();
   }
 }
 
@@ -127,6 +133,7 @@ inline void SpendJoiner::Fetch() {
     SortTogether(inputs_.begin(), inputs_.end(), outputs_.begin());
     rids_.clear();
     state_ = State::Fetched;
+    ReleaseFetch();
   }
 }
 
@@ -136,8 +143,9 @@ inline consensus::Result SpendJoiner::Join(auto&& callback) {
   Assert(inputs_.size() == outputs_.size());
 
   consensus::Result rv = {};
+  std::atomic<bool> failed = false;
   ParallelFor<int>(0, std::ssize(outputs_), [&](int index) {
-    if (!rv) return;
+    if (failed) return;
     const OutputDetail& detail = outputs_[index];
     const OutputHeader& header = detail.header;
     const consensus::SpendRecord spend{ 
@@ -148,8 +156,10 @@ inline consensus::Result SpendJoiner::Join(auto&& callback) {
       .tx = block_->Transaction(inputs_[index].tx_index),
       .spend_input_index = inputs_[index].input_index
     };
-    if (const consensus::Result result = callback(spend); !result)
-      rv = result;  // TODO: What about atomicity?
+    if (const consensus::Result result = callback(spend); !result) {
+      bool expected = false;
+      if (failed.compare_exchange_strong(expected, true)) rv = result;
+    }
   });
   inputs_.clear();
   outputs_.clear();
@@ -189,6 +199,33 @@ inline bool SpendJoiner::Advance() {
       break;
     default: return false;
   }
+  return state_ != State::Error;
+}
+
+
+inline void SpendJoiner::ReleaseQuery() {
+  release_query_ = true;
+  release_query_.notify_all();
+}
+
+inline void SpendJoiner::ReleaseFetch() {
+  release_fetch_ = true;
+  release_fetch_.notify_all();
+}
+
+inline void SpendJoiner::GotoError() {
+  state_ = State::Error;
+  ReleaseQuery();
+  ReleaseFetch();
+}
+
+inline bool SpendJoiner::WaitForQuery() const {
+  release_query_.wait(false);
+  return state_ != State::Error;
+}
+
+inline bool SpendJoiner::WaitForFetch() const {
+  release_fetch_.wait(false);
   return state_ != State::Error;
 }
 
