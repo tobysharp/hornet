@@ -22,6 +22,35 @@ A low-level, high-performance custom database for indexing unspent transactions,
 
 A lightweight node built atop the consensus and UTXO libraries, currently supporting full IBD through a concurrent validation pipeline and designed for future extensibility into mempool, policy, and multi-peer networking.
 
+## Why Hornet?
+
+Bitcoin is defined by its consensus rules, yet those rules have never existed as a clear, independent specification. Hornet begins from the premise that the protocol deserves a precise, executable foundation separate from any particular codebase, so that Bitcoin's software can evolve and diversify safely even as its rules ossify.
+
+Without an independent specification, code changes become risky, and the long-term effect is software centralization: a single codebase accumulates legacy designs, historical constraints, and layers of defensive caution. Refactors and rewrites are discouraged because any deep change must preserve implicit behavior that only lives in that one implementation. Alternative clients may begin as forks of Core, inheriting its structure, assumptions, and technical debt -- yet without its review process. Hornet takes the opposite approach: a clean, modern implementation of consensus from first principles, designed explicitly around clarity, modularity, and an independent ruleset rather than inherited code paths.
+
+Hornet expresses Bitcoin's consensus rules as a minimal, executable specification in declarative C++ and in the Hornet domain-specific language. This makes consensus explicit, compact, and testable. Crucially, Hornet's consensus layer is implemented as a standalone library: a pure, side-effect-free rule engine with well-defined inputs and outputs, isolated from node internals such as data structures, mempool behavior, storage layout, or networking. Any node implementation can link against this library or (in the future) generate equivalent code in another language from the specification compiler. This separation gives the ecosystem something it has never had: a clear definition of consensus independent of any particular implementation.
+
+This clarity sharpens the boundary between consensus and policy. Mempool rules, relay preferences, and filtering choices are legitimate areas of client variation, but without a crisp separation they can be mistaken for protocol changes. A specification-driven approach makes this distinction objective and unambiguous.
+
+An explicit specification enables the healthy software diversity that mature ecosystems depend on. Bitcoin should be able to support multiple high-quality, independent implementations -- written in different languages, optimized for different priorities, structured around different design philosophies -- without risking fragmentation. Hornet provides that foundation by anchoring consensus semantics in a shared, rigorous specification.
+
+A minimal and well-structured specification strengthens everything downstream: testing becomes simpler, differential analysis becomes systematic, formal verification becomes attainable, and onboarding new contributors becomes easier. Hornet's compact, layered design also makes it uniquely suited for education and experimentation, allowing developers to study, test, and extend consensus logic without navigating all the complexity of Bitcoin Core internals.
+
+Hornet’s goal is to specify Bitcoin consensus precisely, and to provide a clean, modern consensus library that other clients can build on. This allows the software ecosystem to modernize, diversify, and innovate safely, without ever compromising the correctness of the consensus rules.
+
+
+## Hornet and libbitcoinkernel
+
+One related effort toward isolating consensus logic is *libbitcoinkernel*, an ongoing refactoring effort within Bitcoin Core that extracts Core's validation code into a library with a C API. This improves modularity for Core and allows other clients to call into Core's consensus engine directly. However, because it is carved out of the existing codebase, libbitcoinkernel necessarily retains Core's internal data structures, architectural assumptions, and dependencies, including its LevelDB-based storage layer and threading model.
+
+Hornet takes a different path. Instead of reorganizing Core's existing code, Hornet is a fresh, first-principles implementation of Bitcoin's consensus rules, expressed as a minimal and declarative specification in modern C++ and in the Hornet DSL. This keeps Hornet inherently more agile: the codebase is small, clean, elegant, and unconstrained by legacy technical debt. It explores what Bitcoin code could look like if implemented from scratch today using the best modern engineering principles and idiomatic modern C++.
+
+Hornet also exposes a much smaller consensus surface area. In Bitcoin Core, the consensus engine is intertwined with the `CCoinsView` and `CCoinsViewCache` UTXO layers, LevelDB-backed storage, `CBlockIndex`, `CChainState`, `ChainstateManager`, and the broader block index and chainstate infrastructure. In Hornet, all of these components live outside the consensus library as implementation details, leaving consensus itself small, pure, and easy to reason about.
+
+Where libbitcoinkernel exposes Core’s consensus behavior for reuse, Hornet aims to specify consensus in an implementation-neutral form. Hornet’s consensus layer is a standalone library in the architectural sense: a pure, side-effect-free rule engine with no dependency on any particular UTXO database, chain representation, or networking stack. Node developers can pair it with whatever storage backend or runtime architecture they prefer, and — with the future DSL compiler — can generate equivalent consensus logic in other languages entirely.
+
+In short, Hornet’s specification-driven design aims to provide a modern and future-oriented foundation for multiple independent clients, enabling faster development, safer innovation, and greater diversity across the Bitcoin ecosystem.
+
 
 ## Hornet Architecture
 
@@ -121,9 +150,9 @@ These principles give Hornet a uniquely clean, compact, and comprehensible archi
 
 ## Summary
 
-Hornet currently functions as a consensus specification and validator with full IBD, and is evolving toward a complete, modern, high-performance Bitcoin client.
+Hornet currently functions as a consensus specification and validator with full IBD, and is evolving toward a complete, modern, high-performance Bitcoin client, with the Hornet DSL providing a long-term path toward language-neutral, formally verified consensus libraries.
 
-For more details, read the paper
+For more details, read the author's paper:
 
 Hornet Node and the Hornet DSL: A Minimal, Executable Specification for Bitcoin Consensus, \
 T. Sharp, September 2025. \
