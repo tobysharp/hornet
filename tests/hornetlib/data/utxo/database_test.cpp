@@ -451,5 +451,102 @@ TEST(DatabaseTest, TestAppendGeneratedParallel) {
   });
 }
 
+TEST(DatabaseTest, TestFetchWithNullIds) {
+  test::TempFolder dir;
+  Database database{dir.Path()};
+  database.Append(protocol::Block::Genesis(), 0);
+
+  // We need to get the OutputId of the genesis output.
+  auto block = protocol::Block::Genesis();
+  std::vector<OutputKey> keys = { {(*block.Transactions().begin()).GetHash(), 0}, {} };
+  std::vector<OutputId> rids(keys.size());
+  database.SortKeys(keys);
+  int queried = database.Query(keys, rids, 1);
+  EXPECT_EQ(queried, 1);
+
+  database.SortIds(rids);
+  std::vector<OutputDetail> outputs(rids.size());
+  std::vector<uint8_t> scripts;
+  int fetched = database.Fetch(rids, outputs, &scripts);
+  EXPECT_EQ(fetched, 1);
+  EXPECT_GT(outputs[1].header.amount, 0);
+}
+
+TEST(DatabaseTest, TestPartialQueryAndFetch) {
+  test::TempFolder dir;
+  Database database{dir.Path()};
+  database.SetMutableWindow(2);
+
+  // Create a chain with 2 blocks (Genesis + 1).
+  test::Blockchain chain;
+  chain.Append(chain.Sample()); // Genesis
+  
+  // Use Sample(1) to ensure block1 only has a coinbase and doesn't spend Genesis outputs.
+  // This simplifies the test logic regarding spent outputs.
+  auto block1 = chain.Sample(1);
+  chain.Append(std::move(block1));
+
+  // Append both to DB.
+  database.Append(*chain[0], 0);
+  database.Append(*chain[1], 1);
+
+  // We want to query inputs for a hypothetical block that spends outputs from both Genesis and Block 1.
+  std::vector<OutputKey> keys;
+  keys.push_back({chain[0]->Transaction(0).GetHash(), 0}); // From Genesis
+  keys.push_back({chain[1]->Transaction(0).GetHash(), 0}); // From Block 1
+  std::vector<int> heights = {0, 1};
+
+  SortTogether(keys.begin(), keys.end(), heights.begin());
+  std::vector<OutputId> rids(keys.size(), kNullOutputId);
+
+  // 1. Partial Query: Query only up to height 1 (exclusive of Block 1).
+  // This should find the Genesis output but not the Block 1 output.
+  auto result1 = database.Query(keys, rids, 0, 1);
+  EXPECT_EQ(result1.funded, 1);
+  EXPECT_EQ(result1.spent, 0);
+  EXPECT_EQ(rids[0], kNullOutputId);
+  EXPECT_NE(rids[1], kNullOutputId);
+
+  // 2. Partial Fetch: Fetch what we found.
+  std::vector<OutputDetail> outputs(keys.size());
+  EXPECT_TRUE(outputs[0].header.IsNull());
+  EXPECT_TRUE(outputs[1].header.IsNull());
+  std::vector<uint8_t> scripts;
+  SortTogether(rids.begin(), rids.end(), heights.begin(), keys.begin());
+  int fetched1 = database.Fetch(rids, outputs, &scripts);
+  EXPECT_EQ(fetched1, 1);
+  SortTogether(heights.begin(), heights.end(), keys.begin(), rids.begin(), outputs.begin());
+
+  // Verify we got the Genesis output.
+  EXPECT_EQ(outputs[0].header.height, 0);
+  EXPECT_GT(outputs[0].header.amount, 0);
+  EXPECT_TRUE(outputs[1].header.IsNull());
+
+  // 3. Remainder Query: Query from height 1 to 2.
+  // This should find the Block 1 output.
+  SortTogether(keys.begin(), keys.end(), heights.begin(), rids.begin(), outputs.begin());
+  auto result2 = database.Query(keys, rids, 1, 2);
+  EXPECT_EQ(result2.funded, 1);
+  EXPECT_EQ(result2.spent, 0);
+
+  // Now we should have both IDs in rids.
+  EXPECT_NE(rids[0], kNullOutputId);
+  EXPECT_NE(rids[1], kNullOutputId);
+
+  // 4. Remainder Fetch: Fetch again.
+  SortTogether(rids.begin(), rids.end(), heights.begin(), keys.begin(), outputs.begin());
+  int fetched2 = database.Fetch(rids, outputs, &scripts);
+  EXPECT_EQ(fetched2, 1);
+
+  SortTogether(heights.begin(), heights.end(), keys.begin(), rids.begin(), outputs.begin());
+  EXPECT_EQ(outputs[0].header.height, 0);
+  EXPECT_GT(outputs[0].header.amount, 0);
+  EXPECT_EQ(outputs[1].header.height, 1);
+  EXPECT_GT(outputs[1].header.amount, 0);
+
+  EXPECT_FALSE(outputs[0].header.IsNull());
+  EXPECT_FALSE(outputs[1].header.IsNull());
+}
+
 }  // namespace
 }  // namespace hornet::data::utxo

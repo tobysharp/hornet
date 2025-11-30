@@ -1,15 +1,16 @@
 #pragma once
 
 #include <algorithm>
+#include <numeric>
+#include <tuple>
 #include <vector>
 
 namespace hornet::data::utxo {
 
-template <typename Iter1, typename Iter2>
-inline void SortTogether(Iter1 begin, Iter1 end, Iter2 secondary) {
+template <typename Iter1, typename... Iters>
+inline void SortTogether(Iter1 begin, Iter1 end, Iters... secondaries) {
   const auto a = begin;
   const int size = end - begin;
-  const auto b = secondary;
 
   // Generate permutation indices via sort.
   std::vector<int> p(size);
@@ -20,17 +21,17 @@ inline void SortTogether(Iter1 begin, Iter1 end, Iter2 secondary) {
   for (int dst = 0; dst < size; ++dst) {
     if (p[dst] == dst) continue;
     auto va = std::move(a[dst]);
-    auto vb = std::move(b[dst]);
+    auto vs = std::make_tuple(std::move(secondaries[dst])...);
 
     int j = dst;
     for (int next = p[j]; next != dst; j = next, next = p[j]) {
       a[j] = std::move(a[next]);
-      b[j] = std::move(b[next]);
+      ((secondaries[j] = std::move(secondaries[next])), ...);
       p[j] = j;       // mark done
     }
 
     a[j] = std::move(va);
-    b[j] = std::move(vb);
+    std::apply([&](auto&&... v) { ((secondaries[j] = std::move(v)), ...); }, vs);
     p[j] = j;
   }
 }

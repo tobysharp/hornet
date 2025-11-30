@@ -108,7 +108,8 @@ inline void SpendJoiner::Query() {
     if (found_funded_ != std::ssize(keys_))
       return GotoError();  // Not all of the required UTXOs were found in the database.
     keys_.clear();
-    SortTogether(rids_.begin(), rids_.end(), inputs_.begin());
+    // Note we only need to include outputs_ in this permutation if we have already done a Fetch.
+    SortTogether(rids_.begin(), rids_.end(), inputs_.begin(), outputs_.begin());
     state_ = State::Queried;
     ReleaseQuery();
   }
@@ -118,13 +119,20 @@ inline void SpendJoiner::Query() {
 inline void SpendJoiner::Fetch() {
   Assert(state_ == State::Queried || state_ == State::QueriedPartial);
 
+  if (state_ == State::QueriedPartial) {
+    // Since the previous action was a partial query, we haven't yet sorted the rid's.
+    SortTogether(rids_.begin(), rids_.end(), inputs_.begin(), keys_.begin()/*, outputs_.begin() */);
+    // We only need to include outputs_ in the permutation if this isn't the first fetch, which implies
+    // partial query -> partial fetch -> 2nd partial query, a code path we don't currently support.
+  }
+
   fetch_count_ += db_.Fetch(rids_, outputs_, &scripts_);
   Assert(fetch_count_ == found_funded_);
-  std::fill(rids_.begin(), rids_.end(), kNullOutputId);  // Prevent fetching again.
 
   if (state_ == State::QueriedPartial) {
     // We've done a partial fetch. Next action should be a residual query.
     state_ = State::FetchedPartial;
+    SortTogether(keys_.begin(), keys_.end(), inputs_.begin(), rids_.begin(), outputs_.begin());
   } else {
     Assert(state_ == State::Queried);
     if (fetch_count_ != std::ssize(inputs_))
@@ -178,7 +186,7 @@ inline bool SpendJoiner::IsAdvanceReady() const {
     case State::Queried:        
       return true;
     case State::FetchedPartial:
-      // We could permit small incremental queries, but we may prefer to wait until all data has arrived.
+      // We could permit small incremental queries, but we may prefer to wait until all residual data has arrived.
       // return query_before_ < db_.GetContiguousLength();
       return height_ <= db_.GetContiguousLength();
     default:

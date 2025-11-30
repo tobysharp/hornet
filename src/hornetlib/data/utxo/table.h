@@ -25,7 +25,8 @@ class Table {
 
   static void SortIds(std::span<OutputId> rids);
 
-  int Fetch(std::span<const OutputId> ids, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts) const;
+  int Fetch(std::span<const OutputId> ids, std::span<OutputDetail> outputs,
+            std::vector<uint8_t>* scripts) const;
   int AppendOutputs(const protocol::Block& block, int height, TiledVector<OutputKV>* entries);
   void EraseSince(int height);
   void CommitBefore(int height);
@@ -33,8 +34,10 @@ class Table {
 
  private:
   void EnqueueReadyCommits() noexcept;
-  static int Unpack(
-    std::span<const OutputId> rids, std::span<const uint8_t> staging, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts);
+  int FetchImpl(std::span<const OutputId> ids, std::span<OutputDetail> outputs,
+                std::vector<uint8_t>* scripts) const;
+  static int Unpack(std::span<const OutputId> rids, int fetch_count, std::span<const uint8_t> staging,
+                    std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts);
 
   Segments segments_;
   std::atomic<int> mutable_window_;
@@ -44,27 +47,31 @@ class Table {
   Flusher flusher_;  // Constructed last, destroyed first.
 };
 
-inline Table::Table(const std::filesystem::path& folder) : 
-  segments_(folder), 
-  mutable_window_(0),
-  next_offset_(segments_.SizeBytes()),
-  flusher_([this](int height) { CommitBefore(height); }) {
-}
+inline Table::Table(const std::filesystem::path& folder)
+    : segments_(folder),
+      mutable_window_(0),
+      next_offset_(segments_.SizeBytes()),
+      flusher_([this](int height) { CommitBefore(height); }) {}
 
 /* static */ inline void Table::SortIds(std::span<OutputId> rids) {
   ParallelSort(rids.begin(), rids.end());
 }
 
-/* static */ inline int Table::Unpack(
-    std::span<const OutputId> rids, std::span<const uint8_t> staging, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts) {
+/* static */ inline int Table::Unpack(std::span<const OutputId> rids,
+                                      int fetch_count,
+                                      std::span<const uint8_t> staging,
+                                      std::span<OutputDetail> outputs,
+                                      std::vector<uint8_t>* scripts) {
   int prev_script_size = std::ssize(*scripts);
-  const size_t script_bytes = staging.size() - rids.size() * sizeof(OutputHeader);
+  const size_t script_bytes = staging.size() - fetch_count * sizeof(OutputHeader);
   scripts->resize(prev_script_size + script_bytes);
   auto staging_cursor = staging.begin();
   auto script_cursor = scripts->begin() + prev_script_size;
   int written = 0;
   for (int i = 0; i < std::ssize(rids); ++i) {
-    if (rids[i] == kNullOutputId) continue;
+    // if (rids[i] == kNullOutputId) continue;
+    Assert(rids[i] != kNullOutputId);
+    if (!outputs[i].header.IsNull()) continue;
     const auto length = IdCodec::Length(rids[i]);
     const int script_length = length - sizeof(OutputHeader);
     Assert(staging_cursor + length <= staging.end());
@@ -78,28 +85,46 @@ inline Table::Table(const std::filesystem::path& folder) :
   }
   Assert(staging_cursor == staging.end());
   Assert(script_cursor == scripts->end());
+  Assert(written == fetch_count);
   return written;
 }
 
-inline int Table::Fetch(std::span<const OutputId> rids, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts) const {
-  Assert(std::is_sorted(rids.begin(), rids.end(), [](OutputId lhs, OutputId rhs) { return IdCodec::Offset(lhs) < IdCodec::Offset(rhs); }));
+inline int Table::Fetch(std::span<const OutputId> rids, std::span<OutputDetail> outputs,
+                        std::vector<uint8_t>* scripts) const {
+  Assert(std::is_sorted(rids.begin(), rids.end(), [](OutputId lhs, OutputId rhs) {
+    return IdCodec::Offset(lhs) < IdCodec::Offset(rhs);
+  }));
   if (rids.empty()) return 0;
 
+  // Ignore any null rid's which must be at the start of the span.
+  size_t rid_start = std::lower_bound(rids.begin(), rids.end(), 1ull) - rids.begin();
+  return FetchImpl(rids.subspan(rid_start), outputs.subspan(rid_start), scripts);
+}
+
+inline int Table::FetchImpl(std::span<const OutputId> rids, std::span<OutputDetail> outputs,
+                            std::vector<uint8_t>* scripts) const {
   // Determines the total byte count for sizing the staging buffer.
   size_t size = 0;
-  for (const OutputId id : rids) size += IdCodec::Length(id);
+  int fetch_count = 0;
+  for (int i = 0; i < std::ssize(rids); ++i) {
+    if (outputs[i].header.IsNull()) {
+      size += IdCodec::Length(rids[i]);
+      ++fetch_count;
+    }
+  }
 
   // Allocates the staging buffer.
   std::vector<uint8_t> staging(size);
 
-  // Takes a snapshot of the tail now. Anything that's already been removed from the tail will be found in the main segments.
+  // Takes a snapshot of the tail now. Anything that's already been removed from the tail will be
+  // found in the main segments.
   const auto snapshot = tail_.Snapshot();
   Assert(IdCodec::Offset(rids.back()) < next_offset_);
   if (snapshot->empty()) {
-    segments_.FetchData(rids, staging.data(), size);
-    return Unpack(rids, staging, outputs, scripts);
+    segments_.FetchData(rids, outputs, staging.data(), size);
+    return Unpack(rids, fetch_count, staging, outputs, scripts);
   }
-  
+
   // Initializes local variables for iterating over rids.
   auto next_block = snapshot->begin();
   const BlockOutputs* cur_block = nullptr;
@@ -108,22 +133,23 @@ inline int Table::Fetch(std::span<const OutputId> rids, std::span<OutputDetail> 
   // Dispatches one FetchData call to the table segments or to a tail block.
   const auto dispatch_batch = [&](size_t begin_rid, size_t rid, size_t cursor, size_t block_bytes) {
     if (block_bytes > 0) {
-      const auto subspan = rids.subspan(begin_rid, rid - begin_rid);
+      const auto rid_subspan = rids.subspan(begin_rid, rid - begin_rid);
+      const auto output_subspan = outputs.subspan(begin_rid, rid - begin_rid);
       uint8_t* dst = staging.data() + cursor;
-      if (cur_block == nullptr)
-        segments_.FetchData(subspan, dst, block_bytes);
-      else
-        cur_block->FetchData(subspan, dst, block_bytes);
+      if (cur_block == nullptr) segments_.FetchData(rid_subspan, output_subspan, dst, block_bytes);
+      else cur_block->FetchData(rid_subspan, output_subspan, dst, block_bytes);
     }
   };
 
-  // Iterates over the rid's and the tail blocks, dispatching to FetchData at the appropriate boundaries.
+  // Iterates over the rid's and the tail blocks, dispatching to FetchData at the appropriate
+  // boundaries.
   size_t begin_rid = 0;
   size_t cursor = 0;
-  size_t block_bytes = 0;  
+  size_t block_bytes = 0;
   for (size_t i = 0; i < rids.size(); ++i) {
-    if (IdCodec::Offset(rids[i]) >= next_boundary)
-    {
+    if (!outputs[i].header.IsNull()) continue;
+
+    if (IdCodec::Offset(rids[i]) >= next_boundary) {
       // Dispatch to the newly completed block.
       dispatch_batch(begin_rid, i, cursor, block_bytes);
       cursor += block_bytes;
@@ -143,10 +169,11 @@ inline int Table::Fetch(std::span<const OutputId> rids, std::span<OutputDetail> 
   Assert(cursor + block_bytes == size);
 
   // Unpacks the staged data into the output format.
-  return Unpack(rids, staging, outputs, scripts);
+  return Unpack(rids, fetch_count, staging, outputs, scripts);
 }
 
-inline int Table::AppendOutputs(const protocol::Block& block, int height, TiledVector<OutputKV>* entries) {
+inline int Table::AppendOutputs(const protocol::Block& block, int height,
+                                TiledVector<OutputKV>* entries) {
   // Calculates the number of bytes requires for this block's outputs.
   size_t bytes = 0;
   for (const auto tx : block.Transactions())
@@ -174,9 +201,10 @@ inline int Table::AppendOutputs(const protocol::Block& block, int height, TiledV
   }
 
   // Publishes a new tail with the local buffer inserted in order.
-  tail_.Insert(BlockOutputs{offset, height, std::move(data)}, [](const BlockOutputs& lhs, const BlockOutputs& rhs) {
-    return lhs.BeginOffset() < rhs.BeginOffset();
-  });
+  tail_.Insert(BlockOutputs{offset, height, std::move(data)},
+               [](const BlockOutputs& lhs, const BlockOutputs& rhs) {
+                 return lhs.BeginOffset() < rhs.BeginOffset();
+               });
 
   // Enqueues a commit if the tail length is at least that of the mutable window size.
   EnqueueReadyCommits();
@@ -199,10 +227,10 @@ inline void Table::CommitBefore(int height) {
       segments_.Append(ptr->Data());
       ++blocks;
     }
-  } catch (const std::exception& e) { 
-    LogError() << "Table::CommitBefore caught exception for height " << height 
-               << ": \"" << e.what() << "\".";
-  } catch (...) { 
+  } catch (const std::exception& e) {
+    LogError() << "Table::CommitBefore caught exception for height " << height << ": \"" << e.what()
+               << "\".";
+  } catch (...) {
     LogError() << "Table::CommitBefore caught exception for height " << height << ".";
   }
   tail_.EraseFront(blocks);

@@ -34,8 +34,9 @@ TEST(BlockOutputsTest, FetchDataSingleRid) {
   BlockOutputs blk(10, 0, std::move(data));
 
   OutputId rid = IdCodec::Encode(12, 2);  // offset=12 → relative 2 (since base=10), length=2
+  OutputDetail detail = { OutputHeader::Null(), {} };
   uint8_t buffer[10] = {};
-  const int count = blk.FetchData({&rid, 1}, buffer, sizeof(buffer));
+  const int count = blk.FetchData({&rid, 1}, {&detail, 1}, buffer, sizeof(buffer));
 
   EXPECT_EQ(count, 1);
   EXPECT_EQ(buffer[0], 3);
@@ -50,8 +51,9 @@ TEST(BlockOutputsTest, FetchDataMultipleRids) {
       IdCodec::Encode(100, 3),  // offset=100 → relative 0, len=3
       IdCodec::Encode(103, 2)   // offset=103 → relative 3, len=2
   };
+  std::vector<OutputDetail> detail(2, { OutputHeader::Null(), {} });
   uint8_t buffer[10] = {};
-  const int count = blk.FetchData(rids, buffer, sizeof(buffer));
+  const int count = blk.FetchData(rids, detail, buffer, sizeof(buffer));
 
   EXPECT_EQ(count, 2);
   EXPECT_EQ(buffer[0], 10);
