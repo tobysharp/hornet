@@ -22,10 +22,9 @@ class Segments {
  public:
   Segments(const std::filesystem::path& folder);
   void Append(std::span<const uint8_t> data);
-  uint64_t SizeBytes() const {
-    return size_bytes_;
-  }
-  void FetchData(std::span<const OutputId> ids, uint8_t* buffer, size_t size) const;
+  uint64_t SizeBytes() const { return size_bytes_; }
+  int FetchData(std::span<const OutputId> ids, std::span<const OutputDetail> outputs,
+                 uint8_t* buffer, size_t size) const;
 
  private:
   struct Item {
@@ -141,19 +140,24 @@ inline void Segments::Append(std::span<const uint8_t> bytes) {
   }
 }
 
-inline void Segments::FetchData(std::span<const OutputId> ids, uint8_t* buffer, size_t size) const {
+inline int Segments::FetchData(std::span<const OutputId> ids,
+                                std::span<const OutputDetail> outputs, uint8_t* buffer,
+                                size_t size) const {
   // Constructs the I/O requests, in the order passed.
   size_t cursor = 0;
   std::vector<IORequest> requests;
   requests.reserve(ids.size());
   int segment = 0;
   for (int i = 0; i < std::ssize(ids); ++i) {
-    if (ids[i] == kNullOutputId) continue;
+    // if (ids[i] == kNullOutputId) continue;
+    Assert(ids[i] != kNullOutputId);
+    if (!outputs[i].header.IsNull()) continue;
     // Retrieves the section index, byte offset, and byte length from a packed address.
     const auto [offset, length] = IdCodec::Decode(ids[i]);
     if (cursor + length > size) break;
     Assert(offset + length <= size_bytes_);
-    while (offset >= items_[segment].offset + items_[segment].length) ++segment;
+    while (offset >= items_[segment].offset + items_[segment].length) 
+      ++segment;
     requests.push_back(
         {items_[segment].fd_read, offset - items_[segment].offset, length, buffer + cursor, 0});
     cursor += length;
@@ -161,6 +165,7 @@ inline void Segments::FetchData(std::span<const OutputId> ids, uint8_t* buffer, 
 
   // Dispatch all the I/O requests to the I/O engine and wait for them to complete.
   Read(io_, requests);
+  return std::ssize(requests);
 }
 
 }  // namespace hornet::data::utxo

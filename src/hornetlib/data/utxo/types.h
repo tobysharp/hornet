@@ -12,9 +12,12 @@
 namespace hornet::data::utxo {
 
 struct OutputHeader {
-  int height;
+  int height = -1;
   uint32_t flags;
   int64_t amount;
+
+  bool IsNull() const { return height < 0; }
+  static OutputHeader Null() { return {-1, 0, 0}; }
 };
 
 struct OutputDetail {

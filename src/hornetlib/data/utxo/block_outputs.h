@@ -11,8 +11,8 @@ namespace hornet::data::utxo {
 
 class BlockOutputs {
  public:
-  BlockOutputs(uint64_t offset, int height, std::vector<uint8_t>&& data) : 
-    height_(height), offset_(offset), data_(std::move(data)) {}
+  BlockOutputs(uint64_t offset, int height, std::vector<uint8_t>&& data)
+      : height_(height), offset_(offset), data_(std::move(data)) {}
   BlockOutputs(BlockOutputs&&) = default;
 
   uint64_t BeginOffset() const { return offset_; }
@@ -20,7 +20,8 @@ class BlockOutputs {
   int Length() const { return std::ssize(data_); }
   int Height() const { return height_; }
 
-  int FetchData(std::span<const OutputId> rids, uint8_t* buffer, size_t size) const;
+  int FetchData(std::span<const OutputId> rids, std::span<const OutputDetail> outputs,
+                uint8_t* buffer, size_t size) const;
   std::span<const uint8_t> Data() const { return data_; }
 
  protected:
@@ -29,11 +30,14 @@ class BlockOutputs {
   std::vector<uint8_t> data_;
 };
 
-inline int BlockOutputs::FetchData(std::span<const OutputId> rids, uint8_t* buffer, size_t size) const {
+inline int BlockOutputs::FetchData(std::span<const OutputId> rids,
+                                   std::span<const OutputDetail> outputs, uint8_t* buffer,
+                                   size_t size) const {
   int count = 0;
   size_t cursor = 0;
-  for (auto it = rids.begin(); it != rids.end(); ++it) {
-    const auto decoded = IdCodec::Decode(*it);
+  for (int i = 0; i < std::ssize(rids); ++i) {
+    if (!outputs[i].header.IsNull()) continue;
+    const auto decoded = IdCodec::Decode(rids[i]);
     const int address = decoded.offset - offset_;
     Assert(address >= 0);
     Assert(address + decoded.length <= std::ssize(data_));
