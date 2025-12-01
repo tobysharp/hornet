@@ -26,7 +26,8 @@ class Blockchain {
   
   bool Empty() const { return blocks_.empty(); }
   int Length() const { return std::ssize(blocks_); }
-  const std::shared_ptr<const protocol::Block>& operator[](int index) const { return blocks_[index]; }
+  std::shared_ptr<const protocol::Block> operator[](int index) const { return blocks_[index]; }
+  std::shared_ptr<protocol::Block> operator[](int index) { return blocks_[index]; }
   void Append(protocol::Block&& block);
   int UnspentSize() const { return std::ssize(unspent_); }
   const Spend& Unspent(int index) const { return unspent_[index]; }
@@ -44,7 +45,7 @@ class Blockchain {
   mutable std::mt19937 rng_;
   std::vector<Spend> unspent_;
   std::vector<Spend> spent_;
-  std::vector<std::shared_ptr<const protocol::Block>> blocks_;
+  std::vector<std::shared_ptr<protocol::Block>> blocks_;
 };
 
 // Add a simulated block to the chain.
@@ -76,11 +77,12 @@ inline void Blockchain::Append(protocol::Block&& block) {
     unspent_.pop_back();
   }
 
-  blocks_.emplace_back(std::make_shared<const protocol::Block>(std::move(block)));
+  blocks_.emplace_back(std::make_shared<protocol::Block>(std::move(block)));
 }
 
 // Add a simulated block to the chain.
 inline protocol::Block Blockchain::Sample(int max_transactions /* = 1000 */, int max_fan_in /* = 2 */, int max_fan_out /* = 4 */) const {
+  if (Empty()) return protocol::Block::Genesis();
 
   constexpr int64_t kBlockReward = 50ll * 100'000'000;
   constexpr std::array<uint8_t, 24> pk_script = {
@@ -101,7 +103,8 @@ inline protocol::Block Blockchain::Sample(int max_transactions /* = 1000 */, int
     coinbase.ResizeOutputs(1);
     coinbase.Input(0).previous_output = protocol::OutPoint::Null();
     // Coinbase script must be between 2 and 100 bytes.
-    coinbase.SetSignatureScript(0, protocol::script::Writer{}.PushInt(Length()).PushInt(0).Release());
+    const int nonce = std::uniform_int_distribution<int>{}(rng_);
+    coinbase.SetSignatureScript(0, protocol::script::Writer{}.PushInt(Length()).PushInt(nonce).Release());
     coinbase.Output(0).value = kBlockReward;
     coinbase.SetPkScript(0, pk_script);
     input_counts.push_back(1);

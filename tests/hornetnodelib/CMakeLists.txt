@@ -7,6 +7,7 @@ add_executable(hornetnodelib_tests
    net/tcp_notification_sink_test.cpp
    dispatch/protocol_loop_test.cpp
    sync/sync_manager_test.cpp
+   sync/validation_pipeline_test.cpp
 )
 
 target_compile_features(hornetnodelib_tests PRIVATE cxx_std_20)

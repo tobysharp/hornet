@@ -16,27 +16,32 @@ namespace hornet::data::utxo {
 
 class SpendJoiner {
  public:
-  enum class State { Init, Parsed, Appended, QueriedPartial, Queried, FetchedPartial, Fetched, Joined, Error };
+  enum class State { Init, Parsed, Appended, QueriedPartial, Queried, FetchedPartial, Fetched, Joined, Error, Cancelled };
 
   using Callback = std::function<consensus::Result(const consensus::SpendRecord&)>;
+
+  struct CancelledException : public std::exception {
+   const char* what() const noexcept override { return "SpendJoiner cancelled."; }
+  };
 
   SpendJoiner(Database& db, 
               std::shared_ptr<const protocol::Block> block, 
               int height) 
               : state_(State::Init), db_(db), block_(block), height_(height) {}
 
-  explicit operator bool() const { return state_ != State::Error; }
   State GetState() const { return state_; }
   int GetHeight() const { return height_; }
   
   bool IsAdvanceReady() const;
-  bool Advance();
+  void Advance();
   
   bool IsJoinReady() const { return state_ == State::Fetched; }
   consensus::Result Join(auto&& callback);
 
   bool WaitForQuery() const;
   bool WaitForFetch() const;
+
+  void Cancel();
 
  private:
   void Parse();
@@ -194,7 +199,7 @@ inline bool SpendJoiner::IsAdvanceReady() const {
   }
 }
 
-inline bool SpendJoiner::Advance() {
+inline void SpendJoiner::Advance() {
   switch (state_) {
     case State::Init:           Parse();  break;
     case State::Parsed:         Append(); break;
@@ -205,9 +210,8 @@ inline bool SpendJoiner::Advance() {
       if (db_.GetContiguousLength() >= height_) Query();
       else Fetch(); 
       break;
-    default: return false;
+    default:
   }
-  return state_ != State::Error;
 }
 
 
@@ -229,12 +233,20 @@ inline void SpendJoiner::GotoError() {
 
 inline bool SpendJoiner::WaitForQuery() const {
   release_query_.wait(false);
+  if (state_ == State::Cancelled) throw CancelledException{};
   return state_ != State::Error;
 }
 
 inline bool SpendJoiner::WaitForFetch() const {
   release_fetch_.wait(false);
+  if (state_ == State::Cancelled) throw CancelledException{};
   return state_ != State::Error;
+}
+
+inline void SpendJoiner::Cancel() {
+  state_ = State::Cancelled;
+  ReleaseQuery();
+  ReleaseFetch();
 }
 
 }  // namespace hornet::data::utxo
