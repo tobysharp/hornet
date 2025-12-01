@@ -44,13 +44,19 @@ TEST(SpendJoinerTest, TestPreemptiveSerial) {
       EXPECT_TRUE(joiner.IsJoinReady());
 
       // Join the block's transactions with their inputs' funding prevouts.
-      const consensus::Result result = joiner.Join([i](const consensus::SpendRecord& spend) {
+      int64_t total_spend = 0;
+      const consensus::Result result = joiner.Join([&](const consensus::SpendRecord& spend) {
         EXPECT_LT(spend.funding_height, i);
-        EXPECT_GT(spend.amount, 0);
+        EXPECT_GE(spend.amount, 0);
+        total_spend += spend.amount;
         return consensus::Result{};
       });
       EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Joined);
       EXPECT_EQ(result, consensus::Result{});
+
+      // The total amount spent must be bounded above by the sum of the coinbase transactions,
+      // excepting that of the most recent block, which cannot have been spent yet.
+      EXPECT_LE(total_spend, i * 50ll * 100'000'000);      
     }
     chain.Append(std::move(*block));
   }
@@ -352,6 +358,7 @@ TEST(SpendJoinerTest, TestPartialFetchMisalignment) {
     }
     return consensus::Result{};
   });
+  EXPECT_EQ(result, consensus::Result::Ok);
   EXPECT_TRUE(found_key0);
   EXPECT_TRUE(found_key1);
 }

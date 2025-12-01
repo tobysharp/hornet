@@ -62,6 +62,8 @@ class SuccessOr {
   requires std::is_constructible_v<Err, E>
   SuccessOr(const SuccessOr<E>& rhs) : value_{rhs ? std::expected<void, Err>{} : std::unexpected{rhs.Error()}} {}
 
+  static inline const SuccessOr Ok = {};
+
   explicit operator bool() const { return value_.has_value(); }
 
   bool operator ==(const SuccessOr& rhs) const {
