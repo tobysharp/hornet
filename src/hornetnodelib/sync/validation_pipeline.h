@@ -41,13 +41,15 @@ class ValidationPipeline {
 
   // Submits a block for validation.
   void Submit(std::shared_ptr<const protocol::Block> block, int height) {
-    queue_.Push({std::move(block), height});
+    auto joiner = spend_pipeline_.Add(block, height);
+    queue_.Push({height, std::move(block), std::move(joiner)});
   }
 
  private:
   struct Job {
-    std::shared_ptr<const protocol::Block> block;
     int height;
+    std::shared_ptr<const protocol::Block> block;
+    std::shared_ptr<data::utxo::SpendJoiner> joiner;
   };
 
   void WorkerLoop() {
@@ -69,9 +71,8 @@ class ValidationPipeline {
     Assert(parent_it);
 
     const auto ancestry_view = headers->GetValidationView(parent_it);
-    data::utxo::DatabaseView utxo_view{spend_pipeline_.Add(job.block, job.height)};
     return consensus::ValidateNonSpending(block, *ancestry_view).AndThen([&] {
-      return consensus::ValidateSpending(block, utxo_view, job.height);
+      return consensus::ValidateSpending(block, data::utxo::DatabaseView{job.joiner}, job.height);
     });
   }
 
