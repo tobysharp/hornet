@@ -58,10 +58,10 @@ class TcpNotificationSink {
   void RunWorker() {
     // This timeout represents the maximum time (in milliseconds) that we could be blocked while
     // the queue is filling up and we're not servicing it.
-    static constexpr int kMaxPollTimeoutMs = 25;
+    static constexpr int kMaxPollTimeoutMs = 10;
 
     std::string output;
-    output.reserve(1 << 14);  // 16 KB
+    output.reserve(1 << 15);  // 32 KB
     while (!abort_ || !queue_.Empty()) {
       // Format any items on our queue ready for streaming
       for (output.clear(); auto item = queue_.TryPop();)
