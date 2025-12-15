@@ -5,6 +5,7 @@
 #pragma once
 
 #include <span>
+#include <stack>
 #include <variant>
 #include <vector>
 
