@@ -47,7 +47,7 @@ TEST(GenesisTest, DeserializeMatchesFields) {
   EXPECT_EQ(block.Header().GetVersion(), 1);
   EXPECT_EQ(block.Header().GetPreviousBlockHash(), Hash{});
   EXPECT_EQ(block.Header().GetMerkleRoot(),
-            "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"_hash);
+            Hash{"4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"_hash});
   EXPECT_EQ(block.Header().GetTimestamp(), 0x495FAB29);
   EXPECT_EQ(block.Header().GetNonce(), 0x7C2BAC1D);
   EXPECT_EQ(block.Header().GetCompactTarget(), 0x1D00FFFF);

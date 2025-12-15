@@ -41,7 +41,6 @@ class HeaderTimechain : public ChainTree<protocol::BlockHeader, model::HeaderCon
   std::unique_ptr<ValidationView> GetValidationView(BaseConstIterator tip) const;
   std::optional<Locator> MakeLocator(int height, const protocol::Hash& hash) const;
   BaseConstIterator FindStable(int height, const protocol::Hash& hash) const;
-  void EraseBranch(Iterator root);
 
   // Iterate over all known headers from the genesis onward, calling the predicate for each, with arguments
   //  (const Locator& parent, const Key& child, const protocol::BlockHeader& header).  

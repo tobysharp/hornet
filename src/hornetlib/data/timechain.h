@@ -6,11 +6,13 @@
 
 #include <memory>
 #include <mutex>
+#include <shared_mutex>
 
 #include "hornetlib/data/header_timechain.h"
 #include "hornetlib/data/key.h"
 #include "hornetlib/data/lock.h"
 #include "hornetlib/data/sidecar.h"
+#include "hornetlib/data/priority_shared_mutex.h"
 #include "hornetlib/model/header_context.h"
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/hash.h"
@@ -27,16 +29,23 @@ class Timechain {
     std::list<std::unique_ptr<SidecarBase>>::iterator it;
   };
 
-  Timechain() {
-    headers_.Add(model::HeaderContext::Genesis(GetGenesisHeader()));
+  Timechain() : Timechain{GetGenesisHeader()} {
   }
 
-  ReadLock<HeaderTimechain> ReadHeaders() const {
-    return { mutex_, headers_ };  // Lock header values for reading.
+  Timechain(const protocol::BlockHeader& genesis_header) {
+    headers_.Add(model::HeaderContext::Genesis(genesis_header));
+  }
+
+  ReadLock<HeaderTimechain, PrioritySharedMutex> ReadHeaders() const {
+    return { structure_mutex_, headers_ };  // Lock header values for reading.
+  }
+
+  WriteLock<HeaderTimechain, PrioritySharedMutex> WriteHeaders() {
+    return { structure_mutex_, headers_ };  // Lock header values for writing.
   }
 
   HeaderTimechain::Iterator AddHeader(HeaderTimechain::ConstIterator parent, const model::HeaderContext& header_context) {
-    auto lock = LockWrite();  // Lock both structure and values of headers and sidecars, and the sidecar array.
+    std::unique_lock lock(structure_mutex_);  // Lock structure exclusively.
     const auto [child_it, moved] = headers_.Add(parent, header_context);
     SidecarAddSync sync = {parent.Locator(), child_it->hash, moved};
     for (const auto& sidecar : sidecars_)
@@ -46,7 +55,7 @@ class Timechain {
 
   template <typename T>
   SidecarHandle<T> AddSidecar(std::unique_ptr<SidecarBaseT<T>> sidecar) {
-    auto lock = LockWrite();  // Lock the sidecar array for writing.
+    std::unique_lock lock(structure_mutex_);  // Lock structure exclusively.
     
     sidecars_.emplace_back(std::move(sidecar));
     SidecarBase* base = sidecars_.back().get();
@@ -64,7 +73,8 @@ class Timechain {
   // Gets metadata from a sidecar in a thread-safe manner.
   template <typename T>
   std::optional<T> Get(SidecarHandle<T> sidecar, int height, const protocol::Hash& hash) const {
-    auto lock = LockRead();  // Lock the sidecar array and values of sidecars for reading.
+    std::shared_lock structure_lock(structure_mutex_); // Lock structure shared.
+    std::shared_lock metadata_lock(metadata_mutex_);   // Lock metadata shared.
     const std::optional<Locator> locator = headers_.MakeLocator(height, hash);
     Assert(locator.has_value());
     const T* value = Downcast<T>(sidecar)->Get(locator);
@@ -74,21 +84,14 @@ class Timechain {
   // Sets metadata to a sidecar in a thread-safe manner.
   template <typename T> 
   void Set(SidecarHandle<T> sidecar, int height, const protocol::Hash& hash, const T& value) {
-    auto lock = LockWrite();  // Lock the sidecar array and values of sidecars for writing.
+    std::shared_lock structure_lock(structure_mutex_); // Lock structure shared.
+    std::unique_lock metadata_lock(metadata_mutex_);   // Lock metadata exclusively.
     const std::optional<Locator> locator = headers_.MakeLocator(height, hash);
     Assert(locator.has_value());    
     Downcast(sidecar)->Set(*locator, value);
   }
 
- private:
-  [[nodiscard]] std::lock_guard<std::recursive_mutex> LockRead() const {
-    return std::lock_guard{mutex_};
-  }
-
-  [[nodiscard]] std::lock_guard<std::recursive_mutex> LockWrite() {
-    return std::lock_guard{mutex_};
-  }
-
+ protected:
   template <typename T>
   SidecarBaseT<T>* Downcast(SidecarHandle<T> sidecar) const {
     SidecarBase* base = sidecar.it->get();
@@ -107,7 +110,8 @@ class Timechain {
     return genesis;
   }
 
-  mutable std::recursive_mutex mutex_;
+  mutable PrioritySharedMutex structure_mutex_;
+  mutable PrioritySharedMutex metadata_mutex_;
   HeaderTimechain headers_;
   std::list<std::unique_ptr<SidecarBase>> sidecars_;
 };
