@@ -36,6 +36,9 @@ class Block {
   int GetTransactionCount() const {
     return std::ssize(transactions_);
   }
+  bool Empty() const {
+    return transactions_.empty();
+  }
   TransactionView Transaction(int index) {
     return {data_, transactions_[index]};
   }

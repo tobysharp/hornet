@@ -31,6 +31,12 @@ inline std::span<uint8_t> AsByteSpan(std::span<T> input) {
   return {reinterpret_cast<uint8_t*>(input.data()), input.size_bytes()};
 }
 
+template <typename T>
+inline std::span<const uint8_t> AsByteSpan(const T& input) {
+  static_assert(std::is_trivially_copyable_v<T>, "AsByteSpan requires trivially copyable types");
+  return {reinterpret_cast<const uint8_t*>(&input), sizeof(input)};
+}
+
 template <typename T, typename U>
 inline constexpr bool operator ==(std::span<T> a, std::span<U> b) {
   return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin());

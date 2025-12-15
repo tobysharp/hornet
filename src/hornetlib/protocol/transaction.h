@@ -165,7 +165,7 @@ inline int TransactionData::SizeBytes() const {
 }
 
 struct TransactionDetail;
-protocol::Hash ComputeTxid(const TransactionDetail& detail, const TransactionData& data);
+protocol::Hash ComputeTxid(const TransactionDetail& detail, const TransactionData& data, bool include_witness);
 
 // The TransactionDetail struct holds the data fields of a transaction, and the
 // metadata needed for its variable-length array fields. The actual data for those
@@ -178,6 +178,7 @@ struct TransactionDetail {
   uint32_t lock_time = 0;
   int no_witness_size_bytes = 0;
   mutable std::optional<protocol::Hash> txid;
+  mutable std::optional<protocol::Hash> wtxid;
 
   bool IsWitness() const {
     return !witnesses.IsEmpty();
@@ -187,9 +188,18 @@ struct TransactionDetail {
     if (!txid) {
       // Computes the txid, which is the double-SHA256 hash of the serialized transaction,
       // excluding any witness data from the serialization.
-      txid = ComputeTxid(*this, data);
+      txid = ComputeTxid(*this, data, false);
     }
     return *txid;
+  }
+
+  const protocol::Hash& GetWitnessHash(const TransactionData& data) const {
+    if (!wtxid) {
+      // Computes the wtxid, which is the double-SHA256 hash of the serialized transaction,
+      // including any witness data in the serialization.
+      wtxid = ComputeTxid(*this, data, true);
+    }
+    return *wtxid;
   }
 
   void Serialize(encoding::Writer& writer, const TransactionData& data, bool include_witness = true) const {
@@ -232,6 +242,8 @@ struct TransactionDetail {
     reader.ReadLE4(version);
 
     // Optional witness flag
+    // TODO: Must pass a flag to TransactionDetail::Deserialize to say whether witness is allowed.
+    // https://linear.app/hornet-node/issue/HOR-56/must-pass-a-flag-to-transactiondetaildeserialize-to-say-whether
     bool witness = false;
     uint8_t byte = reader.ReadByte();
     if (byte == 0) {
@@ -308,6 +320,9 @@ class TransactionViewT {
   const protocol::Hash& GetHash() const {
     return detail_.GetHash(data_);
   }
+  const protocol::Hash& GetWitnessHash() const {
+    return detail_.GetWitnessHash(data_);
+  }
 
   // The following const member methods are chosen by the compiler in the case where
   // the TransactionViewT object is const, e.g. the method is called on a const object that
@@ -338,6 +353,9 @@ class TransactionViewT {
   }
   uint32_t LockTime() const {
     return detail_.lock_time;
+  }
+  std::span<const struct Input> Inputs() const {
+    return detail_.inputs.Span(data_.inputs);
   }
   std::span<const struct Output> Outputs() const {
     return detail_.outputs.Span(data_.outputs);
@@ -372,6 +390,9 @@ class TransactionViewT {
   }
   auto& LockTime() {
     return detail_.lock_time;
+  }
+  auto Inputs() {
+    return detail_.inputs.Span(data_.inputs);
   }
   auto Outputs() {
     return detail_.outputs.Span(data_.outputs);

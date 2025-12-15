@@ -13,6 +13,7 @@
 
 #include "hornetlib/crypto/sha256.h"
 #include "hornetlib/util/as_span.h"
+#include "hornetlib/util/throw.h"
 
 namespace hornet::crypto {
 
@@ -72,6 +73,24 @@ inline void DoubleSha256Batch(const uint8_t* input,
     const uint8_t* buffer = input + i * input_stride_bytes;
     *reinterpret_cast<bytes32_t*>(output + i * output_stride_bytes) = DoubleSha256(buffer, buffer + buffer_length_bytes);
   }
+}
+
+// Computes the double-SHA256 hash of the concatenation of arguments.
+// The caller guarantees that N bytes is enough to store the concatenated arguments.
+template <std::size_t N, typename... Args>
+bytes32_t DoubleSha256(const Args&... args) {
+  std::array<uint8_t, N> buffer;
+  uint8_t* dst = buffer.data();
+  const uint8_t* end = buffer.end();
+
+  const auto append_arg = [&](const auto& x) {
+    const auto bytes = util::AsByteSpan(x);
+    if (dst + bytes.size() > end) util::ThrowOutOfRange("DoubleSha256 buffer overrun");
+    dst = std::copy(bytes.begin(), bytes.end(), dst);
+  };
+
+  (append_arg(args), ...);
+  return DoubleSha256(buffer.data(), dst);
 }
 
 // Writes the uint256_t as a 64-character hex string to an output stream,
