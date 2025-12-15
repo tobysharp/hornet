@@ -191,7 +191,8 @@ inline int MemoryRun::AddEntry(const OutputKV& kv, int bucket) {
   // Initialize heap and destination height range.
   std::priority_queue<Cursor, std::vector<Cursor>, std::greater<Cursor>> heap;
   for (const auto& run : inputs) {
-    heap.push({run->entries_.begin(), run->entries_.end()});
+    if (!run->entries_.Empty())
+      heap.push({run->entries_.begin(), run->entries_.end()});
     dst.height_range_.first = std::min(dst.height_range_.first, run->height_range_.first);
     dst.height_range_.second = std::max(dst.height_range_.second, run->height_range_.second);
   }
