@@ -131,7 +131,7 @@ TEST(ValidatorTest, RejectsBlockWithInvalidTransaction) {
   header.SetMerkleRoot(ComputeMerkleRoot(block).hash);
   block.SetHeader(header);
 
-  EXPECT_EQ(std::get<BlockError>(ValidateBlockStructure(RoundTrip(block)).Error()), BlockError::BadTransaction);
+  EXPECT_EQ(ValidateBlockStructure(RoundTrip(block)), TransactionError::NegativeOutputValue);
 }
 
 }  // namespace
