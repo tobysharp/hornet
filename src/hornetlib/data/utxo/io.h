@@ -112,7 +112,7 @@ class UringIOEngine {
   }
 
  private:
-  static constexpr int kQueueDepth = 64;
+  static constexpr int kQueueDepth = 4'096;
   io_uring ring_;
 };
 
