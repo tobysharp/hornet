@@ -14,109 +14,193 @@
 #include "hornetlib/consensus/merkle.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/data/timechain.h"
-#include "testutil/blockchain.h"
 #include "hornetlib/data/utxo/database.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/util/timeout.h"
+#include "testutil/blockchain.h"
 #include "testutil/temp_folder.h"
 
 namespace hornet::node::sync {
 namespace {
 
+using namespace std::chrono_literals;
+
+// Build the header chain.
+std::unique_ptr<data::Timechain> BuildHeaderChain(const test::Blockchain& data) {
+  auto timechain = std::make_unique<data::Timechain>(data[0]->Header());
+  for (int height = 1; height < data.Length(); ++height) {
+    auto parent_it = timechain->ReadHeaders()->ChainTip();
+    timechain->AddHeader(parent_it, parent_it->Extend(data[height]->Header()));
+  }
+  return timechain;
+}
+
+// Get the path to a blocks data file for the current test.
+std::filesystem::path CurrentTestVectorPath() {
+  const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
+  std::string filename = std::string{info->test_suite_name()} + "_" + info->name() + ".bin";
+  return test::GetDataPath(filename);
+}
+
+struct Completions {
+  std::atomic<int> completions = 0;
+  std::atomic<bool> success = true;
+  consensus::Result rv = consensus::Result::Ok;
+
+  void operator()(const std::shared_ptr<const protocol::Block>&, int height,
+                      consensus::Result result) {
+    if (!result) {
+      LogDebug() << "Warning: Validation failed at height " << height << " with code " << (int)result.Error();
+      bool expected = true;
+      if (success.compare_exchange_strong(expected, false))
+        rv = result;
+    }
+    ++completions;
+  }
+};
+
+consensus::Result ValidateInOrder(const std::filesystem::path& path) {
+  // Load the block data.
+  const test::Blockchain data{path};
+
+  // Set up the UTXO database and validation pipeline.
+  const test::TempFolder dir;
+  data::utxo::Database db(dir.Path());
+  Completions callback;
+  const auto timechain = BuildHeaderChain(data);
+  ValidationPipeline pipeline(*timechain, db, std::ref(callback));
+
+  // Submit all validations in order and wait for drain.
+  for (int height = 1; height < data.Length(); ++height)
+    pipeline.Submit(data[height], height);
+  EXPECT_TRUE(pipeline.Wait(5s));
+
+  // Check that every block completed.
+  EXPECT_EQ(callback.completions, data.Length() - 1);
+  return callback.rv;
+}
+
+consensus::Result ValidateOutOfOrder(const std::filesystem::path& path) {
+  // Load the block data.
+  const test::Blockchain data{path};
+
+  // Set up the UTXO database and validation pipeline.
+  const test::TempFolder dir;
+  data::utxo::Database db(dir.Path());
+  Completions callback;
+  const auto timechain = BuildHeaderChain(data);
+  ValidationPipeline pipeline(*timechain, db, std::ref(callback));
+
+  // Submit all validations out of order and wait for drain.
+  for (int height = 1; height < data.Length(); height += 3) {
+    for (int offset : {1, 2, 0}) {
+      const int submit = height + offset;
+      if (submit < data.Length())    
+        pipeline.Submit(data[submit], submit);
+    }
+  }
+  EXPECT_TRUE(pipeline.Wait(5s));
+
+  // Check that every block completed.
+  EXPECT_EQ(callback.completions, data.Length() - 1);
+  return callback.rv;
+}
+
+consensus::Result ValidateShuffle(const std::filesystem::path& path) {
+  // Load the block data.
+  const test::Blockchain data{path};
+
+  // Set up the UTXO database and validation pipeline.
+  const test::TempFolder dir;
+  data::utxo::Database db(dir.Path());
+  Completions callback;
+  const auto timechain = BuildHeaderChain(data);
+  ValidationPipeline pipeline(*timechain, db, std::ref(callback));
+
+  // Submit all validations out of order and wait for drain.
+  std::vector<int> heights(data.Length() - 1);
+  std::iota(heights.begin(), heights.end(), 1);
+  std::shuffle(heights.begin(), heights.end(), std::mt19937{69'420});
+
+  for (int height : heights)
+    pipeline.Submit(data[height], height);
+  EXPECT_TRUE(pipeline.Wait(5s));
+
+  // Check that every block completed.
+  EXPECT_EQ(callback.completions, data.Length() - 1);
+  return callback.rv;
+}
+
 TEST(ValidationPipelineTest, ProcessBlocks) {
+  constexpr int kLength = 20;
+  const auto path = CurrentTestVectorPath();
+  if (!std::filesystem::exists(path))  {
+    // Construct test data file.
+    test::Blockchain data;
+    for (int height = 1; height < kLength; ++height) 
+      data.Append(data.Sample());  // Create a valid block
+    data.Save(path.string() + ".nopow");
+    FAIL() << "Test file \"" << path << "\" was missing. Run tools/minetests.sh, then re-run test.";
 
-  constexpr int kLength = 20; 
-  
-  test::TempFolder temp_dir;
-  data::utxo::Database db(temp_dir.Path());
-  data::Timechain timechain;
-  test::Blockchain data;
-
-  data.Append(data.Sample());
-  
-  // Currently we have to manually append the genesis block to the db, since we can't validate it.
-  // In the future, we might want to clean this up and make it more uniform, e.g. by having a 
-  // special-case validation for a block with null parent, comparing it against the known genesis.
-  db.Append(*data[0], 0);
-  
-  for (int i = 1; i < kLength; ++i) {
-    data.Append(data.Sample());
-    auto parent_it = timechain.ReadHeaders()->ChainTip();
-    timechain.AddHeader(parent_it, parent_it->Extend(data[i]->Header()));
   }
-
-  std::atomic<int> completed_count = 0;
-  auto callback = [&](const std::shared_ptr<const protocol::Block>&, int, consensus::Result result) {
-    EXPECT_TRUE(result);
-    ++completed_count;
-  };
-
-  ValidationPipeline pipeline(timechain, db, callback);
-
-  const auto start = std::chrono::high_resolution_clock::now();
-
-  for (int i = 1; i < kLength; ++i)  // Don't submit genesis block for validation.
-    pipeline.Submit(data[i], i);
-
-  util::Timeout timeout(10'000);
-  int completed = completed_count;
-  while (completed != kLength - 1 && timeout) {
-    completed_count.wait(completed);
-    completed = completed_count;
-  }
-  
-  const auto duration = std::chrono::high_resolution_clock::now() - start;
-  const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-  std::cout << "Took " << ms << " ms\n";
-
-  EXPECT_EQ(completed_count, kLength - 1);
+  EXPECT_TRUE(ValidateInOrder(path));
+  EXPECT_TRUE(ValidateOutOfOrder(path));
+  EXPECT_TRUE(ValidateShuffle(path));
 }
 
-TEST(ValidationPipelineTest, ProcessInvalidBlock) {
-  test::TempFolder temp_dir;
-  data::utxo::Database db(temp_dir.Path());
-  data::Timechain timechain;
+TEST(ValidationPipelineTest, ProcessInvalidMerkleRoot) {
+  const auto path = CurrentTestVectorPath();
+  if (!std::filesystem::exists(path))  {
+    // Construct test data file.
+    test::Blockchain data;
+    for (int height = 1; height < 4; ++height) 
+      data.Append(data.Sample());  // Create a valid block
+    data[3]->Transaction(1).Input(0).previous_output.hash[0]++;  // Corrupt input txid.
+    data.Save(path.string() + ".nopow");
+    FAIL() << "Test file \"" << path << "\" was missing. Run tools/minetests.sh then re-run test.";
+  }
 
-  test::Blockchain chain;
-  chain.Append(protocol::Block(protocol::Block::Genesis()));
+  const consensus::Error expected = consensus::Error::Structure_BadMerkleRoot;
+  EXPECT_EQ(ValidateInOrder(path), expected);
+  EXPECT_EQ(ValidateOutOfOrder(path), expected);
+  EXPECT_EQ(ValidateShuffle(path), expected);
   
-  { // Create a valid block
-    chain.Append(chain.Sample());
-    const auto block = chain[chain.Length() - 1];
-    auto parent_it = timechain.ReadHeaders()->Search(block->Header().GetPreviousBlockHash());
-    timechain.AddHeader(parent_it, parent_it->Extend(block->Header()));
-  }
-
-  { // Create an invalid block
-    chain.Append(chain.Sample());
-    auto block = chain[chain.Length() - 1];
-    ASSERT_GT(block->GetTransactionCount(), 1);
-    auto tx = block->Transaction(1);
-    ASSERT_GT(tx.InputCount(), 0);
-    tx.Input(0).previous_output.hash[0]++;  // Corrupt input txid.
-    auto parent_it = timechain.ReadHeaders()->Search(block->Header().GetPreviousBlockHash());
-    timechain.AddHeader(parent_it, parent_it->Extend(block->Header()));
-  }
-
-  std::promise<consensus::Result> result_promise;
-  auto on_complete = [&](const std::shared_ptr<const protocol::Block>&, int height, consensus::Result result) {
-    if (height == 1)
-      EXPECT_TRUE(result);
-    else if (height == 2)
-      result_promise.set_value(result);
-  };
-
-  ValidationPipeline pipeline{timechain, db, on_complete};
-  pipeline.Submit(chain[1], 1);
-  pipeline.Submit(chain[2], 2);
-
-  // Unblock execution of the spend pipeline.
-  db.Append(*chain[0], 0);
-
-  auto result_future = result_promise.get_future();
-  ASSERT_EQ(result_future.wait_for(std::chrono::seconds(1)), std::future_status::ready);
-  EXPECT_EQ(result_future.get(), consensus::Error::Transaction_NotUnspent);
+  // TODO: Make sure that the block that failed validation got erased from the database.
 }
 
-} // namespace
-} // namespace hornet::node::sync
+TEST(ValidationPipelineTest, ProcessInvalidUTXO) {
+  const auto path = CurrentTestVectorPath();
+  if (!std::filesystem::exists(path))  {
+    // Construct test data file.
+    test::Blockchain data;
+    for (int height = 1; height < 4; ++height) 
+      data.Append(data.Sample());  // Create a valid block
+    data[3]->Transaction(1).Input(0).previous_output.hash[0]++;  // Corrupt input txid.
+    auto header = data[3]->Header();
+    header.SetMerkleRoot(consensus::ComputeMerkleRoot(*data[3]).hash);
+    data[3]->SetHeader(header);
+    data.Save(path.string() + ".nopow");
+    FAIL() << "Test file \"" << path << "\" was missing. Run tools/minetests.sh then re-run test.";
+  }
+
+  const consensus::Error expected = consensus::Error::Transaction_NotUnspent;
+  EXPECT_EQ(ValidateInOrder(path), expected);
+  EXPECT_EQ(ValidateOutOfOrder(path), expected);
+  EXPECT_EQ(ValidateShuffle(path), expected);
+  
+  // TODO: Make sure that the block that failed validation got erased from the database.
+}
+
+TEST(ValidationPipelineTest, ProcessMainnet50Blocks) {
+  const auto path = CurrentTestVectorPath();
+  if (!std::filesystem::exists(path)) {
+    FAIL() << "Test file \"" << path << "\" was missing. Save first 50 blocks of mainnet then re-run test.";
+  }
+
+  EXPECT_TRUE(ValidateInOrder(path));
+  EXPECT_TRUE(ValidateOutOfOrder(path));
+  EXPECT_TRUE(ValidateShuffle(path));
+}
+
+}  // namespace
+}  // namespace hornet::node::sync
