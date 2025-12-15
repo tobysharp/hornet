@@ -6,6 +6,7 @@
 #include "hornetlib/data/utxo/types.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/transaction.h"
+#include "hornetlib/util/throw.h"
 
 #include <atomic>
 #include <cstdint>
@@ -105,6 +106,10 @@ inline int Database::Fetch(std::span<const OutputId> rids, std::span<OutputDetai
 
 inline void Database::Append(const protocol::Block& block, int height) {
   CheckRethrowFatal();
+
+  if (index_.ContainsHeight(height))
+    util::ThrowInvalidArgument("Database::Append: Height ", height, " already exists.");
+
   std::shared_lock lock(mutex_);
   auto entries = index_.MakeAppendBuffer();
   table_.AppendOutputs(block, height, &entries);

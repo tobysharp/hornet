@@ -27,8 +27,9 @@ class MemoryAge {
   void Append(TiledVector<OutputKV>&& entries, const std::pair<int, int>& range);
   void Merge(MemoryAge* dst);
   void EraseSince(int height);
-  
-  auto RunSnapshot(int index) const { return runs_[index]; }
+  bool ContainsHeight(int height) const;
+
+  auto RunsSnapshot() const { return runs_.Snapshot(); }
 
  protected:
   using MemoryRunPtr = AtomicVector<MemoryRun>::Ptr;
@@ -135,6 +136,16 @@ inline void MemoryAge::EraseSince(int height) {
       *it = std::move(replace);
     } else ++it;
   }
+}
+
+inline bool MemoryAge::ContainsHeight(int height) const {
+  const auto runs = runs_.Snapshot();
+  for (int i = 0; i < std::ssize(*runs); ++i) {
+    const auto range = (*runs)[i]->HeightRange();
+    if (range.first > height) return false;
+    if (height < range.second) return true;
+  }
+  return false;
 }
 
 }  // namespace hornet::data::utxo

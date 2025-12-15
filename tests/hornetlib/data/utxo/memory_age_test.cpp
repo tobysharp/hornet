@@ -108,7 +108,7 @@ TEST(MemoryAgeTest, TestMergeMutableToMutable) {
   EXPECT_FALSE(age1.IsMergeReady());
   EXPECT_FALSE(age0.IsMergeReady());
 
-  const auto run = age1.RunSnapshot(0);
+  const auto run = age1.RunsSnapshot()->at(0);
   EXPECT_TRUE(std::is_sorted(run->Begin(), run->End()));
   EXPECT_EQ(run->Size(), 2 * kEntriesPerRun);
   EXPECT_EQ(run->HeightRange(), std::make_pair(0, 2));
@@ -136,7 +136,7 @@ TEST(MemoryAgeTest, TestMergeMutableToMutableWithDeletes) {
   EXPECT_FALSE(age1.IsMergeReady());
   EXPECT_FALSE(age0.IsMergeReady());
 
-  const auto run = age1.RunSnapshot(0);
+  const auto run = age1.RunsSnapshot()->at(0);
   EXPECT_TRUE(std::is_sorted(run->Begin(), run->End()));
   EXPECT_EQ(run->Size(), 2 * kEntriesPerRun);
   EXPECT_EQ(run->HeightRange(), std::make_pair(0, 2));
@@ -164,7 +164,7 @@ TEST(MemoryAgeTest, TestMergeMutableToImmutableWithDeletes) {
   EXPECT_FALSE(age1.IsMergeReady());
   EXPECT_FALSE(age0.IsMergeReady());
 
-  const auto run = age1.RunSnapshot(0);
+  const auto run = age1.RunsSnapshot()->at(0);
   EXPECT_TRUE(std::is_sorted(run->Begin(), run->End()));
   EXPECT_TRUE(run->Empty());
   EXPECT_EQ(run->HeightRange(), std::make_pair(0, 2));
@@ -186,7 +186,7 @@ TEST(MemoryAgeTest, TestEraseSince) {
   EXPECT_FALSE(age0.IsMergeReady());
   EXPECT_EQ(age0.Size(), 1);
 
-  const auto run = age0.RunSnapshot(0);
+  const auto run = age0.RunsSnapshot()->at(0);
   EXPECT_TRUE(std::is_sorted(run->Begin(), run->End()));
   EXPECT_EQ(run->Size(), kEntriesPerRun);
   EXPECT_EQ(run->HeightRange(), std::make_pair(0, 1));
