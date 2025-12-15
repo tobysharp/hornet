@@ -4,6 +4,11 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
+#include <algorithm>
+#include <expected>
+#include <optional>
+#include <vector>
+
 namespace hornet::consensus {
 
 // Represents errors that can occur during header validation.
@@ -52,6 +57,44 @@ enum class TransactionError {
   DuplicatedInput,
   NullPreviousOutput,
   BadCoinBaseSignatureScriptSize
+};
+
+// SuccessOr represents state that is either "success" or it is a specific typed error.
+template <typename Err>
+class SuccessOr {
+ public:
+  SuccessOr() = default;
+
+  template <typename E>
+  requires std::is_constructible_v<Err, E>
+  SuccessOr(const E err) : value_(std::unexpected{err}) {}
+
+  template <typename E>
+  requires std::is_constructible_v<Err, E>
+  SuccessOr(const SuccessOr<E>& rhs) : value_{rhs ? std::expected<void, Err>{} : std::unexpected{rhs.Error()}} {}
+
+  explicit operator bool() const { return value_.has_value(); }
+
+  bool operator ==(const SuccessOr& rhs) const {
+    return value_ == rhs.value_;
+  }
+
+  // If in the "success" state, executes the given function, and stores its result.
+  // The function must return SuccessOr<E> where E can be converted to type Err.
+  template <typename Func>
+  SuccessOr& AndThen(Func fn) {
+    if (value_.has_value()) {
+      if (const auto result = fn(); !result) value_ = std::unexpected{result.Error()};
+    }
+    return *this;
+  }
+
+  const Err& Error() const {
+    return value_.error();
+  }
+
+ private:
+  std::expected<void, Err> value_;
 };
 
 }  // namespace hornet::consensus

@@ -2,6 +2,8 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
+#include <algorithm>
+
 #include "hornetlib/protocol/script/lang/types.h"
 #include "hornetlib/protocol/script/runtime/engine.h"
 #include "hornetlib/protocol/script/runtime/throw.h"
@@ -29,8 +31,7 @@ inline void BinaryBitwise(const Context& context, Fn&& f) {
 // Op::Equal
 static void OnEqual(const Context& context) {
   return BinaryBitwise(context, [](const auto& a, const auto& b) {
-    using util::operator==;  // Until libcpp includes std::span::operator==.
-    return a == b;
+    return std::ranges::equal(a, b);
   });
 }
 

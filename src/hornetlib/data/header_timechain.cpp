@@ -95,6 +95,17 @@ std::optional<Locator> HeaderTimechain::MakeLocator(int height, const protocol::
   return std::nullopt;
 }
 
+// Ensure both height and hash match before returning a valid iterator.
+HeaderTimechain::BaseConstIterator HeaderTimechain::FindStable(int height, const protocol::Hash& hash) const {
+  if (height < 0) util::ThrowInvalidArgument("HeaderTimechain::FindStable negative height.");
+  if (height < ChainLength() && hash == GetChainHash(height)) 
+    return BeginChain(height);
+  const auto it = forest_.Find(hash);
+  if (forest_.IsValidNode(it) && it->hash == hash)
+    return BeginForest(it);
+  return {};
+}
+
 HeaderTimechain::AddResult HeaderTimechain::PromoteBranch(BaseIterator tip) {
   auto [it, moved] = Base::PromoteBranch(tip, GetPolicy());
   return {MakeContextIterator({it, *ChainTip()}), moved};
@@ -106,7 +117,7 @@ void HeaderTimechain::PruneForest() {
 }
 
 std::unique_ptr<HeaderTimechain::ValidationView> HeaderTimechain::GetValidationView(
-    ConstIterator tip) const {
+    BaseConstIterator tip) const {
   return std::make_unique<HeaderTimechain::ValidationView>(*this, tip);
 }
 
@@ -139,7 +150,7 @@ HeaderTimechain::Iterator HeaderTimechain::FindTipOrForks(
 ////////////////////////////////////////////////////////////////////////////////////////////
 
 int HeaderTimechain::ValidationView::Length() const {
-  return tip_->height + 1;
+  return tip_.GetHeight() + 1;
 }
 
 uint32_t HeaderTimechain::ValidationView::TimestampAt(int height) const {
@@ -150,11 +161,9 @@ std::vector<uint32_t> HeaderTimechain::ValidationView::LastNTimestamps(int count
   std::vector<uint32_t> result;
   result.reserve(count);
 
-  const int stop_height = std::max(tip_->height - count, -1);
-  for (const auto& header : timechain_.AncestorsToHeight(tip_, stop_height))
-    result.push_back(header.GetTimestamp());
-
-  std::sort(result.begin(), result.end());
+  auto it = tip_;
+  for (int i = 0; i < count && it; ++i, ++it)
+    result.push_back(it->GetTimestamp());
   return result;
 }
 

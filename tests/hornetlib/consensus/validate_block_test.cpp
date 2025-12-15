@@ -2,7 +2,7 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "hornetlib/consensus/validate_block.h"
+#include "hornetlib/consensus/rules/validate.h"
 
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/protocol/block.h"
@@ -100,7 +100,7 @@ TEST(ValidatorTest, RejectsBlockWithExcessiveWeight) {
   block.SetHeader(header);
 
   const auto block2 = RoundTrip(block);
-  EXPECT_GT(block2.GetWeightUnits(), constants::kMaximumWeightUnits);
+  EXPECT_GT(block2.GetWeightUnits(), 4'000'000);
   EXPECT_EQ(ValidateBlockStructure(block2), BlockError::BadSize);
 }
 
@@ -131,7 +131,7 @@ TEST(ValidatorTest, RejectsBlockWithInvalidTransaction) {
   header.SetMerkleRoot(ComputeMerkleRoot(block).hash);
   block.SetHeader(header);
 
-  EXPECT_EQ(ValidateBlockStructure(RoundTrip(block)), BlockError::BadTransaction);
+  EXPECT_EQ(std::get<BlockError>(ValidateBlockStructure(RoundTrip(block)).Error()), BlockError::BadTransaction);
 }
 
 }  // namespace

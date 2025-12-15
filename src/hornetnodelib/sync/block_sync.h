@@ -9,14 +9,17 @@
 #include <memory>
 #include <sstream>
 #include <thread>
+#include <variant>
 
 #include "hornetlib/consensus/types.h"
-#include "hornetlib/consensus/validate_block.h"
+#include "hornetlib/consensus/rules/validate.h"
 #include "hornetlib/data/sidecar_binding.h"
 #include "hornetlib/data/timechain.h"
 #include "hornetlib/protocol/message/block.h"
 #include "hornetlib/protocol/message/getdata.h"
+#include "hornetlib/util/notify.h"
 #include "hornetlib/util/thread_safe_queue.h"
+#include "hornetlib/util/throw.h"
 #include "hornetnodelib/net/peer.h"
 #include "hornetnodelib/sync/sync_handler.h"
 #include "hornetnodelib/sync/types.h"
@@ -60,7 +63,8 @@ class BlockSync {
   // Gets the next block ID to request from a peer.
   std::optional<data::Key> GetNextBlockId() const;
 
-  void HandleError(const Item& item, consensus::BlockError error);
+  consensus::SuccessOr<consensus::BlockOrTransactionError> ValidateItem(const Item& item);
+  void HandleError(const Item& item, consensus::BlockOrTransactionError error);
 
   data::Timechain& timechain_;
   BlockValidationBinding validation_;
@@ -191,6 +195,26 @@ inline void BlockSync::OnBlock(net::SharedPeer peer, const protocol::message::Bl
   RequestNextBlock(peer);
 }
 
+inline consensus::SuccessOr<consensus::BlockOrTransactionError> BlockSync::ValidateItem(const Item& item) {
+  // Validates the block.
+  return consensus::rules::ValidateBlockStructure(*item.block).AndThen([&] {
+    // Lock the header chain during the scope of contextual validation.
+    const auto headers = timechain_.ReadHeaders();
+    // Find the header for this block, and advance up the tree to its parent.
+    const auto header = headers->FindStable(item.id.height, item.id.hash);
+    if (!header) {
+      // The block we requested and downloaded and queued is bizarrely now not found in our header timechain.
+      // This should be completely impossible, especially since headers are append-only.
+      hornet::util::ThrowLogicError("Header not found during block sync height ", item.id.height, ".");
+    }
+    const auto parent = std::next(header);
+    // Create a validation view with the parent as the tip.
+    const auto view = headers->GetValidationView(parent);
+    // Call the contextual block validation.
+    return consensus::rules::ValidateBlockContext(*view, *item.block);
+  });
+}
+
 inline void BlockSync::Process() {
   for (std::optional<Item> item; (item = queue_.WaitPop());) {
     queue_bytes_ -= SizeInBytes(*item);
@@ -199,12 +223,12 @@ inline void BlockSync::Process() {
     const auto request_state = RequestNextBlock(item->peer);
 
     // Validates the block.
-    const consensus::BlockError error = consensus::ValidateBlockStructure(*item->block);
+    const auto result = ValidateItem(*item);
 
     // If validation fails, disconnect/ban the peer that provided it,
     // delete this block and any downstream blocks, and cancel any downstream block requests.
-    if (error != consensus::BlockError::None) {
-      HandleError(*item, error);
+    if (!result) {
+      HandleError(*item, result.Error());
       continue;
     }
 
@@ -224,9 +248,16 @@ inline void BlockSync::Process() {
   }
 }
 
-inline void BlockSync::HandleError(const Item& item, consensus::BlockError error) {
+inline void BlockSync::HandleError(const Item& item, consensus::BlockOrTransactionError error) {
   std::ostringstream oss;
-  oss << "Block validation error code " << static_cast<int>(error) << ".";
+  std::visit([&](const auto& e) {
+    using E = std::decay_t<decltype(e)>;
+    if constexpr (std::is_same_v<E, consensus::BlockError>)
+      oss << "Block validation";
+    else if constexpr (std::is_same_v<E, consensus::TransactionError>)
+      oss << "Transaction validation";
+    oss << " error code" << static_cast<int>(e) << ".";
+  }, error);
 
   // Drops peer immediately, and potentially applies misbehavior penalties.
   handler_.OnError(item.peer, oss.str());

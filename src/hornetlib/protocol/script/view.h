@@ -20,6 +20,10 @@ class View {
   class EofTag {};
   class Iterator {
    public:
+    using iterator_concept  = std::input_iterator_tag;
+    using difference_type   = std::ptrdiff_t;
+    using value_type        = lang::Instruction;
+
     Iterator(lang::Bytes data) : parser_(data), op_(parser_.Next()) {}
     bool operator==(EofTag) const {
       return !op_.has_value();
@@ -42,7 +46,12 @@ class View {
     const lang::Instruction* operator->() const {
       return &*op_;
     }
-
+    friend bool operator ==(EofTag eof, const Iterator& it) {
+      return it == eof;
+    }
+    friend bool operator !=(EofTag eof, const Iterator& it) {
+      return it != eof;
+    }
    private:
     Parser parser_;
     std::optional<lang::Instruction> op_;
