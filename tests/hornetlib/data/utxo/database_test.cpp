@@ -23,7 +23,6 @@ namespace {
 TEST(DatabaseTest, TestAppendGenesis) {
   test::TempFolder dir;
   Database database{dir.Path()};
-  database.Append(protocol::Block::Genesis(), 0);
 }
 
 TEST(DatabaseTest, TestSpentOutputsNotFound_MutableSerial) {
@@ -36,8 +35,8 @@ TEST(DatabaseTest, TestSpentOutputsNotFound_MutableSerial) {
   database.SetMutableWindow(chain.Length());
 
   // Appends the blocks to the database, serially in order.
-  for (int i = 0; i < chain.Length(); ++i)
-    database.Append(*chain[i], i);
+  for (int height = 1; height < chain.Length(); ++height)
+    database.Append(*chain[height], height);
   
   // Query everything that was spent already and check it is unfound.
   std::vector<OutputKey> keys(chain.SpentSize());
@@ -61,7 +60,7 @@ TEST(DatabaseTest, TestValidateUnspent_InOrderSerial) {
   Database database{dir.Path()};
 
   test::Blockchain chain;
-  for (int height = 0; height < kLength; ++height) {
+  for (int height = 1; height < kLength; ++height) {
     // Generate a new block to propose for the test chain.
     auto block = chain.Sample(kMaxTransactions);
 
@@ -89,7 +88,7 @@ TEST(DatabaseTest, TestPipeline_InOrderSerial) {
   Database database{dir.Path()};
 
   test::Blockchain chain;
-  for (int height = 0; height < kLength; ++height) {
+  for (int height = 1; height < kLength; ++height) {
     // Generate a new block to propose for the test chain.
     auto block = chain.Sample(kMaxTransactions);
 
@@ -145,7 +144,7 @@ TEST(DatabaseTest, TestPipeline_PreemptiveSerial) {
   Database database{dir.Path()};
 
   test::Blockchain chain;
-  for (int height = 0; height < kLength; ++height) {
+  for (int height = 1; height < kLength; ++height) {
     // Generate a new block to propose for the test chain.
     auto block = chain.Sample(kMaxTransactions);
 
@@ -203,12 +202,12 @@ TEST(DatabaseTest, TestAppend_OutOfOrderSerial) {
 
   // Create the chain as though known to a peer.
   test::Blockchain chain;
-  for (int height = 0; height < kLength; ++height)
+  for (int height = 1; height < kLength; ++height)
     chain.Append(chain.Sample(kMaxTransactions));
 
-  for (int i = 0; i < kLength; i += 2) {
-    database.Append(*chain[i + 1], i + 1);
-    database.Append(*chain[i], i);
+  for (int height = 1; height < kLength - 1; height += 2) {
+    database.Append(*chain[height + 1], height + 1);
+    database.Append(*chain[height], height);
   }
 }
 
@@ -221,7 +220,7 @@ TEST(DatabaseTest, TestPipeline_UnorderedSerial) {
 
   // Create the chain as though known to a peer.
   test::Blockchain chain;
-  for (int height = 0; height < kLength; ++height)
+  for (int height = 1; height < kLength; ++height)
     chain.Append(chain.Sample(kMaxTransactions));
 
   std::vector<OutputKey> prev_keys;
@@ -229,7 +228,7 @@ TEST(DatabaseTest, TestPipeline_UnorderedSerial) {
   bool incomplete = false;
   QueryResult prev_query;
 
-  for (int i = 0; i < kLength; i += 2) {
+  for (int i = 1; i < kLength - 1; i += 2) {
     // Usually we would append and process the even block (0) followed by the odd block (1).
     // In this test we process them in the opposite order to check out-of-order operation.
     
@@ -364,7 +363,7 @@ TEST(DatabaseTest, TestAppendMutableSerial) {
   database.SetMutableWindow(chain.Length());
 
   // Appends the blocks to the database, serially in order.
-  for (int height = 0; height < chain.Length(); ++height) {
+  for (int height = 1; height < chain.Length(); ++height) {
     database.Append(*chain[height], height);
   
     {
@@ -409,7 +408,7 @@ TEST(DatabaseTest, TestAppendMutableSerial) {
     // Verify the conservation of value of all unspent transactions.
     int64_t total = 0;
     for (const OutputDetail& detail : outputs) total += detail.header.amount;
-    EXPECT_EQ(total, kBlocks * 50ll * 100'000'000);
+    EXPECT_EQ(total, (kBlocks - 1) * 50ll * 100'000'000);
   }
 
   // Query everything that was spent already and check it is unfound.
@@ -438,7 +437,7 @@ TEST(DatabaseTest, TestAppendGeneratedParallel) {
   Database database{dir.Path()};
 
   // Appends the blocks to the database.
-  ParallelFor(0, chain.Length(), [&](int i) {
+  ParallelFor(1, chain.Length(), [&](int i) {
     database.Append(*chain[i], i);
   });
 }
@@ -446,14 +445,14 @@ TEST(DatabaseTest, TestAppendGeneratedParallel) {
 TEST(DatabaseTest, TestFetchWithNullIds) {
   test::TempFolder dir;
   Database database{dir.Path()};
-  database.Append(protocol::Block::Genesis(), 0);
-
-  // We need to get the OutputId of the genesis output.
-  auto block = protocol::Block::Genesis();
-  std::vector<OutputKey> keys = { {(*block.Transactions().begin()).GetHash(), 0}, {} };
+  // Use a test::Blockchain to generate a sample block at height 1.
+  test::Blockchain chain;
+  chain.Append(chain.Sample());
+  database.Append(*chain[1], 1);
+  std::vector<OutputKey> keys = { {(chain[1]->Transactions().begin())->GetHash(), 0}, {} };
   std::vector<OutputId> rids(keys.size());
   database.SortKeys(keys);
-  int queried = database.Query(keys, rids, 1);
+  int queried = database.Query(keys, rids, 2);
   EXPECT_EQ(queried, 1);
 
   database.SortIds(rids);
@@ -471,30 +470,29 @@ TEST(DatabaseTest, TestPartialQueryAndFetch) {
 
   // Create a chain with 2 blocks (Genesis + 1).
   test::Blockchain chain;
-  chain.Append(chain.Sample()); // Genesis
   
-  // Use Sample(1) to ensure block1 only has a coinbase and doesn't spend Genesis outputs.
+  // Use Sample(1) to ensure each block only has a coinbase and doesn't spend previous outputs.
   // This simplifies the test logic regarding spent outputs.
-  auto block1 = chain.Sample(1);
-  chain.Append(std::move(block1));
+  chain.Append(chain.Sample(1));  // height 1
+  chain.Append(chain.Sample(1));  // height 2
 
   // Append both to DB.
-  database.Append(*chain[0], 0);
   database.Append(*chain[1], 1);
+  database.Append(*chain[2], 2);
 
   // We want to query inputs for a hypothetical block that spends outputs from both Genesis and Block 1.
   std::vector<OutputKey> keys;
-  keys.push_back({chain[0]->Transaction(0).GetHash(), 0}); // From Genesis
   keys.push_back({chain[1]->Transaction(0).GetHash(), 0}); // From Block 1
-  std::vector<int> heights = {0, 1};
+  keys.push_back({chain[2]->Transaction(0).GetHash(), 0}); // From Block 2
+  std::vector<int> heights = {1, 2};
 
   SortTogether(keys.begin(), keys.end(), heights.begin());
   std::vector<OutputId> rids(keys.size(), kNullOutputId);
   std::vector<OutputDetail> outputs(keys.size());
 
-  // 1. Partial Query: Query only up to height 1 (exclusive of Block 1).
-  // This should find the Genesis output but not the Block 1 output.
-  auto result1 = database.Query(keys, rids, 0, 1);
+  // 1. Partial Query: Query only up to height 2 (exclusive of Block 2).
+  // This should find only the output from height 1.
+  auto result1 = database.Query(keys, rids, 0, 2);
   EXPECT_EQ(result1.funded, 1);
   EXPECT_EQ(result1.spent, 0);
   SortTogether(heights.begin(), heights.end(), keys.begin(), rids.begin(), outputs.begin());
@@ -511,15 +509,15 @@ TEST(DatabaseTest, TestPartialQueryAndFetch) {
   EXPECT_EQ(fetched1, 1);
   SortTogether(heights.begin(), heights.end(), keys.begin(), rids.begin(), outputs.begin());
 
-  // Verify we got the Genesis output.
-  EXPECT_EQ(outputs[0].header.height, 0);
+  // Verify we got the Block 1 output.
+  EXPECT_EQ(outputs[0].header.height, 1);
   EXPECT_GT(outputs[0].header.amount, 0);
   EXPECT_TRUE(outputs[1].header.IsNull());
 
-  // 3. Remainder Query: Query from height 1 to 2.
-  // This should find the Block 1 output.
+  // 3. Remainder Query: Query from height 2 to 3.
+  // This should find the output from height 2.
   SortTogether(keys.begin(), keys.end(), heights.begin(), rids.begin(), outputs.begin());
-  auto result2 = database.Query(keys, rids, 1, 2);
+  auto result2 = database.Query(keys, rids, 2, 3);
   EXPECT_EQ(result2.funded, 1);
   EXPECT_EQ(result2.spent, 0);
 
@@ -533,9 +531,9 @@ TEST(DatabaseTest, TestPartialQueryAndFetch) {
   EXPECT_EQ(fetched2, 1);
 
   SortTogether(heights.begin(), heights.end(), keys.begin(), rids.begin(), outputs.begin());
-  EXPECT_EQ(outputs[0].header.height, 0);
+  EXPECT_EQ(outputs[0].header.height, 1);
   EXPECT_GT(outputs[0].header.amount, 0);
-  EXPECT_EQ(outputs[1].header.height, 1);
+  EXPECT_EQ(outputs[1].header.height, 2);
   EXPECT_GT(outputs[1].header.amount, 0);
 
   EXPECT_FALSE(outputs[0].header.IsNull());

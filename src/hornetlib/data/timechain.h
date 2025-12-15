@@ -29,8 +29,11 @@ class Timechain {
     std::list<std::unique_ptr<SidecarBase>>::iterator it;
   };
 
-  Timechain() {
-    headers_.Add(model::HeaderContext::Genesis(GetGenesisHeader()));
+  Timechain() : Timechain{GetGenesisHeader()} {
+  }
+
+  Timechain(const protocol::BlockHeader& genesis_header) {
+    headers_.Add(model::HeaderContext::Genesis(genesis_header));
   }
 
   ReadLock<HeaderTimechain, PrioritySharedMutex> ReadHeaders() const {
@@ -88,7 +91,7 @@ class Timechain {
     Downcast(sidecar)->Set(*locator, value);
   }
 
- private:
+ protected:
   template <typename T>
   SidecarBaseT<T>* Downcast(SidecarHandle<T> sidecar) const {
     SidecarBase* base = sidecar.it->get();

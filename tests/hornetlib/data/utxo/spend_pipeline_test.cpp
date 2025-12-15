@@ -39,8 +39,9 @@ TEST_F(SpendPipelineTest, ProcessBlocks) {
   constexpr int kLength = 50;
   test::Blockchain chain;
   
-  for (int i = 0; i < kLength; ++i) {
+  while (chain.Length() < kLength) {
     chain.Append(chain.Sample());
+    int i = chain.Length() - 1;
     auto joiner = pipeline_->Add(chain[i], i);
     
     // Wait for the joiner to be ready.
@@ -57,30 +58,31 @@ TEST_F(SpendPipelineTest, ProcessBlocks) {
 }
 
 TEST_F(SpendPipelineTest, ProcessBlocksOutOfOrder) {
-  constexpr int kLength = 20;
+  constexpr int kBlocks = 20;
   test::Blockchain chain;
   
   // Generate blocks.
-  for (int i = 0; i < kLength; ++i)
+  for (int i = 0; i < kBlocks; ++i)
     chain.Append(chain.Sample());
 
   // Create indices and shuffle them.
-  std::vector<int> indices(kLength);
-  std::iota(indices.begin(), indices.end(), 0);
-  std::shuffle(indices.begin(), indices.end(), std::mt19937{std::random_device{}()});
+  std::vector<int> heights(kBlocks);
+  std::iota(heights.begin(), heights.end(), 1);
+  std::shuffle(heights.begin(), heights.end(), std::mt19937{std::random_device{}()});
 
-  std::vector<std::shared_ptr<SpendJoiner>> joiners(kLength);
+  std::vector<std::shared_ptr<SpendJoiner>> joiners(chain.Length());
 
   // Add blocks in random order.
-  for (int i : indices)
-    joiners[i] = pipeline_->Add(chain[i], i);
+  for (int height : heights)
+    joiners[height] = pipeline_->Add(chain[height], height);
 
   // Verify that all blocks complete successfully.
-  for (int i = 0; i < kLength; ++i) {
-    EXPECT_TRUE(joiners[i]->WaitForFetch());
+  for (int i = 0; i < kBlocks; ++i) {
+    int height = i + 1;
+    EXPECT_TRUE(joiners[height]->WaitForFetch());
     
-    const consensus::Result result = joiners[i]->Join([i](const consensus::SpendRecord& spend) {
-        EXPECT_LT(spend.funding_height, i);
+    const consensus::Result result = joiners[height]->Join([height](const consensus::SpendRecord& spend) {
+        EXPECT_LT(spend.funding_height, height);
         EXPECT_GT(spend.amount, 0);
         return consensus::Result{};
     });
@@ -91,9 +93,9 @@ TEST_F(SpendPipelineTest, ProcessBlocksOutOfOrder) {
 TEST_F(SpendPipelineTest, ProcessInvalidBlock) {
   test::Blockchain chain;
   
-  // Add a valid block (Genesis).
+  // Add a valid block.
   chain.Append(chain.Sample());
-  auto joiner0 = pipeline_->Add(chain[0], 0);
+  auto joiner0 = pipeline_->Add(chain[1], 1);
 
   EXPECT_TRUE(joiner0->WaitForFetch());
   EXPECT_EQ(joiner0->Join([](const consensus::SpendRecord&) { return consensus::Result{}; }), consensus::Result{});
@@ -102,7 +104,7 @@ TEST_F(SpendPipelineTest, ProcessInvalidBlock) {
   auto block1 = std::make_shared<protocol::Block>(chain.Sample());
   ASSERT_GT(block1->GetTransactionCount(), 1);
   block1->Transaction(1).Input(0).previous_output.hash[0]++;
-  auto joiner1 = pipeline_->Add(block1, 1);
+  auto joiner1 = pipeline_->Add(block1, 2);
   
   // WaitForFetch should return false because it will fail at the Query stage (inputs not found).
   EXPECT_FALSE(joiner1->WaitForFetch());
