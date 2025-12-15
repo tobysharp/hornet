@@ -12,6 +12,7 @@
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/transaction.h"
 #include "hornetlib/protocol/script/view.h"
+#include "hornetlib/util/io.h"
 #include "hornetlib/util/iterator_range.h"
 
 namespace hornet::protocol {
@@ -98,6 +99,24 @@ class Block {
     const auto end = reader.GetPos();
 
     serialized_bytes_ = end - start;
+  }
+
+  void Write(std::ofstream& os) const {
+    constexpr int32_t kVersion = 1;
+    util::Write(os, kVersion);
+    util::Write(os, header_);
+    util::Write(os, transactions_);
+    data_.Write(os);
+    util::Write(os, serialized_bytes_);
+  }
+
+  void Read(std::istream& is) {
+    [[maybe_unused]] const auto version = util::Read<int32_t>(is);
+    util::Read(is, header_);
+    util::Read(is, transactions_);
+    for (auto& tx : transactions_) tx.Sanitize();
+    data_.Read(is);
+    util::Read(is, serialized_bytes_);
   }
 
   using ConstIterator = TransactionConstIterator;
