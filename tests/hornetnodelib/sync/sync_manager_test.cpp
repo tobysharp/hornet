@@ -20,7 +20,7 @@
 namespace hornet::node::dispatch {
 namespace {
 
-TEST(SyncManagerTest, TestGetHeaders) {
+TEST(SyncManagerTest, TestHandshake) {
     auto node = test::BitcoindPeer::ConnectOrLaunch();
     net::PeerManager peers;
     ProtocolLoop loop(peers);
