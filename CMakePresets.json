@@ -7,9 +7,8 @@
       "description": "Clang++-20 Debug",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/clang20-debug",
+      "toolchainFile": "${sourceDir}/clang20.toolchain.cmake",
       "cacheVariables": {
-        "CMAKE_C_COMPILER": "clang-20",
-        "CMAKE_CXX_COMPILER": "clang++-20",
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
@@ -21,9 +20,8 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/clang20-release",
       "description": "Clang++-20 Release",
+      "toolchainFile": "${sourceDir}/clang20.toolchain.cmake",
       "cacheVariables": {
-        "CMAKE_C_COMPILER": "clang-20",
-        "CMAKE_CXX_COMPILER": "clang++-20",
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
