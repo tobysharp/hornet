@@ -4,7 +4,6 @@
   // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
   "version": "0.2.0",
   "configurations": [
-
     {
       "name": "Debug hornetlib_tests",
       "type": "cppdbg",
@@ -25,7 +24,7 @@
       "cwd": "${workspaceFolder}/build",
       "stopAtEntry": false
     },
-        {
+    {
       "name": "Debug hornetnode",
       "type": "cppdbg",
       "MIMode": "gdb",
@@ -46,5 +45,18 @@
       "cwd": "${workspaceFolder}/build",
       "stopAtEntry": false
     },
+    {
+      "name": "Debug fixpow",
+      "type": "cppdbg",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/clang20-debug/fixpow",
+      "args": [
+        "--in=/tmp/blocks.bin",
+        "--out=/tmp/blocks_pow.bin"
+      ],
+      "cwd": "${workspaceFolder}/build",
+    }
   ]
 }
