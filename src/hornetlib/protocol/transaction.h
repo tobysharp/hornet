@@ -18,6 +18,8 @@
 #include "hornetlib/util/log.h"
 #include "hornetlib/util/subarray.h"
 #include "hornetlib/util/big_uint.h"
+#include "hornetlib/util/io.h"
+#include "hornetlib/util/optional.h"
 
 namespace hornet::protocol {
 
@@ -86,6 +88,20 @@ struct TransactionData {
   }
   void AddWitnessBytes(int bytes) {
     witness_bytes_ += bytes;
+  }
+
+  void Write(std::ostream& os) const {
+    std::apply([&](const auto&... arrs) {
+      (util::Write(os, arrs), ...);
+    }, std::tie(inputs, outputs, witnesses, components, scripts));
+    util::Write(os, witness_bytes_);
+  }
+
+  void Read(std::istream& is) {
+    std::apply([&](auto&... arrs) {
+      (util::Read(is, arrs), ...);
+    }, std::tie(inputs, outputs, witnesses, components, scripts));
+    witness_bytes_ = util::Read<int>(is);
   }
 
  private:
@@ -165,22 +181,14 @@ inline int TransactionData::SizeBytes() const {
   return static_cast<int>(size);
 }
 
-struct TransactionDetail;
+class TransactionDetail;
 protocol::Hash ComputeTxid(const TransactionDetail& detail, const TransactionData& data, bool include_witness);
 
 // The TransactionDetail struct holds the data fields of a transaction, and the
 // metadata needed for its variable-length array fields. The actual data for those
 // arrays is held in TransactionData.
-struct TransactionDetail {
-  uint32_t version = 0;
-  util::SubArray<Input> inputs;
-  util::SubArray<Output> outputs;
-  util::SubArray<Witness> witnesses;
-  uint32_t lock_time = 0;
-  int no_witness_size_bytes = 0;
-  mutable std::optional<protocol::Hash> txid;
-  mutable std::optional<protocol::Hash> wtxid;
-
+class TransactionDetail {
+ public:
   bool IsWitness() const {
     return !witnesses.IsEmpty();
   }
@@ -289,6 +297,41 @@ struct TransactionDetail {
     no_witness_size_bytes = total_bytes - witness_size_bytes;
     data.AddWitnessBytes(witness_size_bytes);
   }
+
+  const util::SubArray<Input>& Inputs() const { return inputs; }
+  const util::SubArray<Output>& Outputs() const { return outputs; }
+  const util::SubArray<Witness>& Witnesses() const { return witnesses; }
+  uint32_t LockTime() const { return lock_time; }
+  uint32_t Version() const { return version; }
+  int BytesNoWitness() const { return no_witness_size_bytes; }
+
+  util::SubArray<Input>& Inputs() { Invalidate(); return inputs; }
+  util::SubArray<Output>& Outputs() { Invalidate(); return outputs; }
+  util::SubArray<Witness>& Witnesses() { Invalidate(); return witnesses; }
+  void SetVersion(uint32_t v) { version = v; Invalidate(); }
+  void SetLockTime(uint32_t v) { lock_time = v; Invalidate(); }
+  void SetInputs(const util::SubArray<Input>& v) { inputs = v; Invalidate(); }
+  void SetOutputs(const util::SubArray<Output>& v) { outputs = v; Invalidate(); }
+  void SetWitnesses(const util::SubArray<Witness>& v) { witnesses = v; Invalidate(); }
+
+  void Sanitize() { Invalidate(); }
+
+ private:
+  template <typename Data, typename Detail> friend class TransactionViewT;
+
+  void Invalidate() {
+    txid.Reset();
+    wtxid.Reset();
+  }
+
+  uint32_t version = 0;
+  util::SubArray<Input> inputs;
+  util::SubArray<Output> outputs;
+  util::SubArray<Witness> witnesses;
+  uint32_t lock_time = 0;
+  int no_witness_size_bytes = 0;
+  mutable util::Optional<protocol::Hash> txid;
+  mutable util::Optional<protocol::Hash> wtxid; 
 };
 
 // The TransactionViewT class represents the join of data and metadata stored in
@@ -301,13 +344,13 @@ class TransactionViewT {
   TransactionViewT(Data& data, Detail& detail) : data_(data), detail_(detail) {}
 
   int InputCount() const {
-    return detail_.inputs.Size();
+    return detail_.Inputs().Size();
   }
   int OutputCount() const {
-    return detail_.outputs.Size();
+    return detail_.Outputs().Size();
   }
   int WitnessCount() const {
-    return detail_.witnesses.Size();
+    return detail_.Witnesses().Size();
   }
   bool IsWitness() const {
     return detail_.IsWitness();
@@ -316,7 +359,7 @@ class TransactionViewT {
     return InputCount() == 1 && Input(0).previous_output.IsNull();
   }
   int SerializedBytesNoWitness() const {
-    return detail_.no_witness_size_bytes;
+    return detail_.BytesNoWitness();
   }
   const protocol::Hash& GetHash() const {
     return detail_.GetHash(data_);
@@ -329,16 +372,16 @@ class TransactionViewT {
   // the TransactionViewT object is const, e.g. the method is called on a const object that
   // derives from TransactionViewT.
   uint32_t Version() const {
-    return detail_.version;
+    return detail_.Version();
   }
   const Input& Input(int index) const {
-    return detail_.inputs.Span(data_.inputs)[index];
+    return detail_.Inputs().Span(data_.inputs)[index];
   }
   const Output& Output(int index) const {
-    return detail_.outputs.Span(data_.outputs)[index];
+    return detail_.Outputs().Span(data_.outputs)[index];
   }
   const Witness& Witness(int input) const {
-    return detail_.witnesses.Span(data_.witnesses)[input];
+    return detail_.Witnesses().Span(data_.witnesses)[input];
   }
   const Component& Component(int input, int component) const {
     return Witness(input).Span(data_.components)[component];
@@ -353,13 +396,13 @@ class TransactionViewT {
     return Component(input, component).Span(data_.scripts);
   }
   uint32_t LockTime() const {
-    return detail_.lock_time;
+    return detail_.LockTime();
   }
   std::span<const struct Input> Inputs() const {
-    return detail_.inputs.Span(data_.inputs);
+    return detail_.Inputs().Span(data_.inputs);
   }
   std::span<const struct Output> Outputs() const {
-    return detail_.outputs.Span(data_.outputs);
+    return detail_.Outputs().Span(data_.outputs);
   }
   auto SignatureScripts() const {
     return std::views::iota(0, InputCount()) | 
@@ -374,16 +417,16 @@ class TransactionViewT {
   // the TransactionViewT object is non-const. In this case, the constness of the return value
   // depends on the constness of the templated types (Data, Detail).
   auto& Version() {
-    return detail_.version;
+    return detail_.Version();
   }
   auto& Input(int index) {
-    return detail_.inputs.Span(data_.inputs)[index];
+    return detail_.Inputs().Span(data_.inputs)[index];
   }
   auto& Output(int index) {
-    return detail_.outputs.Span(data_.outputs)[index];
+    return detail_.Outputs().Span(data_.outputs)[index];
   }
   auto& Witness(int input) {
-    return detail_.witnesses.Span(data_.witnesses)[input];
+    return detail_.Witnesses().Span(data_.witnesses)[input];
   }
   auto& Component(int input, int component) {
     return Witness(input).Span(data_.components)[component];
@@ -398,13 +441,13 @@ class TransactionViewT {
     return Component(input, component).Span(data_.scripts);
   }
   auto& LockTime() {
-    return detail_.lock_time;
+    return detail_.LockTime();
   }
   auto Inputs() {
-    return detail_.inputs.Span(data_.inputs);
+    return detail_.Inputs().Span(data_.inputs);
   }
   auto Outputs() {
-    return detail_.outputs.Span(data_.outputs);
+    return detail_.Outputs().Span(data_.outputs);
   }
   auto SignatureScripts() {
     return std::views::iota(0, InputCount()) | 
@@ -418,16 +461,16 @@ class TransactionViewT {
   // The following methods are only valid on mutable views, and will cause compile errors if
   // called on immutable views, i.e. where detail_ and data_ are const.
   void SetVersion(int version) {
-    detail_.version = version;
+    detail_.SetVersion(version);
   }
   void ResizeInputs(int inputs) {
-    data_.ResizeInputs(detail_.inputs, inputs);
+    data_.ResizeInputs(detail_.Inputs(), inputs);
   }
   void ResizeOutputs(int outputs) {
-    data_.ResizeOutputs(detail_.outputs, outputs);
+    data_.ResizeOutputs(detail_.Outputs(), outputs);
   }
   void ResizeWitnesses(int witnesses) {
-    data_.ResizeWitnesses(detail_.witnesses, witnesses);
+    data_.ResizeWitnesses(detail_.Witnesses(), witnesses);
   }
   void ResizeComponents(int input, int components) {
     data_.ResizeComponents(Witness(input), components);
@@ -442,7 +485,7 @@ class TransactionViewT {
     SetScript(Component(input, component), script);
   }
   void SetLockTime(uint32_t lock_time) {
-    detail_.lock_time = lock_time;
+    detail_.SetLockTime(lock_time);
   }
 
   template <typename Data2, typename Detail2>

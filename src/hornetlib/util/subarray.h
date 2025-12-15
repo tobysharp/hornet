@@ -40,7 +40,7 @@ class SubArray {
     count_ = count;
   }
 
-  std::span<T> Span(std::vector<T>& data) const {
+  std::span<T> Span(std::vector<T>& data) {
     return std::span<T>{data}.subspan(start_, count_);
   }
 

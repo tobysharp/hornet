@@ -137,9 +137,6 @@ class ChainTree {
   template <ContextPolicy<TData, TContext> TPolicy>
   PromoteResult PromoteBranch(Iterator tip, const TPolicy& policy);
 
-  // Erase an entire subtree, whose common ancestor is the node provided.
-  void EraseBranch(Iterator root);
-
   void PruneForest(int min_height);
 
   // Navigation
