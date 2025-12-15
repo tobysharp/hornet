@@ -28,10 +28,10 @@ TEST(SpendJoinerTest, TestPreemptiveSerial) {
 
   constexpr int kLength = 100;
   test::Blockchain chain;
-  for (int i = 0; i < kLength; ++i) {
+  for (int height = 1; height < kLength; ++height) {
     auto block = std::make_shared<protocol::Block>(chain.Sample());
     {
-      SpendJoiner joiner{db, block, i};
+      SpendJoiner joiner{db, block, height};
 
       EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Init);
       EXPECT_FALSE(joiner.IsJoinReady());
@@ -46,7 +46,7 @@ TEST(SpendJoinerTest, TestPreemptiveSerial) {
       // Join the block's transactions with their inputs' funding prevouts.
       int64_t total_spend = 0;
       const consensus::Result result = joiner.Join([&](const consensus::SpendRecord& spend) {
-        EXPECT_LT(spend.funding_height, i);
+        EXPECT_LT(spend.funding_height, height);
         EXPECT_GE(spend.amount, 0);
         total_spend += spend.amount;
         return consensus::Result{};
@@ -56,7 +56,7 @@ TEST(SpendJoinerTest, TestPreemptiveSerial) {
 
       // The total amount spent must be bounded above by the sum of the coinbase transactions,
       // excepting that of the most recent block, which cannot have been spent yet.
-      EXPECT_LE(total_spend, i * 50ll * 100'000'000);      
+  EXPECT_LE(total_spend, height * 50ll * 100'000'000);      
     }
     chain.Append(std::move(*block));
   }
@@ -68,10 +68,10 @@ TEST(SpendJoinerTest, TestPreemptiveInvalidBlock) {
 
   constexpr int kLength = 100;
   test::Blockchain chain;
-  for (int i = 0; i < kLength / 2; ++i) {
+  for (int height = 1; height < kLength / 2; ++height) {
     auto block = std::make_shared<protocol::Block>(chain.Sample());
     {
-      SpendJoiner joiner{db, block, i};
+      SpendJoiner joiner{db, block, height};
 
       EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Init);
       EXPECT_FALSE(joiner.IsJoinReady());
@@ -84,8 +84,8 @@ TEST(SpendJoinerTest, TestPreemptiveInvalidBlock) {
       EXPECT_TRUE(joiner.IsJoinReady());
 
       // Join the block's transactions with their inputs' funding prevouts.
-      const consensus::Result result = joiner.Join([i](const consensus::SpendRecord& spend) {
-        EXPECT_LT(spend.funding_height, i);
+      const consensus::Result result = joiner.Join([height](const consensus::SpendRecord& spend) {
+        EXPECT_LT(spend.funding_height, height);
         EXPECT_GT(spend.amount, 0);
         return consensus::Result{};
       });
@@ -150,9 +150,6 @@ TEST(SpendJoinerTest, TestPartialFetchBug) {
 
   // 1. Setup chain with 3 blocks: 0 -> 1 -> 2
   test::Blockchain chain;
-  chain.Append(chain.Sample());
-  // Genesis is Block 0.
-  db.Append(*chain[0], 0); // Append Genesis to DB. ContiguousLength -> 1.
 
   auto block1_val = chain.Sample(10);
   auto block1 = std::make_shared<protocol::Block>(block1_val); // Block 1
@@ -187,8 +184,6 @@ TEST(SpendJoinerTest, TestIncrementalResolution) {
   Database db{dir.Path()};
 
   test::Blockchain chain;
-  chain.Append(chain.Sample()); // Genesis
-  db.Append(*chain[0], 0);
 
   auto block1_val = chain.Sample(10);
   auto block1 = std::make_shared<protocol::Block>(block1_val);
@@ -239,7 +234,7 @@ TEST(SpendJoinerTest, TestUnsortedFetchBug) {
   constexpr int kLength = 20;
 
   int height;
-  for (height = 0; height < kLength - 2; ++height) {
+  for (height = 1; height < kLength - 2; ++height) {
     chain.Append(chain.Sample());
     db.Append(*chain[height], height);
   }
@@ -277,18 +272,18 @@ TEST(SpendJoinerTest, TestPartialFetchMisalignment) {
   test::TempFolder dir;
   Database db{dir.Path()};
 
-  // 1. Create Block 0 (Genesis) and append to DB.
+  // 1. Create Block 1 and append to DB.
   test::Blockchain chain;
   chain.Append(chain.Sample());
-  db.Append(*chain[0], 0);
+  db.Append(*chain[1], 1);
   
-  const auto tx0 = chain[0]->Transaction(0);
+  const auto tx0 = chain[1]->Transaction(0);
   const OutputKey key0{tx0.GetHash(), 0};
 
-  // 2. Create Block 1 such that its output key is "smaller" than Block 0's key.
-  // This ensures that when sorted by Key, Block 1 comes first.
-  // But when sorted by ID (append order), Block 0 comes first.
-  std::shared_ptr<protocol::Block> block1;
+  // 2. Create Block 2 such that its output key is "smaller" than Block 1's key.
+  // This ensures that when sorted by Key, Block 2 comes first.
+  // But when sorted by ID (append order), Block 1 comes first.
+  std::shared_ptr<protocol::Block> block2;
   OutputKey key1;
   do {
     // Use Sample(1) to ensure we only get a coinbase transaction, so we don't spend key0.
@@ -296,15 +291,15 @@ TEST(SpendJoinerTest, TestPartialFetchMisalignment) {
     const auto tx = candidate.Transaction(0);
     key1 = OutputKey{tx.GetHash(), 0};
     if (key1 < key0) {
-      block1 = std::make_shared<protocol::Block>(std::move(candidate));
+      block2 = std::make_shared<protocol::Block>(std::move(candidate));
       break;
     }
   } while (true);
-  chain.Append(protocol::Block(*block1));
+  chain.Append(protocol::Block(*block2));
   // Do NOT append Block 1 to DB yet.
 
-  // 3. Create Block 2 spending both key0 and key1.
-  auto block2_val = chain.Sample(10);
+  // 3. Create Block 3 spending both key0 and key1.
+  auto block3_val = chain.Sample(10);
   // Manually construct inputs to ensure we spend exactly these two.
   // We don't care about the validity of the signature for this test, just the DB lookup.
   protocol::Transaction tx;
@@ -314,11 +309,11 @@ TEST(SpendJoinerTest, TestPartialFetchMisalignment) {
   tx.ResizeOutputs(1);
   tx.Output(0).value = 100;
   
-  auto block2 = std::make_shared<protocol::Block>();
-  block2->AddTransaction(tx);
+  auto block3 = std::make_shared<protocol::Block>();
+  block3->AddTransaction(tx);
 
-  // 4. Start SpendJoiner for Block 2.
-  SpendJoiner joiner{db, block2, 2};
+  // 4. Start SpendJoiner for Block 3.
+  SpendJoiner joiner{db, block3, 3};
   joiner.Advance();  // Parse.
   joiner.Advance();  // Append.
 
@@ -332,8 +327,8 @@ TEST(SpendJoinerTest, TestPartialFetchMisalignment) {
   joiner.Advance();
   EXPECT_EQ(joiner.GetState(), SpendJoiner::State::FetchedPartial);
 
-  // 5. Append Block 1 to DB.
-  db.Append(*block1, 1);
+  // 5. Append Block 2 to DB.
+  db.Append(*block2, 2);
 
   joiner.Advance();
   EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Queried);
@@ -349,11 +344,11 @@ TEST(SpendJoinerTest, TestPartialFetchMisalignment) {
   auto result = joiner.Join([&](const consensus::SpendRecord& spend) {
     if (spend.spend_input_index == 0) {
       // Spending key0. Should have height 0.
-      EXPECT_EQ(spend.funding_height, 0) << "Input 0 (Key0) should have funding height 0";
+      EXPECT_EQ(spend.funding_height, 1) << "Input 0 (Key0) should have funding height 1";
       found_key0 = true;
     } else if (spend.spend_input_index == 1) {
       // Spending key1. Should have height 1.
-      EXPECT_EQ(spend.funding_height, 1) << "Input 1 (Key1) should have funding height 1";
+      EXPECT_EQ(spend.funding_height, 2) << "Input 1 (Key1) should have funding height 2";
       found_key1 = true;
     }
     return consensus::Result{};

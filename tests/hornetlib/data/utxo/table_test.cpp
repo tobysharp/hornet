@@ -83,14 +83,12 @@ TEST(TableTest, TestPartialFetch) {
   table.SetMutableWindow(1);
 
   test::Blockchain chain;
-  chain.Append(chain.Sample()); // Genesis
   
-  // Create a block with multiple outputs.
+  // Create a block with multiple outputs at height 1.
   auto block1 = chain.Sample(10); 
   chain.Append(std::move(block1));
 
   TiledVector<OutputKV> entries;
-  table.AppendOutputs(*chain[0], 0, &entries);
   table.AppendOutputs(*chain[1], 1, &entries);
 
   std::vector<OutputId> all_rids;
@@ -100,8 +98,8 @@ TEST(TableTest, TestPartialFetch) {
   
   // Create two disjoint sets of IDs.
   std::vector<OutputId> set1, set2;
-  for(size_t i=0; i<all_rids.size(); ++i) {
-      if (i % 2 == 0) set1.push_back(all_rids[i]);
+  for(size_t i = 0; i < all_rids.size(); ++i) {
+      if ((i & 1) == 0) set1.push_back(all_rids[i]);
       else set2.push_back(all_rids[i]);
   }
   
