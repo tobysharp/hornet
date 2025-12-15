@@ -20,6 +20,7 @@ class Index {
   void Append(TiledVector<OutputKV>&& entries, int height);
   void EraseSince(int height);
   int GetContiguousLength() const;
+  bool ContainsHeight(int height) const;
 
   static constexpr int GetMutableWindow();
   static void SortKeys(std::span<OutputKey> keys);
@@ -35,7 +36,7 @@ class Index {
   static constexpr int kMergeFanIn = 8;
   
   std::vector<std::unique_ptr<MemoryAge>> ages_;
-  Compacter compacter_;  // Constructed last, destroyed first.
+  mutable Compacter compacter_;  // Constructed last, destroyed first.
 };
 
 inline Index::Index() : compacter_(kCompacterThreads, [this](int index) { DoMerge(index); }) {
@@ -43,6 +44,8 @@ inline Index::Index() : compacter_(kCompacterThreads, [this](int index) { DoMerg
     ages_.emplace_back(std::make_unique<MemoryAge>(i < kMutableAges, kMergeFanIn, 
       [this, index=i](MemoryAge*) { EnqueueMerge(index); })
     );
+  // Add an empty entry for the genesis block, which has no spendable outputs.
+  ages_[0]->Append({}, std::make_pair(0, 1));
 }
 
 inline void Index::DoMerge(int index) {
@@ -70,22 +73,47 @@ inline void Index::EraseSince(int height) {
 }
 
 inline int Index::GetContiguousLength() const {
-  int length = 0;
-  // Holes don't get merged upward, so the end height in the first non-empty age is a lower bound.
+  //const auto lock = compacter_.Lock();
+  // This lock-free implementation requires to search the ages in increasing maturity.
+
+  std::optional<int> age0_min, age0_min_pre_hole;
+  {
+    const auto age0 = ages_[0]->RunsSnapshot();
+    if (!age0->empty())
+    {
+      age0_min = age0->front()->HeightRange().first;
+      age0_min_pre_hole = *age0_min - 1;
+      for (const auto& run : *age0) {
+        if (age0_min_pre_hole != run->HeightRange().first - 1)
+          break;
+        (*age0_min_pre_hole)++;
+      }
+    }
+  }
+
+  std::optional<int> older_max;
   for (int i = 1; i < std::ssize(ages_); ++i) {
-    if (!ages_[i]->Empty()) {
-      length = ages_[i]->RunSnapshot(ages_[i]->Size() - 1)->HeightRange().second;
+    const auto runs = ages_[i]->RunsSnapshot();
+    if (!runs->empty()) {
+      older_max = runs->back()->HeightRange().second - 1;
       break;
     }
   }
-  // Then we can visit each height in age 0, which are always in height order, stopping
-  // when any height is non-contiguous.
-  for (int i = 0; i < ages_[0]->Size(); ++i, ++length) {
-    const auto run = ages_[0]->RunSnapshot(i);
-    if (run->HeightRange().first != length)
-      break;
-  }
-  return length;
+
+  // If the first height in age 0 joins up with the previous ages, we don't have a gap there.
+  if (age0_min && (!older_max || *older_max + 1 >= *age0_min))
+      return *age0_min_pre_hole + 1;
+  // Otherwise there is a hole at the start of age 0.
+  else if (older_max)
+      return *older_max + 1;
+  else
+    return 0;
+}
+
+inline bool Index::ContainsHeight(int height) const {
+  for (const auto& age : ages_)
+    if (age->ContainsHeight(height)) return true;
+  return false;
 }
 
 /* static */ inline void Index::SortKeys(std::span<OutputKey> keys) {
