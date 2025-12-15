@@ -16,6 +16,11 @@ class Timeout {
       : timeout_ms_(timeout_ms),
         initial_time_(std::chrono::high_resolution_clock::now()),
         expiry_time_(initial_time_ + std::chrono::milliseconds{timeout_ms}) {}
+
+  template <typename Rep, typename Period>
+  Timeout(std::chrono::duration<Rep, Period> duration)
+      : Timeout(std::chrono::duration_cast<std::chrono::milliseconds>(duration).count()) {}
+
   constexpr Timeout(const Timeout&) = default;
   constexpr Timeout(Timeout&&) = default;
 
@@ -56,6 +61,10 @@ class Timeout {
     else ms = std::max(std::chrono::duration_cast<std::chrono::milliseconds>(
         expiry_time_ - std::chrono::high_resolution_clock::now()).count(), 0ll);
     return std::chrono::milliseconds{ms};
+  }
+
+  std::chrono::high_resolution_clock::time_point Deadline() const {
+    return IsInfinite() ? std::chrono::high_resolution_clock::time_point::max() : expiry_time_;
   }
 
   void Reset() {
