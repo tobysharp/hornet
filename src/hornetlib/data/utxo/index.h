@@ -72,8 +72,8 @@ inline void Index::EraseSince(int height) {
     if (ptr->IsMutable()) ptr->EraseSince(height);
 }
 
+// Returns the number of contiguously added blocks since genesis, before any holes.
 inline int Index::GetContiguousLength() const {
-  //const auto lock = compacter_.Lock();
   // This lock-free implementation requires to search the ages in increasing maturity.
 
   std::optional<int> age0_min, age0_min_pre_hole;
