@@ -41,6 +41,8 @@ using OutputId = uint64_t;
 
 static constexpr OutputId kNullOutputId = 0;
 static constexpr OutputId kSpentOutputId = -1;
+static constexpr OutputId kLocalOutputId = -2;
+inline bool IsOutputIdValid(OutputId rid) { return rid > kNullOutputId && rid < kLocalOutputId; }
 
 struct OutputKV {
   enum Operation { Delete = -1, Add = 0 };

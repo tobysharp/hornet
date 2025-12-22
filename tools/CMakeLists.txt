@@ -1,1 +1,3 @@
 add_subdirectory(fixpow)
+add_subdirectory(validate)
+add_subdirectory(writechain)

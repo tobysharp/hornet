@@ -36,6 +36,10 @@ class BlockWriter {
     return *this;
   }
 
+  int64_t SizeBytes() const {
+    return stream_.tellp();
+  }
+
  private:
   void WriteIndex() {
     constexpr int32_t kVersion = 1;
@@ -48,7 +52,7 @@ class BlockWriter {
   }
 
   std::filesystem::path path_;
-  std::ofstream stream_;
+  mutable std::ofstream stream_;
   std::vector<int64_t> offsets_;
 };
 
@@ -66,6 +70,10 @@ class BlockReader {
   const BlockReader& operator>>(protocol::Block& block) const {
     block.Read(stream_);
     return *this;
+  }
+
+  bool IsEof() const {
+    return stream_.tellg() >= offsets_.back();
   }
 
   std::shared_ptr<protocol::Block> operator[](int index) const {

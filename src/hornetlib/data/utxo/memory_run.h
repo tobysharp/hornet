@@ -119,7 +119,7 @@ inline QueryResult MemoryRun::QueryImpl(std::span<const OutputKey> keys, std::sp
   const bool overwrite = since > 0;
   auto lower = entries_.begin(), upper = entries_.end();
   for (int index = 0; index < size; ++index) {
-    if (rids[index] == kSpentOutputId || (!overwrite && rids[index] != kNullOutputId))
+    if (rids[index] == kLocalOutputId || rids[index] == kSpentOutputId || (!overwrite && rids[index] != kNullOutputId))
       continue;  // If the key was already found spent or we're not overwriting previous rid's, we can continue.
     
     // Get the key for this query.

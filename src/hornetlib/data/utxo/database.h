@@ -17,6 +17,7 @@
 #include <stdexcept>
 #include <string>
 #include <tuple>
+#include <unordered_map>
 #include <vector>
 
 namespace hornet::data::utxo {
@@ -33,16 +34,23 @@ class Database {
 
   static void SortIds(std::span<OutputId> rids);
 
+  static int ParseBlockPrevouts(const protocol::Block& block, int height,
+                                std::span<InputHeader> inputs, std::span<OutputKey> keys,
+                                std::span<OutputId> rids, std::span<OutputDetail> outputs,
+                                std::vector<uint8_t>& scripts);
+
   // Queries the whole database for each prevout and writes their IDs into the equivalent slots of
   // ids. Returns the number of matches found.
   int Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int before) const {
     return Query(keys, rids, 0, before).funded;
   }
 
-  QueryResult Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int since, int before) const;
+  QueryResult Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int since,
+                    int before) const;
 
   // Fetches the output headers and script bytes for each ID.
-  int Fetch(std::span<const uint64_t> ids, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts) const;
+  int Fetch(std::span<const uint64_t> ids, std::span<OutputDetail> outputs,
+            std::vector<uint8_t>* scripts) const;
 
   // Appends all spendable outputs of the given block at the given height.
   void Append(const protocol::Block& block, int height);
@@ -63,7 +71,8 @@ class Database {
   void CheckRethrowFatal() const {
     if (has_fatal_exception_) std::rethrow_exception(fatal_exception_);
   }
-  static void AppendSpends(const protocol::Block& block, int height, TiledVector<OutputKV>* entries);
+  static void AppendSpends(const protocol::Block& block, int height,
+                           TiledVector<OutputKV>* entries);
 
   Table table_;
   Index index_;
@@ -72,34 +81,83 @@ class Database {
   mutable std::shared_mutex mutex_;
 };
 
-inline Database::Database(const std::filesystem::path& folder)
-    : table_(folder) {}
+inline Database::Database(const std::filesystem::path& folder) : table_(folder) {}
 
-/* static */ inline std::vector<OutputKey> Database::ExtractSpentKeys(const protocol::Block& block) {
+/* static */ inline std::vector<OutputKey> Database::ExtractSpentKeys(
+    const protocol::Block& block) {
   // Sizing pre-pass for single allocation.
   size_t size = 0;
   for (const auto tx : block.Transactions())
-    for (const auto& input : tx.Inputs())
-      size += !input.previous_output.IsNull();
+    for (const auto& input : tx.Inputs()) size += !input.previous_output.IsNull();
 
   // Key extraction pass.
   std::vector<OutputKey> keys(size);
   auto pkey = keys.begin();
   for (const auto tx : block.Transactions())
     for (const auto& input : tx.Inputs())
-      if (!input.previous_output.IsNull())
-        *pkey++ = input.previous_output;
+      if (!input.previous_output.IsNull()) *pkey++ = input.previous_output;
 
   return keys;  // Returns unsorted.
 }
 
-inline QueryResult Database::Query(std::span<const OutputKey> keys,
-                           std::span<OutputId> rids, int since, int before) const {
+inline int Database::ParseBlockPrevouts(const protocol::Block& block, int height,
+                                        std::span<InputHeader> inputs, std::span<OutputKey> keys,
+                                        std::span<OutputId> rids, std::span<OutputDetail> outputs,
+                                        std::vector<uint8_t>& scripts) {
+  struct HashFn {
+    size_t operator()(const OutputKey& prevout) const {
+      size_t prefix;
+      std::memcpy(&prefix, prevout.hash.data(), sizeof(prefix));
+      return std::hash<size_t>{}(prefix ^ prevout.index);
+    }
+  };
+  std::unordered_map<OutputKey, int, HashFn> map;
+  int local_count = 0;
+  int cursor = 0;
+
+  for (int i = 0; i < block.GetTransactionCount(); ++i) {
+    const auto tx = block.Transaction(i);
+    for (int j = 0; j < tx.InputCount(); ++j) {
+      const auto& prevout = tx.Input(j).previous_output;
+      if (!prevout.IsNull()) {
+        // First search the previous transactions in this local block.
+        const auto local_it = map.find(prevout);
+        inputs[cursor] = {i, j};
+        keys[cursor] = prevout;
+        if (local_it != map.end()) {
+          // If the prevout was found in the same block, write the funding data here.
+          const auto& funding_tx = block.Transaction(local_it->second);
+          if (prevout.index >= static_cast<uint32_t>(funding_tx.OutputCount())) return -1;
+          const auto pk_script = funding_tx.PkScript(prevout.index);
+          rids[cursor] = kLocalOutputId;
+          const OutputHeader header{height, 0, funding_tx.Output(prevout.index).value};
+          const util::SubArray<uint8_t> sub_array = {static_cast<int>(std::ssize(scripts)),
+                                                     static_cast<int>(std::ssize(pk_script))};
+          scripts.insert(scripts.end(), pk_script.begin(), pk_script.end());
+          outputs[cursor] = {header, sub_array};
+          map.erase(local_it);
+          ++local_count;
+        } else {
+          rids[cursor] = kNullOutputId;
+        }
+        ++cursor;
+      }
+    }
+    // Add the transactions' outputs into the local map.
+    for (int j = 0; j < tx.OutputCount(); ++j)
+      map.emplace(OutputKey{tx.GetHash(), static_cast<uint32_t>(j)}, i);
+  }
+  return local_count;
+}
+
+inline QueryResult Database::Query(std::span<const OutputKey> keys, std::span<OutputId> rids,
+                                   int since, int before) const {
   CheckRethrowFatal();
   return index_.Query(keys, rids, since, before);
 }
 
-inline int Database::Fetch(std::span<const OutputId> rids, std::span<OutputDetail> outputs, std::vector<uint8_t>* scripts) const {
+inline int Database::Fetch(std::span<const OutputId> rids, std::span<OutputDetail> outputs,
+                           std::vector<uint8_t>* scripts) const {
   CheckRethrowFatal();
   return table_.Fetch(rids, outputs, scripts);
 }
@@ -116,7 +174,8 @@ inline void Database::Append(const protocol::Block& block, int height) {
   AppendSpends(block, height, &entries);
 #if UTXO_LOG
   for (const auto& entry : entries)
-    LogDebug() << "Append {" << entry.key.hash << ", " << entry.key.index << "}, height " << entry.Height() << ", " << (entry.IsAdd() ? "+" : "-");
+    LogDebug() << "Append {" << entry.key.hash << ", " << entry.key.index << "}, height "
+               << entry.Height() << ", " << (entry.IsAdd() ? "+" : "-");
 #endif
   ParallelSort(entries.begin(), entries.end());
   index_.Append(std::move(entries), height);
@@ -137,18 +196,18 @@ inline void Database::EraseSince(int height) {
   table_.EraseSince(height);
 }
 
-/* static */ inline void Database::AppendSpends(const protocol::Block& block, int height, TiledVector<OutputKV>* entries) {
+/* static */ inline void Database::AppendSpends(const protocol::Block& block, int height,
+                                                TiledVector<OutputKV>* entries) {
   for (const auto tx : block.Transactions()) {
     for (int i = 0; i < tx.InputCount(); ++i) {
       const auto& prevout = tx.Input(i).previous_output;
-      if (!prevout.IsNull())
-        entries->PushBack(OutputKV::Spent(prevout, height));
+      if (!prevout.IsNull()) entries->PushBack(OutputKV::Spent(prevout, height));
     }
   }
 }
 
 inline void Database::SetMutableWindow(int heights) {
-  if (heights > Index::GetMutableWindow()) 
+  if (heights > Index::GetMutableWindow())
     util::ThrowInvalidArgument("SetMutableWindow: ", heights, " exceeds Index geometry.");
   table_.SetMutableWindow(heights);
 }

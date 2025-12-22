@@ -69,9 +69,7 @@ inline Table::Table(const std::filesystem::path& folder)
   auto script_cursor = scripts->begin() + prev_script_size;
   int written = 0;
   for (int i = 0; i < std::ssize(rids); ++i) {
-    // if (rids[i] == kNullOutputId) continue;
-    Assert(rids[i] != kNullOutputId);
-    if (!outputs[i].header.IsNull()) continue;
+    if (!IsOutputIdValid(rids[i]) || !outputs[i].header.IsNull()) continue;
     const auto length = IdCodec::Length(rids[i]);
     const int script_length = length - sizeof(OutputHeader);
     Assert(staging_cursor + length <= staging.end());
@@ -98,7 +96,10 @@ inline int Table::Fetch(std::span<const OutputId> rids, std::span<OutputDetail> 
 
   // Ignore any null rid's which must be at the start of the span.
   size_t rid_start = std::lower_bound(rids.begin(), rids.end(), 1ull) - rids.begin();
-  return FetchImpl(rids.subspan(rid_start), outputs.subspan(rid_start), scripts);
+  // Ignore any local / spent rid's which must be at the end of the span.
+  size_t rid_end = std::lower_bound(rids.begin() + rid_start, rids.end(), kLocalOutputId) - rids.begin();
+  const auto rid_size = rid_end - rid_start;
+  return FetchImpl(rids.subspan(rid_start, rid_size), outputs.subspan(rid_start, rid_size), scripts);
 }
 
 inline int Table::FetchImpl(std::span<const OutputId> rids, std::span<OutputDetail> outputs,
@@ -107,7 +108,7 @@ inline int Table::FetchImpl(std::span<const OutputId> rids, std::span<OutputDeta
   size_t size = 0;
   int fetch_count = 0;
   for (int i = 0; i < std::ssize(rids); ++i) {
-    if (outputs[i].header.IsNull()) {
+    if (IsOutputIdValid(rids[i]) && outputs[i].header.IsNull()) {
       size += IdCodec::Length(rids[i]);
       ++fetch_count;
     }
@@ -147,7 +148,7 @@ inline int Table::FetchImpl(std::span<const OutputId> rids, std::span<OutputDeta
   size_t cursor = 0;
   size_t block_bytes = 0;
   for (size_t i = 0; i < rids.size(); ++i) {
-    if (!outputs[i].header.IsNull()) continue;
+    if (!IsOutputIdValid(rids[i]) || !outputs[i].header.IsNull()) continue;
 
     if (IdCodec::Offset(rids[i]) >= next_boundary) {
       // Dispatch to the newly completed block.
@@ -223,7 +224,7 @@ inline void Table::CommitBefore(int height) {
   int blocks = 0;
   try {
     for (const auto& ptr : *tail_.Snapshot()) {
-      if (ptr->Height() >= height) break;
+      if (ptr->Height() >= height || ptr->BeginOffset() != segments_.SizeBytes()) break;
       segments_.Append(ptr->Data());
       ++blocks;
     }

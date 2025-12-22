@@ -31,9 +31,13 @@ class SpendJoiner {
 
   State GetState() const { return state_; }
   int GetHeight() const { return height_; }
+  const std::shared_ptr<const protocol::Block>& GetBlock() const { return block_; }
   
   bool IsAdvanceReady() const;
-  void Advance();
+
+  enum class Action { Advance, Wait, Join, Retire };
+  struct StepResult { State state; Action action; };
+  StepResult Advance();
   
   bool IsJoinReady() const { return state_ == State::Fetched; }
   consensus::Result Join(auto&& callback);
@@ -42,6 +46,14 @@ class SpendJoiner {
   bool WaitForFetch() const;
 
   void Cancel();
+
+  struct Metrics {
+    long long parse_time_ns = 0;
+    long long append_time_ns = 0;
+    long long query_time_ns = 0;
+    long long fetch_time_ns = 0;
+  };
+  Metrics GetMetrics() const { return {parse_time_ns_, append_time_ns_, query_time_ns_, fetch_time_ns_}; }
 
  private:
   void Parse();
@@ -55,6 +67,11 @@ class SpendJoiner {
   std::atomic<State> state_;
   std::atomic<bool> release_query_ = false;
   std::atomic<bool> release_fetch_ = false;
+
+  long long parse_time_ns_ = 0;
+  long long append_time_ns_ = 0;
+  long long query_time_ns_ = 0;
+  long long fetch_time_ns_ = 0;
 
   Database& db_;
   std::shared_ptr<const protocol::Block> block_;
@@ -71,18 +88,23 @@ class SpendJoiner {
 
 inline void SpendJoiner::Parse() {
   Assert(state_ == State::Init);
-  for (int i = 0; i < block_->GetTransactionCount(); ++i) {
-    const auto tx = block_->Transaction(i);
-    for (int j = 0; j < tx.InputCount(); ++j) {
-      const auto& prevout = tx.Input(j).previous_output;
-      if (!prevout.IsNull()) {
-        inputs_.push_back({i, j});
-        keys_.push_back(tx.Input(j).previous_output);
-      }
-    }
-  }
+
+  int size = 0;
+  for (const auto tx : block_->Transactions())
+    for (const auto& input : tx.Inputs())
+      size += !input.previous_output.IsNull();
+
+  inputs_.resize(size);
+  keys_.resize(size);
+  rids_.resize(size);
+  outputs_.resize(size);
+
+  const int local_count = Database::ParseBlockPrevouts(*block_, height_, inputs_, keys_, rids_, outputs_, scripts_);
+  if (local_count < 0) return GotoError();
+  found_funded_ = fetch_count_ = local_count;
+
   // Sort by keys, ready for query.
-  SortTogether(keys_.begin(), keys_.end(), inputs_.begin());
+  SortTogether(keys_.begin(), keys_.end(), inputs_.begin(), rids_.begin(), outputs_.begin());
   state_ = State::Parsed;
 }
 
@@ -94,8 +116,8 @@ inline void SpendJoiner::Append() {
 
 inline void SpendJoiner::Query() {
   Assert(state_ == State::Appended || state_ == State::QueriedPartial || state_ == State::FetchedPartial);
-  rids_.resize(keys_.size());
-  outputs_.resize(keys_.size());
+  //rids_.resize(keys_.size());
+  //outputs_.resize(keys_.size());
   const int commit_height = db_.GetContiguousLength();
   const int query_since = query_before_;  // Initially zero.
   if (query_since >= commit_height) return;
@@ -126,9 +148,7 @@ inline void SpendJoiner::Fetch() {
 
   if (state_ == State::QueriedPartial) {
     // Since the previous action was a partial query, we haven't yet sorted the rid's.
-    SortTogether(rids_.begin(), rids_.end(), inputs_.begin(), keys_.begin()/*, outputs_.begin() */);
-    // We only need to include outputs_ in the permutation if this isn't the first fetch, which implies
-    // partial query -> partial fetch -> 2nd partial query, a code path we don't currently support.
+    SortTogether(rids_.begin(), rids_.end(), inputs_.begin(), keys_.begin(), outputs_.begin());
   }
 
   fetch_count_ += db_.Fetch(rids_, outputs_, &scripts_);
@@ -199,19 +219,32 @@ inline bool SpendJoiner::IsAdvanceReady() const {
   }
 }
 
-inline void SpendJoiner::Advance() {
+inline SpendJoiner::StepResult SpendJoiner::Advance() {
+  auto measure = [](long long& accumulator, auto&& func) {
+    auto start = std::chrono::high_resolution_clock::now();
+    func();
+    auto end = std::chrono::high_resolution_clock::now();
+    accumulator += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+  };
+
   switch (state_) {
-    case State::Init:           Parse();  break;
-    case State::Parsed:         Append(); break;
+    case State::Init:           measure(parse_time_ns_, [&]{ Parse(); });  break;
+    case State::Parsed:         measure(append_time_ns_, [&]{ Append(); }); break;
     case State::Appended:
-    case State::FetchedPartial: Query();  break;
-    case State::Queried:        Fetch();  break;
+    case State::FetchedPartial: measure(query_time_ns_, [&]{ Query(); });  break;
+    case State::Queried:        measure(fetch_time_ns_, [&]{ Fetch(); });  break;
     case State::QueriedPartial: 
-      if (db_.GetContiguousLength() >= height_) Query();
-      else Fetch(); 
+      if (db_.GetContiguousLength() >= height_) measure(query_time_ns_, [&]{ Query(); });
+      else measure(fetch_time_ns_, [&]{ Fetch(); }); 
       break;
     default:
+      break;
   }
+
+  if (IsAdvanceReady()) return {state_, Action::Advance};
+  if (state_ == State::FetchedPartial) return {state_, Action::Wait};
+  if (state_ == State::Fetched) return {state_, Action::Join};
+  return {state_, Action::Retire};
 }
 
 

@@ -43,6 +43,8 @@ class Controller {
   // Run the protocol loop in the current thread, exiting when the break condition returns true.
   void Run(BreakCondition condition);
 
+  sync::SyncManager& SyncManager() { return sync_manager_; }
+
  private:
   data::Timechain timechain_;  // The timechain managed by this controller.
   sync::BlockValidationBinding block_validation_status_;  // Tracks block validation status.

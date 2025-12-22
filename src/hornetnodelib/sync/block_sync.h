@@ -14,6 +14,7 @@
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/consensus/validate_api.h"
 #include "hornetlib/data/sidecar_binding.h"
+#include "hornetlib/data/key.h"
 #include "hornetlib/data/timechain.h"
 #include "hornetlib/protocol/message/block.h"
 #include "hornetlib/protocol/message/getdata.h"
@@ -26,9 +27,14 @@
 
 namespace hornet::node::sync {
 
+class BlockSyncHandler : public SyncHandler {
+ public:
+  virtual void OnBlockValidated(net::WeakPeer peer, const data::Key& key, const std::shared_ptr<const protocol::Block>& block) = 0;
+};
+
 class BlockSync {
  public:
-  BlockSync(data::Timechain& timechain, BlockValidationBinding validation, SyncHandler& handler);
+  BlockSync(data::Timechain& timechain, BlockValidationBinding validation, BlockSyncHandler& handler);
   ~BlockSync();
 
   // Sets the maximum number of bytes allowed in the queue
@@ -68,7 +74,7 @@ class BlockSync {
 
   data::Timechain& timechain_;
   BlockValidationBinding validation_;
-  SyncHandler& handler_;
+  BlockSyncHandler& handler_;
   util::ThreadSafeQueue<Item> queue_;
   std::thread worker_thread_;         // Background worker thread for processing.
   std::atomic<int> queue_bytes_ = 0;  // Size in bytes of the queued items.
@@ -90,7 +96,7 @@ class BlockSync {
 };
 
 inline BlockSync::BlockSync(data::Timechain& timechain, BlockValidationBinding validation,
-                            SyncHandler& handler)
+                            BlockSyncHandler& handler)
     : timechain_(timechain),
       validation_(validation),
       handler_(handler),
@@ -238,6 +244,8 @@ inline void BlockSync::Process() {
                << " bytes.";
     validation_.Set(item->id, BlockValidationStatus::StructureValid);
 
+    handler_.OnBlockValidated(item->peer, item->id, item->block);
+  
     // TODO: Update the current UTXO set and the active chain tip, once all necessary validation is
     // complete. We might choose to do this in a separate thread for increased parallelism.
 

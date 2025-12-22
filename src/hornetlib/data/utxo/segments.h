@@ -123,7 +123,8 @@ inline int Segments::GetReadFD(uint64_t offset) const {
     }
     written += n;
   }
-  if (::fdatasync(fd) < 0) util::ThrowRuntimeError("fdatasync failed.");
+  //if (::fdatasync(fd) < 0) util::ThrowRuntimeError("fdatasync failed.");
+  LogDebug() << "Written " << written << " bytes to file.";
 }
 
 inline void Segments::Append(std::span<const uint8_t> bytes) {
@@ -149,9 +150,7 @@ inline int Segments::FetchData(std::span<const OutputId> ids,
   requests.reserve(ids.size());
   int segment = 0;
   for (int i = 0; i < std::ssize(ids); ++i) {
-    // if (ids[i] == kNullOutputId) continue;
-    Assert(ids[i] != kNullOutputId);
-    if (!outputs[i].header.IsNull()) continue;
+    if (!IsOutputIdValid(ids[i]) || !outputs[i].header.IsNull()) continue;
     // Retrieves the section index, byte offset, and byte length from a packed address.
     const auto [offset, length] = IdCodec::Decode(ids[i]);
     if (cursor + length > size) break;

@@ -56,7 +56,33 @@
         "--in=/tmp/blocks.bin",
         "--out=/tmp/blocks_pow.bin"
       ],
-      "cwd": "${workspaceFolder}/build",
-    }
+      "cwd": "${workspaceFolder}/build"
+    },
+    {
+      "name": "Debug writechain",
+      "type": "cppdbg",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/clang20-debug/writechain",
+      "args": [
+        "--connect=127.0.0.1:8333",
+        "--datadir=\"/hornet/writechain\"",
+        "--length=1000"
+      ],
+      "cwd": "${workspaceFolder}/build"
+    },
+    {
+      "name": "Debug validate",
+      "type": "cppdbg",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/clang20-debug/validate",
+      "args": [
+        "--datadir=\"/hornet/writechain-100k\""
+      ],
+      "cwd": "${workspaceFolder}/build"
+    }        
   ]
 }

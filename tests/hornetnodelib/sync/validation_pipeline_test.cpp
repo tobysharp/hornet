@@ -115,7 +115,7 @@ consensus::Result ValidateShuffle(const std::filesystem::path& path) {
   data::utxo::Database db(dir.Path());
   Completions callback;
   const auto timechain = BuildHeaderChain(data);
-  ValidationPipeline pipeline(*timechain, db, std::ref(callback));
+  ValidationPipeline pipeline(*timechain, db, std::ref(callback), 1, data.Length());
 
   // Submit all validations out of order and wait for drain.
   std::vector<int> heights(data.Length() - 1);
@@ -200,6 +200,34 @@ TEST(ValidationPipelineTest, ProcessMainnet50Blocks) {
   EXPECT_TRUE(ValidateInOrder(path));
   EXPECT_TRUE(ValidateOutOfOrder(path));
   EXPECT_TRUE(ValidateShuffle(path));
+}
+
+TEST(ValidationPipelineTest, DetectDeadlock) {
+  const auto path = test::GetDataPath("ValidationPipelineTest_ProcessBlocks.bin");
+  if (!std::filesystem::exists(path)) {
+    GTEST_SKIP() << "Test file \"" << path << "\" was missing.";
+  }
+
+  // Load the block data.
+  const test::Blockchain data{path};
+
+  // Set up the UTXO database and validation pipeline.
+  const test::TempFolder dir;
+  data::utxo::Database db(dir.Path());
+  Completions callback;
+  const auto timechain = BuildHeaderChain(data);
+
+  // max_active_count = 5
+  ValidationPipeline pipeline(*timechain, db, std::ref(callback), 4, 5);
+
+  // Submit blocks 2 to 6 (5 blocks). This fills the pipeline.
+  // Block 1 is missing, so they will stall in the spend pipeline.
+  for (int height = 2; height <= 6; ++height) {
+    pipeline.Submit(data[height], height);
+  }
+
+  // Submit one more block. This should trigger the deadlock detection.
+  EXPECT_THROW({ pipeline.Submit(data[7], 7); }, std::runtime_error);
 }
 
 }  // namespace
