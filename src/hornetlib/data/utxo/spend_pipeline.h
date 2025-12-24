@@ -91,13 +91,12 @@ class SpendPipeline {
         std::unique_lock lock(mutex_);
 
         // Prevent lost wakeups by checking the blocked list before sleeping.
-        if (ready_queue_.empty() && !blocked_list_.empty())
-          WakeBlockedJobsInternal();
+        WakeBlockedJobsInternal();
 
         cv_.wait(lock, [&] { return abort_ || !ready_queue_.empty(); });
         if (abort_) return;
         job = ready_queue_.top();
-        ready_queue_.pop();
+       ready_queue_.pop();
         ++busy_workers_;
       }
 
