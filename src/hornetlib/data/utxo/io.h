@@ -82,7 +82,17 @@ class UringIOEngine {
       ::io_uring_sqe_set_data(sqe, const_cast<IORequest*>(&request));
       ++queued;
     }
-    if (queued > 0) ::io_uring_submit(&ring_);
+    if (queued > 0) {
+      int submitted = 0;
+      while (submitted < queued) {
+        const int ret = ::io_uring_submit(&ring_);
+        if (ret < 0) {
+          if (ret == -EINTR || ret == -EAGAIN) continue;
+          util::ThrowRuntimeError("io_uring_submit failed: ", std::strerror(-ret));
+        }
+        submitted += ret;
+      }
+    }
     return queued;
   }
 
