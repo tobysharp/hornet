@@ -79,6 +79,7 @@ class SpendJoiner {
   int query_before_ = 0;
   int found_funded_ = 0;
   int fetch_count_ = 0;
+  std::optional<Database::Pin> pin_;
   std::vector<InputHeader> inputs_;
   std::vector<OutputKey> keys_;
   std::vector<OutputId> rids_;
@@ -110,7 +111,7 @@ inline void SpendJoiner::Parse() {
 
 inline void SpendJoiner::Append() {
   Assert(state_ == State::Parsed);
-  db_.Append(*block_, height_);  // TODO: Enable out-of-order appends
+  pin_ = db_.Append(*block_, height_);
   state_ = State::Appended;
 }
 
@@ -249,6 +250,7 @@ inline SpendJoiner::StepResult SpendJoiner::Advance() {
 
 
 inline void SpendJoiner::ReleaseQuery() {
+  pin_.reset();
   release_query_ = true;
   release_query_.notify_all();
 }

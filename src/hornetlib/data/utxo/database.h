@@ -24,6 +24,8 @@ namespace hornet::data::utxo {
 
 class Database {
  public:
+  using Pin = Index::Pin;
+
   // Constructs an unspent output database with the given duration (in blocks) as the recent
   // window, i.e. the period during which outputs may be removed before being permanently committed.
   Database(const std::filesystem::path& folder);
@@ -53,7 +55,7 @@ class Database {
             std::vector<uint8_t>* scripts) const;
 
   // Appends all spendable outputs of the given block at the given height.
-  void Append(const protocol::Block& block, int height);
+  Pin Append(const protocol::Block& block, int height);
 
   // Removes all outputs at heights greater than or equal to the given height. The given height
   // must be within the recent window compared to the highest block added. Otherwise the data
@@ -162,7 +164,7 @@ inline int Database::Fetch(std::span<const OutputId> rids, std::span<OutputDetai
   return table_.Fetch(rids, outputs, scripts);
 }
 
-inline void Database::Append(const protocol::Block& block, int height) {
+inline Database::Pin Database::Append(const protocol::Block& block, int height) {
   CheckRethrowFatal();
 
   if (index_.ContainsHeight(height))
@@ -178,7 +180,7 @@ inline void Database::Append(const protocol::Block& block, int height) {
                << entry.Height() << ", " << (entry.IsAdd() ? "+" : "-");
 #endif
   ParallelSort(entries.begin(), entries.end());
-  index_.Append(std::move(entries), height);
+  return index_.Append(std::move(entries), height);
 }
 
 /* static */ inline void Database::SortKeys(std::span<OutputKey> keys) {

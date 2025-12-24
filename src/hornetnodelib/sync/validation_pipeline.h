@@ -136,10 +136,8 @@ class ValidationPipeline {
         total_validate_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
         total_validate_calls++;
 
-        //Assert(!!result);
         {
           std::lock_guard lock{retire_mutex_};
-          LogDebug() << "Validated height " << job->height;
           completed_.push(JobResult{job->height, std::move(job->block), result});
         }
 

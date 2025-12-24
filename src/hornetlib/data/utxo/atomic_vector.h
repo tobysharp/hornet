@@ -53,6 +53,22 @@ class AtomicVector {
     edit->insert(it, std::make_shared<T>(std::move(obj)));
   }
 
+  // Insert obj if it doesn't match any existing item, otherwise overwrite the existing item.
+  void InsertOrAssign(T obj, auto&& compare) {
+    auto edit = Edit();
+    const auto it = std::lower_bound(edit->begin(), edit->end(), obj, [&](const Ptr& lhs, const T& rhs) {
+      return compare(*lhs, rhs);
+    });
+    if (it != edit->end()) {
+      const T& existing = **it;
+      if (!compare(existing, obj) && !compare(obj, existing)) {
+        *it = std::make_shared<T>(std::move(obj));
+        return;
+      }
+    }
+    edit->insert(it, std::make_shared<T>(std::move(obj)));
+  }
+
   void EraseFront(int count) {
     if (count <= 0) return;
     auto edit = Edit();
@@ -63,6 +79,10 @@ class AtomicVector {
     if (count <= 0) return;
     auto edit = Edit();
     edit->erase(edit->end() - std::min<int>(count, std::ssize(*edit)), edit->end());
+  }
+
+  void EraseIf(auto&& predicate) {
+    std::erase_if(*Edit(), [&](const Ptr& ptr) { return predicate(*ptr); });
   }
 
  private:
