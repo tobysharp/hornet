@@ -11,6 +11,7 @@
 #include "hornetlib/data/utxo/types.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/transaction.h"
+#include "hornetlib/util/metrics.h"
 
 namespace hornet::data::utxo {
 
@@ -47,13 +48,9 @@ class SpendJoiner {
 
   void Cancel();
 
-  struct Metrics {
-    long long parse_time_ns = 0;
-    long long append_time_ns = 0;
-    long long query_time_ns = 0;
-    long long fetch_time_ns = 0;
-  };
-  Metrics GetMetrics() const { return {parse_time_ns_, append_time_ns_, query_time_ns_, fetch_time_ns_}; }
+  enum Timer { Time_Parse, Time_Append, Time_Query, Time_Fetch, Time_Join, Time_Count };
+  using Metrics = util::Metrics<Time_Count>;
+  const Metrics& GetMetrics() const { return metrics_; }
 
  private:
   void Parse();
@@ -68,11 +65,6 @@ class SpendJoiner {
   std::atomic<bool> release_query_ = false;
   std::atomic<bool> release_fetch_ = false;
 
-  long long parse_time_ns_ = 0;
-  long long append_time_ns_ = 0;
-  long long query_time_ns_ = 0;
-  long long fetch_time_ns_ = 0;
-
   Database& db_;
   std::shared_ptr<const protocol::Block> block_;
   const int height_;
@@ -85,10 +77,13 @@ class SpendJoiner {
   std::vector<OutputId> rids_;
   std::vector<OutputDetail> outputs_;
   std::vector<uint8_t> scripts_;
+  Metrics metrics_;
 };
 
 inline void SpendJoiner::Parse() {
   Assert(state_ == State::Init);
+
+  const auto timer = metrics_.AddScoped(Time_Parse);
 
   int size = 0;
   for (const auto tx : block_->Transactions())
@@ -111,14 +106,16 @@ inline void SpendJoiner::Parse() {
 
 inline void SpendJoiner::Append() {
   Assert(state_ == State::Parsed);
+  const auto timer = metrics_.AddScoped(Time_Append);
   pin_ = db_.Append(*block_, height_);
   state_ = State::Appended;
 }
 
 inline void SpendJoiner::Query() {
   Assert(state_ == State::Appended || state_ == State::QueriedPartial || state_ == State::FetchedPartial);
-  //rids_.resize(keys_.size());
-  //outputs_.resize(keys_.size());
+ 
+  const auto timer = metrics_.AddScoped(Time_Query);
+
   const int commit_height = db_.GetContiguousLength();
   const int query_since = query_before_;  // Initially zero.
   if (query_since >= commit_height) return;
@@ -146,6 +143,8 @@ inline void SpendJoiner::Query() {
 // Fetch the output records from the outputs table.
 inline void SpendJoiner::Fetch() {
   Assert(state_ == State::Queried || state_ == State::QueriedPartial);
+
+  const auto timer = metrics_.AddScoped(Time_Fetch);
 
   if (state_ == State::QueriedPartial) {
     // Since the previous action was a partial query, we haven't yet sorted the rid's.
@@ -175,6 +174,8 @@ inline void SpendJoiner::Fetch() {
 inline consensus::Result SpendJoiner::Join(auto&& callback) {
   Assert(state_ == State::Fetched);
   Assert(inputs_.size() == outputs_.size());
+
+  const auto timer = metrics_.AddScoped(Time_Join);
 
   consensus::Result rv = {};
   std::atomic<bool> failed = false;
@@ -221,22 +222,15 @@ inline bool SpendJoiner::IsAdvanceReady() const {
 }
 
 inline SpendJoiner::StepResult SpendJoiner::Advance() {
-  auto measure = [](long long& accumulator, auto&& func) {
-    auto start = std::chrono::high_resolution_clock::now();
-    func();
-    auto end = std::chrono::high_resolution_clock::now();
-    accumulator += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
-  };
-
   switch (state_) {
-    case State::Init:           measure(parse_time_ns_, [&]{ Parse(); });  break;
-    case State::Parsed:         measure(append_time_ns_, [&]{ Append(); }); break;
+    case State::Init:           Parse();  break;
+    case State::Parsed:         Append(); break;
     case State::Appended:
-    case State::FetchedPartial: measure(query_time_ns_, [&]{ Query(); });  break;
-    case State::Queried:        measure(fetch_time_ns_, [&]{ Fetch(); });  break;
+    case State::FetchedPartial: Query();  break;
+    case State::Queried:        Fetch();  break;
     case State::QueriedPartial: 
-      if (db_.GetContiguousLength() >= height_) measure(query_time_ns_, [&]{ Query(); });
-      else measure(fetch_time_ns_, [&]{ Fetch(); }); 
+      if (db_.GetContiguousLength() >= height_) Query();
+      else Fetch(); 
       break;
     default:
       break;

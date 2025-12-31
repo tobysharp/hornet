@@ -47,6 +47,9 @@ class ValidationPipeline {
 
   ~ValidationPipeline() {
     Abort();
+    for (auto& t : workers_)
+      if (t.joinable()) t.join();
+    workers_.clear();
   }
 
   void Abort() {
@@ -56,10 +59,7 @@ class ValidationPipeline {
       submit_cv_.notify_all();
     }
     queue_.Stop();
-    spend_pipeline_.Stop();
-    for (auto& t : workers_)
-      if (t.joinable()) t.join();
-    workers_.clear();
+    spend_pipeline_.Abort();
   }
 
   // Submits a block for validation. Can be out of height order.
@@ -87,20 +87,21 @@ class ValidationPipeline {
     spend_pipeline_.Add(block, height);
   }
 
-  bool Wait(const util::Timeout& timeout) {
+  bool Wait(const util::Timeout& timeout = util::Timeout::Infinite()) {
     std::unique_lock lock{wait_mutex_};
+    auto predicate = [this] { return active_count_ == 0 || max_active_count_ == 0; };
     if (timeout.IsInfinite()) {
-      wait_cv_.wait(lock, [this] { return active_count_ == 0; });
+      wait_cv_.wait(lock, predicate);
       return true;
     } else
-      return wait_cv_.wait_until(lock, timeout.Deadline(), [this] { return active_count_ == 0; });
+      return wait_cv_.wait_until(lock, timeout.Deadline(), predicate);
   }
 
   std::pair<long long, long long> GetValidationMetrics() const {
     return {total_validate_time_ns.load(), total_validate_calls.load()};
   }
 
-  data::utxo::SpendPipeline::DetailedMetrics GetSpendMetrics() const {
+  const data::utxo::SpendPipeline::Metrics& GetSpendMetrics() const {
     return spend_pipeline_.GetMetrics();
   }
 
@@ -150,7 +151,7 @@ class ValidationPipeline {
           std::lock_guard wait_lock{wait_mutex_};
           if (--active_count_ == 0) wait_cv_.notify_all();
         }
-        submit_cv_.notify_all();        
+        submit_cv_.notify_all();
         break;
       }
       --validation_pending_;

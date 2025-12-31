@@ -24,7 +24,11 @@ class SpendPipeline {
   }
 
   ~SpendPipeline() {
-    Stop();
+    Abort();
+    for (auto& t : workers_) {
+      if (t.joinable()) t.join();
+    }
+    workers_.clear();
   }
 
   // Creates a SpendJoiner, adds it to the pipeline, and returns it so it can be
@@ -42,7 +46,7 @@ class SpendPipeline {
     return joiner;
   }
 
-  void Stop() {
+  void Abort() {
     {
       std::lock_guard lock(mutex_);
       abort_ = true;
@@ -52,10 +56,6 @@ class SpendPipeline {
       active_joiners_.clear();
     }
     cv_.notify_all();
-    for (auto& t : workers_) {
-      if (t.joinable()) t.join();
-    }
-    workers_.clear();
   }
 
   bool IsStalled() const {
@@ -63,25 +63,12 @@ class SpendPipeline {
     return ready_queue_.empty() && !blocked_list_.empty() && busy_workers_ == 0;
   }
 
-  struct DetailedMetrics {
-    long long total_advance_time_ns;
-    long long total_advance_calls;
-    long long parse_time_ns;
-    long long append_time_ns;
-    long long query_time_ns;
-    long long fetch_time_ns;
+  struct Metrics {
+    util::Timer advance_;
+    SpendJoiner::Metrics joiner_metrics_;
   };
 
-  DetailedMetrics GetMetrics() const {
-    return {
-      total_advance_time_ns.load(), 
-      total_advance_calls.load(),
-      total_parse_time_ns.load(),
-      total_append_time_ns.load(),
-      total_query_time_ns.load(),
-      total_fetch_time_ns.load()
-    };
-  }
+  const Metrics& GetMetrics() const { return metrics_; }
 
  private:
   void WorkerLoop() {
@@ -96,36 +83,33 @@ class SpendPipeline {
         cv_.wait(lock, [&] { return abort_ || !ready_queue_.empty(); });
         if (abort_) return;
         job = ready_queue_.top();
-       ready_queue_.pop();
+        ready_queue_.pop();
         ++busy_workers_;
       }
 
-      Assert(job->IsAdvanceReady());
-      
-      auto start = std::chrono::high_resolution_clock::now();
-      const auto [state, action] = job->Advance();
-      auto end = std::chrono::high_resolution_clock::now();
-      total_advance_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
-      total_advance_calls++;
+      try {
+        Assert(job->IsAdvanceReady());
 
-      // If we just appended, we may have unblocked other jobs.
-      if (state == SpendJoiner::State::Appended)
-        WakeBlockedJobs();
+        auto advance_timer = metrics_.advance_.AddScoped();
+        const auto [state, action] = job->Advance();
+        advance_timer.End();
 
-      if (action == SpendJoiner::Action::Advance) {
-        std::unique_lock lock(mutex_);
-        ready_queue_.push(std::move(job));
-        cv_.notify_one();
-      } else if (action == SpendJoiner::Action::Wait) {
-        std::unique_lock lock(mutex_);
-        blocked_list_.push_back(std::move(job));
-      } else if (on_complete_) {
-        auto m = job->GetMetrics();
-        total_parse_time_ns += m.parse_time_ns;
-        total_append_time_ns += m.append_time_ns;
-        total_query_time_ns += m.query_time_ns;
-        total_fetch_time_ns += m.fetch_time_ns;
-        on_complete_(std::move(job));
+        // If we just appended, we may have unblocked other jobs.
+        if (state == SpendJoiner::State::Appended) WakeBlockedJobs();
+
+        if (action == SpendJoiner::Action::Advance) {
+          std::unique_lock lock(mutex_);
+          ready_queue_.push(std::move(job));
+          cv_.notify_one();
+        } else if (action == SpendJoiner::Action::Wait) {
+          std::unique_lock lock(mutex_);
+          blocked_list_.push_back(std::move(job));
+        } else if (on_complete_) {
+          metrics_.joiner_metrics_ += job->GetMetrics();
+          on_complete_(std::move(job));
+        }
+      } catch (const SpendJoiner::CancelledException&) {
+        // Job was cancelled, ignore.
       }
       --busy_workers_;
     }
@@ -172,13 +156,7 @@ class SpendPipeline {
   bool abort_ = false;
   CompleteCallback on_complete_;
   std::atomic<int> busy_workers_ = 0;
-
-  std::atomic<long long> total_advance_time_ns{0};
-  std::atomic<long long> total_advance_calls{0};
-  std::atomic<long long> total_parse_time_ns{0};
-  std::atomic<long long> total_append_time_ns{0};
-  std::atomic<long long> total_query_time_ns{0};
-  std::atomic<long long> total_fetch_time_ns{0};
+  Metrics metrics_;
 };
 
 }  // namespace hornet::data::utxo
