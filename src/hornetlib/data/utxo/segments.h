@@ -124,7 +124,7 @@ inline int Segments::GetReadFD(uint64_t offset) const {
     ssize_t n = ::write(fd, bytes.data() + written, bytes.size() - written);
     if (n < 0) {
       if (errno == EINTR) continue;
-      util::ThrowRuntimeError("Write failed.");
+      util::ThrowRuntimeError("Write failed: ", std::strerror(errno));
     }
     written += n;
   }

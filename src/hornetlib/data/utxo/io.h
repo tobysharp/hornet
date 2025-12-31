@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <span>
+#include <string>
 
 #include "hornetlib/util/throw.h"
 
@@ -64,8 +65,8 @@ namespace hornet::data::utxo {
 class UringIOEngine {
  public:
   UringIOEngine() {
-    if (::io_uring_queue_init(kQueueDepth, &ring_, 0) < 0)
-      util::ThrowRuntimeError("io_uring_queue_init failed.");
+    if (int ret = ::io_uring_queue_init(kQueueDepth, &ring_, 0); ret < 0)
+      util::ThrowRuntimeError("io_uring_queue_init failed with error ", strerror(-ret));
   }
   ~UringIOEngine() {
     ::io_uring_queue_exit(&ring_);

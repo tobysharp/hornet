@@ -80,7 +80,9 @@
       "request": "launch",
       "program": "${workspaceFolder}/build/clang20-debug/validate",
       "args": [
-        "--datadir=\"/hornet/writechain-100k\""
+        "--blocksdir=\"/nvme1/bitcoin/blocks\"",
+        "--datadir=\"/hornet/validate\"",
+        "--length=2000"
       ],
       "cwd": "${workspaceFolder}/build"
     }        
