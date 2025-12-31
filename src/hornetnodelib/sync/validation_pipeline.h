@@ -70,10 +70,9 @@ class ValidationPipeline {
     
     {
       std::unique_lock lock{wait_mutex_};
-      //Assert(active_count_ - (queue_.Size() + std::ssize(completed_) + std::ssize(workers_)) <= 1);
       
       using namespace std::chrono_literals;
-      while (!submit_cv_.wait_for(lock, 100ms, [&] { 
+      while (!spend_pipeline_.IsStalled() && !submit_cv_.wait_for(lock, 100ms, [&] {
         return max_active_count_ == 0 || active_count_ < max_active_count_;
       })) {}
 
