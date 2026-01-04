@@ -29,7 +29,7 @@ TEST(DirectoryTest, TestDirectory) {
     EXPECT_EQ(directory[i], i <= 0x63 ? 0 : 1);
 
   EXPECT_EQ(tv[directory[0x63]].key.hash, hash);
-  EXPECT_EQ(directory.LookupRange(tv[0].key), std::make_pair(0, 1));
+  EXPECT_EQ(directory.LookupRange(tv[0].key), std::make_pair(0u, 1u));
 }
 
 }  // namespace

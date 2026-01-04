@@ -12,6 +12,7 @@
 #include "hornetlib/data/utxo/block_outputs.h"
 #include "hornetlib/data/utxo/flusher.h"
 #include "hornetlib/data/utxo/parallel.h"
+#include "hornetlib/data/utxo/profiler.h"
 #include "hornetlib/data/utxo/segments.h"
 #include "hornetlib/data/utxo/tiled_vector.h"
 #include "hornetlib/data/utxo/types.h"
@@ -221,6 +222,7 @@ inline void Table::EraseSince(int height) {
 }
 
 inline void Table::CommitBefore(int height) {
+  ScopedProfiler profiler("Flush", height);
   int blocks = 0;
   try {
     for (const auto& ptr : *tail_.Snapshot()) {

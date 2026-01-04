@@ -7,6 +7,7 @@
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/consensus/utxo.h"
 #include "hornetlib/data/utxo/database.h"
+#include "hornetlib/data/utxo/profiler.h"
 #include "hornetlib/data/utxo/sort.h"
 #include "hornetlib/data/utxo/types.h"
 #include "hornetlib/protocol/block.h"
@@ -84,6 +85,7 @@ inline void SpendJoiner::Parse() {
   Assert(state_ == State::Init);
 
   const auto timer = metrics_.AddScoped(Time_Parse);
+  ScopedProfiler profiler("Parse", height_);
 
   int size = 0;
   for (const auto tx : block_->Transactions())
@@ -107,6 +109,7 @@ inline void SpendJoiner::Parse() {
 inline void SpendJoiner::Append() {
   Assert(state_ == State::Parsed);
   const auto timer = metrics_.AddScoped(Time_Append);
+  ScopedProfiler profiler("Append", height_);
   pin_ = db_.Append(*block_, height_);
   state_ = State::Appended;
 }
@@ -115,6 +118,7 @@ inline void SpendJoiner::Query() {
   Assert(state_ == State::Appended || state_ == State::QueriedPartial || state_ == State::FetchedPartial);
  
   const auto timer = metrics_.AddScoped(Time_Query);
+  ScopedProfiler profiler("Query", height_);
 
   const int commit_height = db_.GetContiguousLength();
   const int query_since = query_before_;  // Initially zero.
@@ -145,6 +149,7 @@ inline void SpendJoiner::Fetch() {
   Assert(state_ == State::Queried || state_ == State::QueriedPartial);
 
   const auto timer = metrics_.AddScoped(Time_Fetch);
+  ScopedProfiler profiler("Fetch", height_);
 
   if (state_ == State::QueriedPartial) {
     // Since the previous action was a partial query, we haven't yet sorted the rid's.
