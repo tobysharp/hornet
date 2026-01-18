@@ -28,8 +28,9 @@ class SpendJoiner {
 
   SpendJoiner(Database& db, 
               std::shared_ptr<const protocol::Block> block, 
-              int height) 
-              : state_(State::Init), db_(db), block_(block), height_(height) {}
+              int height,
+              bool assume_valid = false) 
+              : state_(State::Init), db_(db), block_(block), height_(height), assume_valid_(assume_valid) {}
 
   State GetState() const { return state_; }
   int GetHeight() const { return height_; }
@@ -42,6 +43,7 @@ class SpendJoiner {
   StepResult Advance();
   
   bool IsJoinReady() const { return state_ == State::Fetched; }
+  bool IsAssumeValid() const { return assume_valid_; }
   consensus::Result Join(auto&& callback);
 
   bool WaitForQuery() const;
@@ -69,6 +71,7 @@ class SpendJoiner {
   Database& db_;
   std::shared_ptr<const protocol::Block> block_;
   const int height_;
+  const bool assume_valid_;
   int query_before_ = 0;
   int found_funded_ = 0;
   int fetch_count_ = 0;
@@ -147,6 +150,7 @@ inline void SpendJoiner::Query() {
 // Fetch the output records from the outputs table.
 inline void SpendJoiner::Fetch() {
   Assert(state_ == State::Queried || state_ == State::QueriedPartial);
+  Assert(!assume_valid_);
 
   const auto timer = metrics_.AddScoped(Time_Fetch);
   ScopedProfiler profiler("Fetch", height_);
@@ -179,6 +183,7 @@ inline void SpendJoiner::Fetch() {
 inline consensus::Result SpendJoiner::Join(auto&& callback) {
   Assert(state_ == State::Fetched);
   Assert(inputs_.size() == outputs_.size());
+  Assert(!assume_valid_);
 
   const auto timer = metrics_.AddScoped(Time_Join);
 
@@ -214,9 +219,11 @@ inline bool SpendJoiner::IsAdvanceReady() const {
     case State::Init:           
     case State::Parsed:         
     case State::Appended:       
-    case State::QueriedPartial:  
-    case State::Queried:        
       return true;
+    case State::QueriedPartial:
+      return !assume_valid_ || height_ <= db_.GetContiguousLength();
+    case State::Queried:
+      return !assume_valid_;
     case State::FetchedPartial:
       // We could permit small incremental queries, but we may prefer to wait until all residual data has arrived.
       // return query_before_ < db_.GetContiguousLength();
@@ -232,10 +239,10 @@ inline SpendJoiner::StepResult SpendJoiner::Advance() {
     case State::Parsed:         Append(); break;
     case State::Appended:
     case State::FetchedPartial: Query();  break;
-    case State::Queried:        Fetch();  break;
+    case State::Queried:        if (!assume_valid_) Fetch();  break;
     case State::QueriedPartial: 
       if (db_.GetContiguousLength() >= height_) Query();
-      else Fetch(); 
+      else if (!assume_valid_) Fetch(); 
       break;
     default:
       break;
@@ -243,7 +250,9 @@ inline SpendJoiner::StepResult SpendJoiner::Advance() {
 
   if (IsAdvanceReady()) return {state_, Action::Advance};
   if (state_ == State::FetchedPartial) return {state_, Action::Wait};
+  if (state_ == State::QueriedPartial && assume_valid_) return {state_, Action::Wait};
   if (state_ == State::Fetched) return {state_, Action::Join};
+
   return {state_, Action::Retire};
 }
 
