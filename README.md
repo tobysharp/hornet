@@ -14,10 +14,10 @@ For more details, see docs/overview.md.
 
 **Step 1**. Clone 
 
-Clone the repository and navigate into the project directory:
+Clone the repository and navigate into the project directory.
 
 ```bash
-git clone https://github.com/tobysharp/hornet.git
+git clone --recursive https://github.com/tobysharp/hornet.git
 cd hornet
 ```
 
