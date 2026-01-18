@@ -127,10 +127,8 @@ int main(int argc, char** argv) {
     }
   }
 
-  fs::remove_all(options.data_dir);
-  fs::create_directories(options.data_dir);
   if (!fs::is_directory(options.data_dir) || !fs::is_empty(options.data_dir))
-    throw std::runtime_error{"Path given in --datadir is not a directory."};
+    throw std::runtime_error{"Path given in --datadir is not an empty directory."};
 
   Metrics metrics;
 
@@ -139,7 +137,8 @@ int main(int argc, char** argv) {
   LoadHeaders(options, &metrics, &timechain);
 
   const auto on_complete = [](const std::shared_ptr<const protocol::Block>&, int height,
-                              consensus::Result) {
+                              consensus::Result result) {
+    if (!result) util::ThrowRuntimeError("Block height ", height, " failed validation.");
     if (height % 100'000 == 0) LogInfo() << height << " blocks validated...";
   };
 
@@ -177,7 +176,7 @@ int main(int argc, char** argv) {
 
       // If we found a block to add on this turn, add it now.
       metrics.Add(Op_Submit, [&] {
-        if (block != nullptr) pipeline.Submit(std::move(block), height++);
+        if (block != nullptr) pipeline.Submit(std::move(block), height++, true);
       });
     }
     metrics.Add(Op_Wait, [&] { pipeline.Wait(); });
