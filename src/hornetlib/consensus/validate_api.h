@@ -46,4 +46,12 @@ using rules::ValidateTransaction;
   return rules::ValidateBlock(block, parent, view, current_time, unspent);
 }
 
+[[nodiscard]] inline Result ValidateBlockExceptScripts(const protocol::Block& block,
+                                          const protocol::BlockHeader& parent,
+                                          const HeaderAncestryView& view,
+                                          const int64_t current_time,
+                                          const UnspentOutputsView& unspent) {
+  return rules::ValidateBlockExceptScripts(block, parent, view, current_time, unspent);
+}
+
 }  // namespace hornet::consensus

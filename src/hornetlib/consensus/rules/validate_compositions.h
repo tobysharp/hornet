@@ -29,6 +29,10 @@ namespace hornet::consensus::rules {
     });
 }
 
+[[nodiscard]] inline Result ValidateUnspent(const BlockSpendingContext& context) {
+  return context.unspent.QueryPrevoutsUnspent(context.block);
+}
+
 [[nodiscard]] inline Result ValidateBlock(const protocol::Block& block,
                                         const protocol::BlockHeader& parent,
                                         const HeaderAncestryView& view,
@@ -39,6 +43,22 @@ namespace hornet::consensus::rules {
     Rule{ValidateHeader,          MakeHeaderContext},
     Rule{ValidateNonSpending,     MakeEnvironmentContext},
     Rule{ValidateSpending,        MakeBlockSpendingContext}
+  );
+  //clang-format on                                            
+  const BlockValidationContext context{block, parent, view, current_time, unspent};
+  return ValidateRules(ruleset, view.Length(), context);
+}
+
+[[nodiscard]] inline Result ValidateBlockExceptScripts(const protocol::Block& block,
+                                        const protocol::BlockHeader& parent,
+                                        const HeaderAncestryView& view,
+                                        const int64_t current_time,
+                                        const UnspentOutputsView& unspent) {
+  // clang-format off
+  static const auto ruleset = std::make_tuple(
+    Rule{ValidateHeader,          MakeHeaderContext},
+    Rule{ValidateNonSpending,     MakeEnvironmentContext},
+    Rule{ValidateUnspent,         MakeBlockSpendingContext}
   );
   //clang-format on                                            
   const BlockValidationContext context{block, parent, view, current_time, unspent};
