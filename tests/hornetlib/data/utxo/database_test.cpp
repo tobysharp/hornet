@@ -463,6 +463,37 @@ TEST(DatabaseTest, TestFetchWithNullIds) {
   EXPECT_GT(outputs[1].header.amount, 0);
 }
 
+TEST(DatabaseTest, TestSameBlockFundedThenSpentIsSpent) {
+  test::TempFolder dir;
+  Database database{dir.Path()};
+
+  protocol::Block block;
+  block.SetHeader(protocol::BlockHeader{});
+
+  protocol::Transaction funding;
+  funding.ResizeInputs(1);
+  funding.Input(0).previous_output = protocol::OutPoint::Null();
+  funding.ResizeOutputs(1);
+  funding.Output(0).value = 1000;
+  block.AddTransaction(funding);
+
+  protocol::Transaction spending;
+  spending.ResizeInputs(1);
+  spending.Input(0).previous_output = {block.Transaction(0).GetHash(), 0};
+  spending.ResizeOutputs(1);
+  spending.Output(0).value = 900;
+  block.AddTransaction(spending);
+
+  database.Append(block, 1);
+
+  std::vector<OutputKey> keys{{block.Transaction(0).GetHash(), 0}};
+  std::vector<OutputId> rids(1, kNullOutputId);
+  auto result = database.Query(keys, rids, 0, 2);
+  EXPECT_EQ(result.funded, 0);
+  EXPECT_EQ(result.spent, 1);
+  EXPECT_EQ(rids[0], kSpentOutputId);
+}
+
 TEST(DatabaseTest, TestPartialQueryAndFetch) {
   test::TempFolder dir;
   Database database{dir.Path()};
