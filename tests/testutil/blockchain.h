@@ -42,11 +42,12 @@ class Blockchain {
   const Spend& Spent(int index) const { return spent_[index]; }
   auto& Rng() const { return rng_; }
 
-  protocol::Block Sample(int max_transactions = 1'000, int max_fan_in = 2, int max_fan_out = 4,
-                         bool enforce_coinbase_maturity = false) const;
+  protocol::Block Sample(int max_transactions = 1'000, bool enforce_coinbase_maturity = false,
+                         int max_fan_in = 2, int max_fan_out = 4) const;
 
-  static Blockchain Generate(int length, int transactions_per_block = 1'000, int max_fan_in = 2,
-                             int max_fan_out = 4, bool enforce_coinbase_maturity = false);
+  static Blockchain Generate(int length, int transactions_per_block = 1'000,
+                             bool enforce_coinbase_maturity = false, int max_fan_in = 2,
+                             int max_fan_out = 4);
 
   void Save(const std::filesystem::path& path) const;
   void Load(const std::filesystem::path& path);
@@ -113,9 +114,9 @@ inline void Blockchain::Append(std::shared_ptr<protocol::Block> block) {
 
 // Add a simulated block to the chain.
 inline protocol::Block Blockchain::Sample(int max_transactions /* = 1000 */,
+                                          bool enforce_coinbase_maturity /* = false */,
                                           int max_fan_in /* = 2 */,
-                                          int max_fan_out /* = 4 */,
-                                          bool enforce_coinbase_maturity /* = false */) const {
+                                          int max_fan_out /* = 4 */) const {
   constexpr int64_t kBlockReward = 50ll * 100'000'000;
   constexpr std::array<uint8_t, 24> pk_script = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
                                                  0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10,
@@ -128,8 +129,7 @@ inline protocol::Block Blockchain::Sample(int max_transactions /* = 1000 */,
   for (int i = 0; i < std::ssize(unspent_); ++i) {
     const Spend& spend = unspent_[i];
     const bool is_mature = !spend.is_coinbase || (height - spend.height >= 100);
-    if (!enforce_coinbase_maturity || is_mature)
-      spendable_indices.push_back(i);
+    if (!enforce_coinbase_maturity || is_mature) spendable_indices.push_back(i);
   }
   int funded_size = std::ssize(spendable_indices);
 
@@ -162,7 +162,8 @@ inline protocol::Block Blockchain::Sample(int max_transactions /* = 1000 */,
     total_spends += input_counts.back();
   }
 
-  std::vector<int> spendable_slots = SampleWithoutReplacement(total_spends, std::ssize(spendable_indices));
+  std::vector<int> spendable_slots =
+      SampleWithoutReplacement(total_spends, std::ssize(spendable_indices));
   auto spendable_cursor = spendable_slots.begin();
   int transactions = std::min<int>(max_transactions, std::ssize(input_counts));
 
@@ -219,13 +220,13 @@ inline std::vector<int> Blockchain::SampleWithoutReplacement(int count, int end)
 
 /* static */ inline Blockchain Blockchain::Generate(int length,
                                                     int transactions_per_block /* = 1'000 */,
+                                                    bool enforce_coinbase_maturity /* = false */,
                                                     int max_fan_in /* = 2 */,
-                                                    int max_fan_out /* = 4 */,
-                                                    bool enforce_coinbase_maturity /* = false */) {
+                                                    int max_fan_out /* = 4 */) {
   Blockchain chain;
   for (int height = 1; height < length; ++height)
     chain.Append(
-        chain.Sample(transactions_per_block, max_fan_in, max_fan_out, enforce_coinbase_maturity));
+        chain.Sample(transactions_per_block, enforce_coinbase_maturity, max_fan_in, max_fan_out));
   return chain;
 }
 

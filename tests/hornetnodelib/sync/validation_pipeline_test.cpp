@@ -138,7 +138,7 @@ TEST(ValidationPipelineTest, ProcessBlocks) {
     // Construct test data file.
     test::Blockchain data;
     for (int height = 1; height < kLength; ++height) 
-      data.Append(data.Sample(1'000, 2, 4, true));  // Create a maturity-valid block
+      data.Append(data.Sample(1'000, true));  // Create a maturity-valid block
     data.Save(path.string() + ".nopow");
     FAIL() << "Test file \"" << path << "\" was missing. Run tools/minetests.sh, then re-run test.";
 
@@ -154,7 +154,7 @@ TEST(ValidationPipelineTest, ProcessInvalidMerkleRoot) {
     // Construct test data file.
     test::Blockchain data;
     for (int height = 1; height < 4; ++height) 
-      data.Append(data.Sample(1'000, 2, 4, true));  // Create a maturity-valid block
+      data.Append(data.Sample(1'000, true));  // Create a maturity-valid block
     data[3]->Transaction(0).Output(0).value += 1;  // Corrupt block data without updating Merkle root.
     data.Save(path.string() + ".nopow");
     FAIL() << "Test file \"" << path << "\" was missing. Run tools/minetests.sh then re-run test.";
@@ -175,7 +175,7 @@ TEST(ValidationPipelineTest, ProcessInvalidUTXO) {
     test::Blockchain data;
     constexpr int kLength = 104;
     for (int height = 1; height < kLength; ++height)
-      data.Append(data.Sample(1'000, 2, 4, true));  // Create maturity-valid chain with spendable outputs.
+      data.Append(data.Sample(1'000, true));  // Create maturity-valid chain with spendable outputs.
 
     auto block = data[kLength - 1];
     ASSERT_GT(block->GetTransactionCount(), 1)
