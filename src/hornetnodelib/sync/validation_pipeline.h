@@ -166,12 +166,10 @@ class ValidationPipeline {
     if (!parent_it) return consensus::Error::Header_ParentNotFound;
     const auto ancestry_view = headers->GetValidationView(parent_it);
     const data::utxo::DatabaseView utxo{job.joiner};
-    if (job.joiner->IsJoinReady()) {
-      return consensus::ValidateBlock(block, *parent_it, *ancestry_view, GetCurrentTime(), utxo);
-    } else {
-      Assert(job.joiner->IsAssumeValid());
+    if (job.joiner->IsAssumeValid()) 
       return consensus::ValidateBlockExceptScripts(block, *parent_it, *ancestry_view, GetCurrentTime(), utxo);
-    }
+    else
+      return consensus::ValidateBlock(block, *parent_it, *ancestry_view, GetCurrentTime(), utxo);
   }
 
   // Retires completed jobs in height order, if we can take the retirement lock.

@@ -18,6 +18,8 @@ struct SpendRecord {
   std::span<const uint8_t> pubkey_script;
   protocol::TransactionConstView tx;
   int spend_input_index;
+
+  bool IsCoinbase() const { return funding_flags & 1; }
 };
 
 // This class represents an abstract view onto the whole set of unspent outputs.

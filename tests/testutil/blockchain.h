@@ -25,6 +25,7 @@ class Blockchain {
     protocol::OutPoint prevout;
     int height;
     int64_t amount;
+    bool is_coinbase;
   };
 
   Blockchain();
@@ -41,11 +42,11 @@ class Blockchain {
   const Spend& Spent(int index) const { return spent_[index]; }
   auto& Rng() const { return rng_; }
 
-  protocol::Block Sample(int max_transactions = 1'000, int max_fan_in = 2,
-                         int max_fan_out = 4) const;
+  protocol::Block Sample(int max_transactions = 1'000, int max_fan_in = 2, int max_fan_out = 4,
+                         bool enforce_coinbase_maturity = false) const;
 
   static Blockchain Generate(int length, int transactions_per_block = 1'000, int max_fan_in = 2,
-                             int max_fan_out = 4);
+                             int max_fan_out = 4, bool enforce_coinbase_maturity = false);
 
   void Save(const std::filesystem::path& path) const;
   void Load(const std::filesystem::path& path);
@@ -95,7 +96,8 @@ inline void Blockchain::Append(std::shared_ptr<protocol::Block> block) {
     if (height == 0) continue;  // Genesis transactions are not spendable.
     const auto& txid = tx.GetHash();
     for (int i = 0; i < tx.OutputCount(); ++i)
-      unspent_.push_back({{txid, static_cast<uint32_t>(i)}, height, tx.Output(i).value});
+      unspent_.push_back(
+          {{txid, static_cast<uint32_t>(i)}, height, tx.Output(i).value, tx.IsCoinBase()});
   }
 
   std::sort(spent_indices.begin(), spent_indices.end(), std::greater<int>{});
@@ -112,15 +114,24 @@ inline void Blockchain::Append(std::shared_ptr<protocol::Block> block) {
 // Add a simulated block to the chain.
 inline protocol::Block Blockchain::Sample(int max_transactions /* = 1000 */,
                                           int max_fan_in /* = 2 */,
-                                          int max_fan_out /* = 4 */) const {
+                                          int max_fan_out /* = 4 */,
+                                          bool enforce_coinbase_maturity /* = false */) const {
   constexpr int64_t kBlockReward = 50ll * 100'000'000;
   constexpr std::array<uint8_t, 24> pk_script = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
                                                  0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10,
                                                  0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18};
 
   protocol::Block block;
-  int funded_size =
-      std::ssize(unspent_);  // The number of unspent outputs prior to the appending block.
+  const int height = Length();
+  std::vector<int> spendable_indices;
+  spendable_indices.reserve(unspent_.size());
+  for (int i = 0; i < std::ssize(unspent_); ++i) {
+    const Spend& spend = unspent_[i];
+    const bool is_mature = !spend.is_coinbase || (height - spend.height >= 100);
+    if (!enforce_coinbase_maturity || is_mature)
+      spendable_indices.push_back(i);
+  }
+  int funded_size = std::ssize(spendable_indices);
 
   std::vector<int> input_counts;
   input_counts.reserve(max_transactions);
@@ -151,8 +162,8 @@ inline protocol::Block Blockchain::Sample(int max_transactions /* = 1000 */,
     total_spends += input_counts.back();
   }
 
-  std::vector<int> unspent_indices = SampleWithoutReplacement(total_spends, std::ssize(unspent_));
-  auto unspent_cursor = unspent_indices.begin();
+  std::vector<int> spendable_slots = SampleWithoutReplacement(total_spends, std::ssize(spendable_indices));
+  auto spendable_cursor = spendable_slots.begin();
   int transactions = std::min<int>(max_transactions, std::ssize(input_counts));
 
   // Add other transactions to the block.
@@ -165,8 +176,8 @@ inline protocol::Block Blockchain::Sample(int max_transactions /* = 1000 */,
     int64_t total = 0;
     for (int i = 0; i < input_count; ++i) {
       // Choose a prior output to spend as this input.
-      Assert(unspent_cursor != unspent_indices.end());
-      int unspent_index = *unspent_cursor++;
+      Assert(spendable_cursor != spendable_slots.end());
+      int unspent_index = spendable_indices[*spendable_cursor++];
       const Spend& spend = unspent_[unspent_index];
       tx.Input(i).previous_output = spend.prevout;
       tx.Input(i).sequence = unspent_index;
@@ -187,7 +198,6 @@ inline protocol::Block Blockchain::Sample(int max_transactions /* = 1000 */,
   protocol::BlockHeader header;
   header.SetMerkleRoot(consensus::ComputeMerkleRoot(block).hash);
   if (!blocks_.empty()) header.SetPreviousBlockHash(blocks_.back()->Header().ComputeHash());
-  const int height = Length();
   header.SetTimestamp(blocks_[0]->Header().GetTimestamp() + height * 600);
   header.SetCompactTarget(blocks_[0]->Header().GetCompactTarget());
   block.SetHeader(header);
@@ -210,10 +220,12 @@ inline std::vector<int> Blockchain::SampleWithoutReplacement(int count, int end)
 /* static */ inline Blockchain Blockchain::Generate(int length,
                                                     int transactions_per_block /* = 1'000 */,
                                                     int max_fan_in /* = 2 */,
-                                                    int max_fan_out /* = 4 */) {
+                                                    int max_fan_out /* = 4 */,
+                                                    bool enforce_coinbase_maturity /* = false */) {
   Blockchain chain;
   for (int height = 1; height < length; ++height)
-    chain.Append(chain.Sample(transactions_per_block, max_fan_in, max_fan_out));
+    chain.Append(
+        chain.Sample(transactions_per_block, max_fan_in, max_fan_out, enforce_coinbase_maturity));
   return chain;
 }
 

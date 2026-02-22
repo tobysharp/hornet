@@ -132,13 +132,13 @@ consensus::Result ValidateShuffle(const std::filesystem::path& path) {
 }
 
 TEST(ValidationPipelineTest, ProcessBlocks) {
-  constexpr int kLength = 20;
+  constexpr int kLength = 104;
   const auto path = CurrentTestVectorPath();
   if (!std::filesystem::exists(path))  {
     // Construct test data file.
     test::Blockchain data;
     for (int height = 1; height < kLength; ++height) 
-      data.Append(data.Sample());  // Create a valid block
+      data.Append(data.Sample(1'000, 2, 4, true));  // Create a maturity-valid block
     data.Save(path.string() + ".nopow");
     FAIL() << "Test file \"" << path << "\" was missing. Run tools/minetests.sh, then re-run test.";
 
@@ -154,8 +154,8 @@ TEST(ValidationPipelineTest, ProcessInvalidMerkleRoot) {
     // Construct test data file.
     test::Blockchain data;
     for (int height = 1; height < 4; ++height) 
-      data.Append(data.Sample());  // Create a valid block
-    data[3]->Transaction(1).Input(0).previous_output.hash[0]++;  // Corrupt input txid.
+      data.Append(data.Sample(1'000, 2, 4, true));  // Create a maturity-valid block
+    data[3]->Transaction(0).Output(0).value += 1;  // Corrupt block data without updating Merkle root.
     data.Save(path.string() + ".nopow");
     FAIL() << "Test file \"" << path << "\" was missing. Run tools/minetests.sh then re-run test.";
   }
@@ -173,12 +173,22 @@ TEST(ValidationPipelineTest, ProcessInvalidUTXO) {
   if (!std::filesystem::exists(path))  {
     // Construct test data file.
     test::Blockchain data;
-    for (int height = 1; height < 4; ++height) 
-      data.Append(data.Sample());  // Create a valid block
-    data[3]->Transaction(1).Input(0).previous_output.hash[0]++;  // Corrupt input txid.
-    auto header = data[3]->Header();
-    header.SetMerkleRoot(consensus::ComputeMerkleRoot(*data[3]).hash);
-    data[3]->SetHeader(header);
+    constexpr int kLength = 104;
+    for (int height = 1; height < kLength; ++height)
+      data.Append(data.Sample(1'000, 2, 4, true));  // Create maturity-valid chain with spendable outputs.
+
+    auto block = data[kLength - 1];
+    ASSERT_GT(block->GetTransactionCount(), 1)
+        << "Failed to create invalid UTXO fixture: no non-coinbase transaction found.";
+    auto tx = block->Transaction(1);
+    ASSERT_GT(tx.InputCount(), 0)
+        << "Failed to create invalid UTXO fixture: transaction 1 has no inputs.";
+    tx.Input(0).previous_output.hash[0] ^= 0x01;  // Corrupt exactly one spend input txid.
+
+    auto header = block->Header();
+    header.SetMerkleRoot(consensus::ComputeMerkleRoot(*block).hash);
+    block->SetHeader(header);
+
     data.Save(path.string() + ".nopow");
     FAIL() << "Test file \"" << path << "\" was missing. Run tools/minetests.sh then re-run test.";
   }
