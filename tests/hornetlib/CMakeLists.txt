@@ -55,7 +55,7 @@ add_executable(hornetlib_tests
 )
 
 target_compile_features(hornetlib_tests PRIVATE cxx_std_20)
-target_link_libraries(hornetlib_tests PRIVATE hornetlib gtest_main)
+target_link_libraries(hornetlib_tests PRIVATE hornetlib testutil gtest_main)
 target_include_directories(hornetlib_tests PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/tests)
 
 include(GoogleTest)

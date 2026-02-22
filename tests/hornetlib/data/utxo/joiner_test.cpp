@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include "hornetlib/consensus/rules/validate.h"
 #include "testutil/blockchain.h"
 #include "testutil/temp_folder.h"
 
@@ -405,6 +406,50 @@ TEST(SpendJoinerTest, TestIntraBlockFunding_CorrectOrder) {
   EXPECT_EQ(result, consensus::Result{});
   // We expect 1 input total (Tx 1 input). Tx 0 input is coinbase and skipped.
   EXPECT_EQ(callback_count, 1);
+}
+
+TEST(SpendJoinerTest, RejectsIntraBlockCoinbaseSpendViaConsensusValidation) {
+  test::TempFolder dir;
+  Database db{dir.Path()};
+
+  auto block = std::make_shared<protocol::Block>();
+
+  protocol::Transaction coinbase;
+  coinbase.SetVersion(1);
+  coinbase.ResizeInputs(1);
+  coinbase.Input(0).previous_output = protocol::OutPoint::Null();
+  coinbase.Input(0).sequence = 0xffffffff;
+  coinbase.SetSignatureScript(0, std::vector<uint8_t>{0x02, 0x01});
+  coinbase.ResizeOutputs(1);
+  coinbase.Output(0).value = 50'000'000;
+  coinbase.SetPkScript(0, std::vector<uint8_t>{0x51});
+  coinbase.SetLockTime(0);
+  block->AddTransaction(coinbase);
+
+  protocol::Transaction spend;
+  spend.SetVersion(1);
+  spend.ResizeInputs(1);
+  spend.Input(0).previous_output = {block->Transaction(0).GetHash(), 0};
+  spend.Input(0).sequence = 0xffffffff;
+  spend.SetSignatureScript(0, std::vector<uint8_t>{0x51});
+  spend.ResizeOutputs(1);
+  spend.Output(0).value = 49'999'000;
+  spend.SetPkScript(0, std::vector<uint8_t>{0x51});
+  spend.SetLockTime(0);
+  block->AddTransaction(spend);
+
+  constexpr int kHeight = 1;
+  SpendJoiner joiner{db, block, kHeight};
+  while (joiner.IsAdvanceReady())
+    joiner.Advance();
+
+  ASSERT_TRUE(joiner.IsJoinReady());
+
+  const auto result = joiner.Join([](const consensus::SpendRecord& spend_record) {
+    return consensus::rules::ValidateInputSpend(spend_record, kHeight);
+  });
+
+  EXPECT_EQ(result, consensus::Error::Transaction_PrematureSpend);
 }
 
 TEST(SpendJoinerTest, TestIntraBlockFunding_IncorrectOrder) {

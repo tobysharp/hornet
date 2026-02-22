@@ -23,8 +23,14 @@ struct InputSpendingContext {
   const int height;
 };
 
-[[nodiscard]] inline Result ValidateCoinbaseMaturity(const InputSpendingContext&) {
-    return {};  // TODO
+// Coinbase outputs MUST NOT be spent until 100 blocks after their creation.
+[[nodiscard]] inline Result ValidateCoinbaseMaturity(const InputSpendingContext& context) {
+  constexpr int kCoinbaseMaturity = 100;  // Number of blocks until coinbase maturity.
+
+  if (context.spend.IsCoinbase() && context.height - context.spend.funding_height < kCoinbaseMaturity)
+    return Error::Transaction_PrematureSpend;
+
+  return {};
 }
 
 }  // namespace hornet::consensus::rules
