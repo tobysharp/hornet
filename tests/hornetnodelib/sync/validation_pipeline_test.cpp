@@ -178,13 +178,7 @@ TEST(ValidationPipelineTest, ProcessInvalidUTXO) {
       data.Append(data.Sample(1'000, true));  // Create maturity-valid chain with spendable outputs.
 
     auto block = data[kLength - 1];
-    ASSERT_GT(block->GetTransactionCount(), 1)
-        << "Failed to create invalid UTXO fixture: no non-coinbase transaction found.";
-    auto tx = block->Transaction(1);
-    ASSERT_GT(tx.InputCount(), 0)
-        << "Failed to create invalid UTXO fixture: transaction 1 has no inputs.";
-    tx.Input(0).previous_output.hash[0] ^= 0x01;  // Corrupt exactly one spend input txid.
-
+    block->Transaction(1).Input(0).previous_output.hash[0]++;  // Corrupt exactly one spend input txid.
     auto header = block->Header();
     header.SetMerkleRoot(consensus::ComputeMerkleRoot(*block).hash);
     block->SetHeader(header);
