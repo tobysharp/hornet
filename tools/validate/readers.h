@@ -65,14 +65,15 @@ class CoreReader {
       throw std::runtime_error{"Path given is not a valid directory containing a block file."};
   }
 
-  explicit operator bool() const { return reader_.has_value(); }
-
-  using DataType = std::conditional_t<kHeadersOnly, protocol::BlockHeader,
+  using DataType = std::conditional_t<kHeadersOnly, std::optional<protocol::BlockHeader>,
                                       std::shared_ptr<const protocol::Block>>;
 
+  operator bool() const { return reader_.has_value(); }
+
   CoreReader& operator>>(DataType& value) {
-    value = reader_->ReadNext();
-    if (reader_->IsEof()) AdvanceReader();
+    do {
+      value = reader_->ReadNext();
+    } while (!value && AdvanceReader());
     return *this;
   }
 
@@ -97,8 +98,7 @@ class CoreReader {
     return true;
   }
 
-  using Reader =
-      std::conditional_t<kHeadersOnly, data::SerializedHeaderReader, data::SerializedBlockReader>;
+  using Reader = data::SerializedBlockReader<kHeadersOnly>;
 
   std::filesystem::path dir_;
   std::optional<Reader> reader_;

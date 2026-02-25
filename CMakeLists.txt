@@ -24,6 +24,8 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_compile_options(-g -O0)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
     add_compile_options(-O3 -DNDEBUG)
+elseif(CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    add_compile_options(-O3 -g -DNDEBUG -fno-omit-frame-pointer -DHORNET_PROFILING)
 endif()
 
 # Force external subprojects to use libc++

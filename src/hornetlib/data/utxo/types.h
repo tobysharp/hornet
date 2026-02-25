@@ -49,7 +49,8 @@ struct OutputKV {
   
   std::strong_ordering operator <=>(const OutputKV& rhs) const noexcept {
     if (auto cmp = key <=> rhs.key; cmp != 0) return cmp;
-    return rhs.data.height <=> data.height;
+    if (auto cmp = rhs.data.height <=> data.height; cmp != 0) return cmp;
+    return data.op <=> rhs.data.op;
   }
   bool operator ==(const OutputKV& rhs) const {
     return operator <=>(rhs) == 0;

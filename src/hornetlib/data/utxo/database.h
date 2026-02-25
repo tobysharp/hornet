@@ -132,7 +132,7 @@ inline int Database::ParseBlockPrevouts(const protocol::Block& block, int height
           if (prevout.index >= static_cast<uint32_t>(funding_tx.OutputCount())) return -1;
           const auto pk_script = funding_tx.PkScript(prevout.index);
           rids[cursor] = kLocalOutputId;
-          const OutputHeader header{height, 0, funding_tx.Output(prevout.index).value};
+          const OutputHeader header{height, funding_tx.IsCoinBase(), funding_tx.Output(prevout.index).value};
           const util::SubArray<uint8_t> sub_array = {static_cast<int>(std::ssize(scripts)),
                                                      static_cast<int>(std::ssize(pk_script))};
           scripts.insert(scripts.end(), pk_script.begin(), pk_script.end());

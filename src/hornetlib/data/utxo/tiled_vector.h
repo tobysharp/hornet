@@ -150,7 +150,7 @@ class TiledVector<T>::IteratorT {
     ++index_;
     return *this;
   }
-  Iterator& operator --() {
+  IteratorT& operator --() {
     --index_;
     return *this;
   }

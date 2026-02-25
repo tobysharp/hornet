@@ -45,7 +45,8 @@ enum class Error {
   Transaction_DuplicatedInput,
   Transaction_NullPreviousOutput,
   Transaction_BadCoinBaseSigScriptSize,
-  Transaction_NotUnspent
+  Transaction_NotUnspent,
+  Transaction_PrematureSpend
 };
 
 // SuccessOr represents state that is either "success" or it is a specific typed error.

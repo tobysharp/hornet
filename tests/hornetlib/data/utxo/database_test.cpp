@@ -9,12 +9,13 @@
 
 #include <gtest/gtest.h>
 
-#include "testutil/blockchain.h"
+#include "hornetlib/consensus/rules/validate.h"
 #include "hornetlib/data/utxo/sort.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/script/writer.h"
 #include "hornetlib/protocol/transaction.h"
 #include "hornetlib/util/log.h"
+#include "testutil/blockchain.h"
 #include "testutil/temp_folder.h"
 
 namespace hornet::data::utxo {
@@ -23,6 +24,57 @@ namespace {
 TEST(DatabaseTest, TestAppendGenesis) {
   test::TempFolder dir;
   Database database{dir.Path()};
+}
+
+TEST(DatabaseTest, RejectsSameBlockCoinbaseSpendViaLocalPrevoutPath) {
+  protocol::Block block;
+
+  protocol::Transaction coinbase;
+  coinbase.SetVersion(1);
+  coinbase.ResizeInputs(1);
+  coinbase.Input(0).previous_output = protocol::OutPoint::Null();
+  coinbase.Input(0).sequence = 0xffffffff;
+  coinbase.SetSignatureScript(0, std::vector<uint8_t>{0x02, 0x01});
+  coinbase.ResizeOutputs(1);
+  coinbase.Output(0).value = 50'000'000;
+  coinbase.SetPkScript(0, std::vector<uint8_t>{0x51});
+  coinbase.SetLockTime(0);
+  block.AddTransaction(coinbase);
+
+  protocol::Transaction spend;
+  spend.SetVersion(1);
+  spend.ResizeInputs(1);
+  spend.Input(0).previous_output = protocol::OutPoint{coinbase.GetHash(), 0};
+  spend.Input(0).sequence = 0xffffffff;
+  spend.SetSignatureScript(0, std::vector<uint8_t>{0x51});
+  spend.ResizeOutputs(1);
+  spend.Output(0).value = 49'999'000;
+  spend.SetPkScript(0, std::vector<uint8_t>{0x51});
+  spend.SetLockTime(0);
+  block.AddTransaction(spend);
+
+  constexpr int kHeight = 1000;
+  std::array<InputHeader, 1> inputs;
+  std::array<OutputKey, 1> keys;
+  std::array<OutputId, 1> rids;
+  std::array<OutputDetail, 1> outputs;
+  std::vector<uint8_t> scripts;
+
+  const int local_count =
+      Database::ParseBlockPrevouts(block, kHeight, inputs, keys, rids, outputs, scripts);
+  ASSERT_EQ(local_count, 1);
+  ASSERT_EQ(rids[0], kLocalOutputId);
+
+  const protocol::Block& const_block = block;
+  const consensus::SpendRecord local_spend{.funding_height = outputs[0].header.height,
+                                           .funding_flags = outputs[0].header.flags,
+                                           .amount = outputs[0].header.amount,
+                                           .pubkey_script = outputs[0].script.Span(scripts),
+                                           .tx = const_block.Transaction(inputs[0].tx_index),
+                                           .spend_input_index = inputs[0].input_index};
+
+  EXPECT_EQ(consensus::rules::ValidateInputSpend(local_spend, kHeight),
+            consensus::Error::Transaction_PrematureSpend);
 }
 
 TEST(DatabaseTest, TestSpentOutputsNotFound_MutableSerial) {
@@ -35,18 +87,15 @@ TEST(DatabaseTest, TestSpentOutputsNotFound_MutableSerial) {
   database.SetMutableWindow(chain.Length());
 
   // Appends the blocks to the database, serially in order.
-  for (int height = 1; height < chain.Length(); ++height)
-    database.Append(*chain[height], height);
-  
+  for (int height = 1; height < chain.Length(); ++height) database.Append(*chain[height], height);
+
   // Query everything that was spent already and check it is unfound.
   std::vector<OutputKey> keys(chain.SpentSize());
-  for (int i = 0; i < chain.SpentSize(); ++i)
-    keys[i] = chain.Spent(i).prevout;
+  for (int i = 0; i < chain.SpentSize(); ++i) keys[i] = chain.Spent(i).prevout;
   database.SortKeys(keys);
   std::vector<OutputId> rids(keys.size(), kNullOutputId);
   LogDebug() << "Query keys: ";
-  for (const auto& key : keys)
-    LogDebug() << "   key: {" << key.hash << ", " << key.index << "}";
+  for (const auto& key : keys) LogDebug() << "   key: {" << key.hash << ", " << key.index << "}";
   int query = database.Query(keys, rids, chain.Length());
   EXPECT_EQ(query, 0);
   for (auto rid : rids) EXPECT_EQ(rid, kSpentOutputId);
@@ -97,8 +146,7 @@ TEST(DatabaseTest, TestPipeline_InOrderSerial) {
     std::vector<OutputId> rids(keys.size(), kNullOutputId);
     int64_t total_spend = 0;  // Total block output
     for (const auto tx : block.Transactions())
-      for (const auto& output : tx.Outputs())
-        total_spend += output.value;
+      for (const auto& output : tx.Outputs()) total_spend += output.value;
     database.SortKeys(keys);
     auto queried = database.Query(keys, rids, 0, height);
     EXPECT_EQ(queried.funded, keys.size());
@@ -120,7 +168,7 @@ TEST(DatabaseTest, TestPipeline_InOrderSerial) {
     }
     int64_t supply_growth = total_spend - total_funding;
     EXPECT_EQ(supply_growth, 50ll * 100'000'000);  // Every test block adds 50 BTC to supply.
-  
+
     // Update the UTXO database.
     database.Append(block, height);
 
@@ -148,17 +196,16 @@ TEST(DatabaseTest, TestPipeline_PreemptiveSerial) {
     // Generate a new block to propose for the test chain.
     auto block = chain.Sample(kMaxTransactions);
 
-    // Start by preemptively appending the block the UTXO database, 
+    // Start by preemptively appending the block the UTXO database,
     // anticipating that all spends will prove valid.
     database.Append(block, height);
-    
+
     // Query all input prevouts at the previous height to check they were indeed unspent.
     std::vector<OutputKey> keys = database.ExtractSpentKeys(block);
     std::vector<OutputId> rids(keys.size(), kNullOutputId);
     int64_t total_spend = 0;  // Total block output
     for (const auto tx : block.Transactions())
-      for (const auto& output : tx.Outputs())
-        total_spend += output.value;
+      for (const auto& output : tx.Outputs()) total_spend += output.value;
     database.SortKeys(keys);
     auto queried = database.Query(keys, rids, 0, height);
     EXPECT_EQ(queried.funded, keys.size());
@@ -202,8 +249,7 @@ TEST(DatabaseTest, TestAppend_OutOfOrderSerial) {
 
   // Create the chain as though known to a peer.
   test::Blockchain chain;
-  for (int height = 1; height < kLength; ++height)
-    chain.Append(chain.Sample(kMaxTransactions));
+  for (int height = 1; height < kLength; ++height) chain.Append(chain.Sample(kMaxTransactions));
 
   for (int height = 1; height < kLength - 1; height += 2) {
     database.Append(*chain[height + 1], height + 1);
@@ -220,8 +266,7 @@ TEST(DatabaseTest, TestPipeline_UnorderedSerial) {
 
   // Create the chain as though known to a peer.
   test::Blockchain chain;
-  for (int height = 1; height < kLength; ++height)
-    chain.Append(chain.Sample(kMaxTransactions));
+  for (int height = 1; height < kLength; ++height) chain.Append(chain.Sample(kMaxTransactions));
 
   std::vector<OutputKey> prev_keys;
   std::vector<OutputId> prev_rids;
@@ -231,16 +276,16 @@ TEST(DatabaseTest, TestPipeline_UnorderedSerial) {
   for (int i = 1; i < kLength - 1; i += 2) {
     // Usually we would append and process the even block (0) followed by the odd block (1).
     // In this test we process them in the opposite order to check out-of-order operation.
-    
+
     // Block i+1 arrives before block i, and we process it as far as possible.
     {
       const int height = i + 1;
       const auto& block = *chain[height];
 
-      // Start by preemptively appending the block the UTXO database, 
+      // Start by preemptively appending the block the UTXO database,
       // anticipating that all spends will prove valid.
       database.Append(block, height);
-    
+
       // Partial query all input prevouts before height - 1 to check they were indeed unspent.
       std::vector<OutputKey> keys = database.ExtractSpentKeys(block);
       std::vector<OutputId> rids(keys.size(), kNullOutputId);
@@ -263,19 +308,18 @@ TEST(DatabaseTest, TestPipeline_UnorderedSerial) {
 
       // Preemptive out-of-order append.
       database.Append(block, height);
-      
+
       // Full query since we have all contiguous blocks up to this point.
       std::vector<OutputKey> keys = database.ExtractSpentKeys(block);
       std::vector<OutputId> rids(keys.size(), kNullOutputId);
       int64_t total_spend = 0;  // Total block output
       for (const auto tx : block.Transactions())
-        for (const auto& output : tx.Outputs())
-          total_spend += output.value;
+        for (const auto& output : tx.Outputs()) total_spend += output.value;
       database.SortKeys(keys);
       auto queried = database.Query(keys, rids, 0, height);
       EXPECT_EQ(queried.funded, keys.size());
       EXPECT_EQ(queried.spent, 0);
-    
+
       // Fetch all funding output data and validate.
       std::vector<OutputDetail> outputs(keys.size());
       std::vector<uint8_t> scripts;
@@ -292,7 +336,8 @@ TEST(DatabaseTest, TestPipeline_UnorderedSerial) {
       int64_t supply_growth = total_spend - total_funding;
       EXPECT_EQ(supply_growth, 50ll * 100'000'000);  // Every test block adds 50 BTC to supply.
 
-      // After appending the new block, all the keys that were previously funded should now be spent.
+      // After appending the new block, all the keys that were previously funded should now be
+      // spent.
       std::fill(rids.begin(), rids.end(), kNullOutputId);
       queried = database.Query(keys, rids, 0, height + 1);
       EXPECT_EQ(queried.funded, 0);
@@ -304,7 +349,7 @@ TEST(DatabaseTest, TestPipeline_UnorderedSerial) {
     {
       int height = i + 1;
       const auto& block = *chain[height];
-      
+
       std::vector<OutputKey> keys(std::move(prev_keys));
       std::vector<OutputId> rids(std::move(prev_rids));
       QueryResult queried = prev_query;
@@ -337,12 +382,12 @@ TEST(DatabaseTest, TestPipeline_UnorderedSerial) {
       }
       int64_t total_spend = 0;  // Total block output
       for (const auto tx : block.Transactions())
-        for (const auto& output : tx.Outputs())
-          total_spend += output.value;
+        for (const auto& output : tx.Outputs()) total_spend += output.value;
       int64_t supply_growth = total_spend - total_funding;
       EXPECT_EQ(supply_growth, 50ll * 100'000'000);  // Every test block adds 50 BTC to supply.
 
-      // After appending the new block, all the keys that were previously funded should now be spent.
+      // After appending the new block, all the keys that were previously funded should now be
+      // spent.
       std::fill(rids.begin(), rids.end(), kNullOutputId);
       queried = database.Query(keys, rids, 0, height + 1);
       EXPECT_EQ(queried.funded, 0);
@@ -365,9 +410,10 @@ TEST(DatabaseTest, TestAppendMutableSerial) {
   // Appends the blocks to the database, serially in order.
   for (int height = 1; height < chain.Length(); ++height) {
     database.Append(*chain[height], height);
-  
+
     {
-      // Query for the most recent block's coinbase output, which should exist at the current height.
+      // Query for the most recent block's coinbase output, which should exist at the current
+      // height.
       std::vector<OutputKey> keys(1, {chain[height]->Transaction(0).GetHash(), 0u});
       std::vector<OutputId> rids(1, kNullOutputId);
       int query = database.Query(keys, rids, height + 1);
@@ -394,8 +440,7 @@ TEST(DatabaseTest, TestAppendMutableSerial) {
     database.SortKeys(keys);
     int query = database.Query(keys, rids, chain.Length());
     EXPECT_EQ(query, chain.UnspentSize());
-    for (int i = 0; i < std::ssize(keys); ++i)
-      EXPECT_NE(rids[i], kNullOutputId);
+    for (int i = 0; i < std::ssize(keys); ++i) EXPECT_NE(rids[i], kNullOutputId);
 
     // Fetches all unspent output data.
     std::vector<OutputDetail> outputs(rids.size());
@@ -404,7 +449,7 @@ TEST(DatabaseTest, TestAppendMutableSerial) {
     int fetched = database.Fetch(rids, outputs, &scripts);
     EXPECT_EQ(fetched, std::ssize(rids));
     EXPECT_LE(scripts.size(), 24u * fetched);
-  
+
     // Verify the conservation of value of all unspent transactions.
     int64_t total = 0;
     for (const OutputDetail& detail : outputs) total += detail.header.amount;
@@ -414,13 +459,11 @@ TEST(DatabaseTest, TestAppendMutableSerial) {
   // Query everything that was spent already and check it is unfound.
   {
     std::vector<OutputKey> keys(chain.SpentSize());
-    for (int i = 0; i < chain.SpentSize(); ++i)
-      keys[i] = chain.Spent(i).prevout;
+    for (int i = 0; i < chain.SpentSize(); ++i) keys[i] = chain.Spent(i).prevout;
     database.SortKeys(keys);
     std::vector<OutputId> rids(keys.size(), kNullOutputId);
     LogDebug() << "Query keys: ";
-    for (const auto& key : keys)
-      LogDebug() << "   key: {" << key.hash << ", " << key.index << "}";
+    for (const auto& key : keys) LogDebug() << "   key: {" << key.hash << ", " << key.index << "}";
     int query = database.Query(keys, rids, chain.Length());
     EXPECT_EQ(query, 0);
     for (auto rid : rids) EXPECT_EQ(rid, kSpentOutputId);
@@ -437,9 +480,7 @@ TEST(DatabaseTest, TestAppendGeneratedParallel) {
   Database database{dir.Path()};
 
   // Appends the blocks to the database.
-  ParallelFor(1, chain.Length(), [&](int i) {
-    database.Append(*chain[i], i);
-  });
+  ParallelFor(1, chain.Length(), [&](int i) { database.Append(*chain[i], i); });
 }
 
 TEST(DatabaseTest, TestFetchWithNullIds) {
@@ -449,7 +490,7 @@ TEST(DatabaseTest, TestFetchWithNullIds) {
   test::Blockchain chain;
   chain.Append(chain.Sample());
   database.Append(*chain[1], 1);
-  std::vector<OutputKey> keys = { {(chain[1]->Transactions().begin())->GetHash(), 0}, {} };
+  std::vector<OutputKey> keys = {{(chain[1]->Transactions().begin())->GetHash(), 0}, {}};
   std::vector<OutputId> rids(keys.size());
   database.SortKeys(keys);
   int queried = database.Query(keys, rids, 2);
@@ -463,6 +504,37 @@ TEST(DatabaseTest, TestFetchWithNullIds) {
   EXPECT_GT(outputs[1].header.amount, 0);
 }
 
+TEST(DatabaseTest, TestSameBlockFundedThenSpentIsSpent) {
+  test::TempFolder dir;
+  Database database{dir.Path()};
+
+  protocol::Block block;
+  block.SetHeader(protocol::BlockHeader{});
+
+  protocol::Transaction funding;
+  funding.ResizeInputs(1);
+  funding.Input(0).previous_output = protocol::OutPoint::Null();
+  funding.ResizeOutputs(1);
+  funding.Output(0).value = 1000;
+  block.AddTransaction(funding);
+
+  protocol::Transaction spending;
+  spending.ResizeInputs(1);
+  spending.Input(0).previous_output = {block.Transaction(0).GetHash(), 0};
+  spending.ResizeOutputs(1);
+  spending.Output(0).value = 900;
+  block.AddTransaction(spending);
+
+  database.Append(block, 1);
+
+  std::vector<OutputKey> keys{{block.Transaction(0).GetHash(), 0}};
+  std::vector<OutputId> rids(1, kNullOutputId);
+  auto result = database.Query(keys, rids, 0, 2);
+  EXPECT_EQ(result.funded, 0);
+  EXPECT_EQ(result.spent, 1);
+  EXPECT_EQ(rids[0], kSpentOutputId);
+}
+
 TEST(DatabaseTest, TestPartialQueryAndFetch) {
   test::TempFolder dir;
   Database database{dir.Path()};
@@ -470,7 +542,7 @@ TEST(DatabaseTest, TestPartialQueryAndFetch) {
 
   // Create a chain with 2 blocks (Genesis + 1).
   test::Blockchain chain;
-  
+
   // Use Sample(1) to ensure each block only has a coinbase and doesn't spend previous outputs.
   // This simplifies the test logic regarding spent outputs.
   chain.Append(chain.Sample(1));  // height 1
@@ -480,10 +552,11 @@ TEST(DatabaseTest, TestPartialQueryAndFetch) {
   database.Append(*chain[1], 1);
   database.Append(*chain[2], 2);
 
-  // We want to query inputs for a hypothetical block that spends outputs from both Genesis and Block 1.
+  // We want to query inputs for a hypothetical block that spends outputs from both Genesis and
+  // Block 1.
   std::vector<OutputKey> keys;
-  keys.push_back({chain[1]->Transaction(0).GetHash(), 0}); // From Block 1
-  keys.push_back({chain[2]->Transaction(0).GetHash(), 0}); // From Block 2
+  keys.push_back({chain[1]->Transaction(0).GetHash(), 0});  // From Block 1
+  keys.push_back({chain[2]->Transaction(0).GetHash(), 0});  // From Block 2
   std::vector<int> heights = {1, 2};
 
   SortTogether(keys.begin(), keys.end(), heights.begin());

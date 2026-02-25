@@ -63,7 +63,7 @@ class ValidationPipeline {
   }
 
   // Submits a block for validation. Can be out of height order.
-  void Submit(std::shared_ptr<const protocol::Block> block, int height) {
+  void Submit(std::shared_ptr<const protocol::Block> block, int height, bool assume_valid = false) {
     if (height == 0)
       util::ThrowInvalidArgument(
           "ValidationPipeline::Submit: Genesis block should not be submitted.");
@@ -83,7 +83,7 @@ class ValidationPipeline {
       }
       ++active_count_;
     }
-    spend_pipeline_.Add(block, height);
+    spend_pipeline_.Add(block, height, assume_valid);
   }
 
   bool Wait(const util::Timeout& timeout = util::Timeout::Infinite()) {
@@ -166,7 +166,10 @@ class ValidationPipeline {
     if (!parent_it) return consensus::Error::Header_ParentNotFound;
     const auto ancestry_view = headers->GetValidationView(parent_it);
     const data::utxo::DatabaseView utxo{job.joiner};
-    return consensus::ValidateBlock(block, *parent_it, *ancestry_view, GetCurrentTime(), utxo);
+    if (job.joiner->IsAssumeValid()) 
+      return consensus::ValidateBlockExceptScripts(block, *parent_it, *ancestry_view, GetCurrentTime(), utxo);
+    else
+      return consensus::ValidateBlock(block, *parent_it, *ancestry_view, GetCurrentTime(), utxo);
   }
 
   // Retires completed jobs in height order, if we can take the retirement lock.
