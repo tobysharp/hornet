@@ -1,5 +1,6 @@
 build/
 venv/
+.venv/
 *.vsix
 tools/docgen/node_modules
 tools/docgen/package-lock.json
