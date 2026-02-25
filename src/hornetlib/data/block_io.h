@@ -175,6 +175,8 @@ class SerializedBlockReader {
         util::ThrowRuntimeError("Block file does not contain mainnet blocks.");
       if (header.size > 4u << 20)
         util::ThrowRuntimeError("Block size larger than maximum allowed.");
+      if (header.size < sizeof(protocol::BlockHeader))
+        util::ThrowRuntimeError("Block size smaller than minimum allowed.");
 
       const int read_size = kHeadersOnly ? sizeof(protocol::BlockHeader) : header.size;
       std::vector<uint8_t> bytes(read_size);
