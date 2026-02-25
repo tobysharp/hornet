@@ -47,8 +47,8 @@ void LoadHeaders(const Options& options, Metrics* metrics, data::Timechain* time
     std::unordered_map<protocol::Hash, const protocol::BlockHeader> cache;
     auto headers = timechain->WriteHeaders();
     std::optional<protocol::BlockHeader> header = std::make_optional<protocol::BlockHeader>();
-    reader >> *header;  // Read genesis.
-    while (headers->ChainLength() <= options.length) {
+    reader >> header;  // Read genesis.
+    while (headers->ChainLength() < options.length) {
       const auto tip = headers->ChainTip();
       // Check if required block is in the cache.
       if (const auto it = cache.find(tip->hash); it != cache.end()) {
@@ -56,26 +56,25 @@ void LoadHeaders(const Options& options, Metrics* metrics, data::Timechain* time
         cache.erase(it);
       } else if (reader) {  // Otherwise read a block from file.
         header.emplace();
-        reader >> *header;
-        // If it's not the next block we need, put it in the cache instead.
+        reader >> header;
+        if (!header) break;
+        // If it's not the next block we need, put in in the cache instead.
         if (header->GetPreviousBlockHash() != tip->hash) {
           cache.insert(std::pair{header->GetPreviousBlockHash(), *header});
           header.reset();
         }
-      } else {
-        break;
       }
       // If we found a block to add on this turn, add it now.
       if (header) timechain->AddHeader(tip, tip->Extend(*header));
     }
   });
+  std::cout << "Loaded " << timechain->ReadHeaders()->ChainLength() << " headers." << std::endl;
 }
 
 void PrintMetrics(const Metrics& metrics, int length,
                   const node::sync::ValidationPipeline& pipeline) {
   std::cout << "Total time " << metrics[Op_Total].Seconds() << " ("
-            << (length / metrics[Op_Total].Seconds().count()) << " blocks/s)"
-            << std::endl;
+            << (length / metrics[Op_Total].Seconds().count()) << " blocks/s)" << std::endl;
   std::cout << "including " << std::endl;
   for (int op : {Op_Blocks, Op_Submit, Op_Wait}) {
     std::cout << "\t" << metrics[op].Seconds() << " " << kOpNames[op]
@@ -161,23 +160,20 @@ int main(int argc, char** argv) {
         break;
       }
 
-      bool is_break = false;
       metrics.Add(Op_Blocks, [&] {
         const auto& prev_hash = headers->GetChainHash(height - 1);
         // Check if required block is in the cache.
         if (const auto it = cache.find(prev_hash); it != cache.end()) {
           block = std::move(it->second);
           cache.erase(it);
-        } else if (reader) {  // Otherwise read a block from file.
+        } else {  // Otherwise read a block from file.
           reader >> block;
+          if (!block) util::ThrowRuntimeError("Failed to load block from file, height ", height);
           // If it's not the next block we need, put it in the cache instead.
           if (block->Header().GetPreviousBlockHash() != prev_hash)
             cache.insert(std::pair{block->Header().GetPreviousBlockHash(), std::move(block)});
-        } else {
-          is_break = true;
         }
       });
-      if (is_break) break;
 
       // If we found a block to add on this turn, add it now.
       metrics.Add(Op_Submit, [&] {
