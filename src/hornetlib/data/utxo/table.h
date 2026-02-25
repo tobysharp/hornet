@@ -12,6 +12,7 @@
 #include "hornetlib/data/utxo/block_outputs.h"
 #include "hornetlib/data/utxo/flusher.h"
 #include "hornetlib/data/utxo/parallel.h"
+#include "hornetlib/data/utxo/profiler.h"
 #include "hornetlib/data/utxo/segments.h"
 #include "hornetlib/data/utxo/tiled_vector.h"
 #include "hornetlib/data/utxo/types.h"
@@ -189,7 +190,7 @@ inline int Table::AppendOutputs(const protocol::Block& block, int height,
   for (const auto tx : block.Transactions()) {
     for (int output = 0; output < tx.OutputCount(); ++output, ++count) {
       const protocol::OutPoint prevout{tx.GetHash(), static_cast<uint32_t>(output)};
-      const OutputHeader header{height, 0, tx.Output(output).value};
+      const OutputHeader header{height, tx.IsCoinBase(), tx.Output(output).value};
       const auto pk_script = tx.PkScript(output);
       const uint8_t* pheader = reinterpret_cast<const uint8_t*>(&header);
       const uint64_t address = offset + data.size();
@@ -221,6 +222,7 @@ inline void Table::EraseSince(int height) {
 }
 
 inline void Table::CommitBefore(int height) {
+  ScopedProfiler profiler("Flush", height);
   int blocks = 0;
   try {
     for (const auto& ptr : *tail_.Snapshot()) {

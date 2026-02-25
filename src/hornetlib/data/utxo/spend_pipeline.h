@@ -33,9 +33,9 @@ class SpendPipeline {
 
   // Creates a SpendJoiner, adds it to the pipeline, and returns it so it can be
   // wrapped in a DatabaseView for the consumer.
-  std::shared_ptr<SpendJoiner> Add(std::shared_ptr<const protocol::Block> block, int height) {
+  std::shared_ptr<SpendJoiner> Add(std::shared_ptr<const protocol::Block> block, int height, bool assume_valid = false) {
     if (abort_) throw SpendJoiner::CancelledException{};
-    auto joiner = std::make_shared<SpendJoiner>(db_, std::move(block), height);
+    auto joiner = std::make_shared<SpendJoiner>(db_, std::move(block), height, assume_valid);
     {
       std::lock_guard lock(mutex_);
       std::erase_if(active_joiners_, [](const auto& weak) { return weak.expired(); });

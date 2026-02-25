@@ -5,6 +5,7 @@ add_executable(hornetlib_tests
    consensus/validate_block_test.cpp
    consensus/validate_transaction_test.cpp
    crypto/hash_test.cpp
+   crypto_sha256_test.cpp
    data/block_io_test.cpp
    data/chain_tree_test.cpp
    data/hashed_tree_test.cpp
@@ -15,6 +16,7 @@ add_executable(hornetlib_tests
    data/utxo/block_outputs_test.cpp
    data/utxo/database_test.cpp
    data/utxo/directory_test.cpp
+   data/utxo/filter_test.cpp
    data/utxo/index_test.cpp
    data/utxo/joiner_test.cpp
    data/utxo/memory_age_test.cpp

@@ -6,6 +6,7 @@
 
 #include "hornetlib/data/utxo/compacter.h"
 #include "hornetlib/data/utxo/memory_age.h"
+#include "hornetlib/data/utxo/profiler.h"
 #include "hornetlib/data/utxo/tiled_vector.h"
 #include "hornetlib/data/utxo/types.h"
 
@@ -65,8 +66,10 @@ inline Index::Index() : compacter_(kCompacterThreads, [this](int index) { DoMerg
 }
 
 inline void Index::DoMerge(int index) {
-  if (index + 1 < std::ssize(ages_))
+  if (index + 1 < std::ssize(ages_)) {
+    ScopedProfiler profiler("Merge", index, "Age " + std::to_string(index) + " -> " + std::to_string(index + 1));
     ages_[index]->Merge(ages_[index + 1].get());
+  }
 }
 
 inline QueryResult Index::Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int since, int before) const {

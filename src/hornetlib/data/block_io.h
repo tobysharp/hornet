@@ -130,12 +130,12 @@ class BlockReader {
   std::vector<int64_t> offsets_;
 };
 
+template <bool kHeadersOnly = false>
 class SerializedBlockReader {
  public:
   SerializedBlockReader(const std::filesystem::path& path, const std::array<uint8_t, 8>& xor_key)
       : path_{path},
         stream_{path, std::ios::binary | std::ios::in},
-        scratch_(4u << 20),
         xor_key_(xor_key) {
     if (!stream_)
       util::ThrowRuntimeError("Failed to open block file \"", path_.string(), "\" for reading.");
@@ -145,115 +145,66 @@ class SerializedBlockReader {
     Advance();
   }
 
-  bool IsEof() const { return next_block_ == nullptr; }
+  using Element = std::conditional_t<kHeadersOnly, std::optional<protocol::BlockHeader>, std::shared_ptr<protocol::Block>>;
 
-  std::shared_ptr<protocol::Block> ReadNext() {
-    auto rv = std::move(next_block_);
-    if (rv != nullptr) Advance();
+  Element ReadNext()  {
+    auto rv = std::move(next_);
+    if (rv) Advance();
     return rv;
   }
 
  private:
   void Advance() {
-    next_block_.reset();
-    if (stream_.tellg() >= file_size_) return;
+    struct Header {
+      uint32_t magic;
+      uint32_t size;
+    };
+
+    next_.reset();
+    if (stream_.tellg() > file_size_ - static_cast<int>(sizeof(Header))) return;
+
     try {
-      struct Header {
-        uint32_t magic;
-        uint32_t size;
-      };
       int key_pos = stream_.tellg() & 7;
       uint64_t raw = util::Read<uint64_t>(stream_);
       for (unsigned int i = 0; i < sizeof(raw); ++i)
         reinterpret_cast<uint8_t*>(&raw)[i] ^= xor_key_[key_pos++ & 7];
       const Header header = *reinterpret_cast<const Header*>(&raw);
+      
       if (header.magic == 0) return;
       if (header.magic != static_cast<uint32_t>(protocol::Magic::Main))
         util::ThrowRuntimeError("Block file does not contain mainnet blocks.");
-      if (header.size > scratch_.size())
+      if (header.size > 4u << 20)
         util::ThrowRuntimeError("Block size larger than maximum allowed.");
-      auto bytes = std::span{scratch_}.first(header.size);
+
+      const int read_size = kHeadersOnly ? sizeof(protocol::BlockHeader) : header.size;
+      std::vector<uint8_t> bytes(read_size);
       stream_.read(reinterpret_cast<char*>(bytes.data()), bytes.size());
       if (stream_.gcount() != std::ssize(bytes))
         util::ThrowRuntimeError("Failure reading block file.");
+
       for (uint8_t& byte : bytes) byte ^= xor_key_[key_pos++ & 7];
       encoding::Reader reader{bytes};
-      auto block = std::make_shared<protocol::Block>();
-      block->Deserialize(reader);
-      next_block_ = std::move(block);
-    } catch (const std::runtime_error&) {
-    }
-  }
 
-  std::filesystem::path path_;
-  mutable std::ifstream stream_;
-  std::vector<uint8_t> scratch_;
-  const std::array<uint8_t, 8> xor_key_;
-  std::shared_ptr<protocol::Block> next_block_;
-  std::streamsize file_size_ = 0;
-};
-
-class SerializedHeaderReader {
- public:
-  SerializedHeaderReader(const std::filesystem::path& path, const std::array<uint8_t, 8>& xor_key)
-      : path_{path},
-        stream_{path, std::ios::binary | std::ios::in},
-        xor_key_(xor_key) {
-    if (!stream_)
-      util::ThrowRuntimeError("Failed to open block file \"", path_.string(), "\" for reading.");
-    stream_.seekg(0, std::ios::end);
-    file_size_ = stream_.tellg();
-    stream_.seekg(0, std::ios::beg);
-    Advance();
-  }
-
-  bool IsEof() const { return !next_header_.has_value(); }
-
-  protocol::BlockHeader ReadNext() {
-    auto rv = std::move(next_header_);
-    if (!rv) util::ThrowRuntimeError("Failed to read next header from block file \"", path_.string(), "\"");
-    Advance();
-    return *rv;
-  }
-
- private:
-  void Advance() {
-    next_header_.reset();
-    if (stream_.tellg() >= file_size_) return;
-    try {
-      struct Header {
-        uint32_t magic;
-        uint32_t size;
-      };
-      int key_pos = stream_.tellg() & 7;
-      uint64_t raw = util::Read<uint64_t>(stream_);
-      for (unsigned int i = 0; i < sizeof(raw); ++i)
-        reinterpret_cast<uint8_t*>(&raw)[i] ^= xor_key_[key_pos++ & 7];
-      const Header header = *reinterpret_cast<const Header*>(&raw);
-      if (header.magic == 0) return;
-      if (header.magic != static_cast<uint32_t>(protocol::Magic::Main))
-        util::ThrowRuntimeError("Block file does not contain mainnet blocks.");
-      std::array<uint8_t, sizeof(protocol::BlockHeader)> scratch;
-      if (header.size < scratch.size())
-        util::ThrowRuntimeError("Block size smaller than minimum allowed.");
-      stream_.read(reinterpret_cast<char*>(scratch.data()), scratch.size());
-      if (stream_.gcount() != std::ssize(scratch))
-        util::ThrowRuntimeError("Failure reading block file.");
-      for (uint8_t& byte : scratch) byte ^= xor_key_[key_pos++ & 7];
-      encoding::Reader reader{scratch};
-      auto block_header = std::make_optional<protocol::BlockHeader>();
-      block_header->Deserialize(reader);
-      next_header_ = std::move(block_header);
-      stream_.seekg(header.size - scratch.size(), std::ios::cur);
-    } catch (const std::runtime_error&) {
+      Element element;
+      if constexpr (kHeadersOnly) {
+        element = std::make_optional<protocol::BlockHeader>();
+      } else {
+        element = std::make_shared<protocol::Block>();
+      }
+      element->Deserialize(reader);
+      next_ = std::move(element);
+      if (int seek_delta = header.size - read_size; seek_delta != 0)
+        stream_.seekg(seek_delta, std::ios::cur);
+    } catch (...) {
+      // EOF or error, stop advancing
     }
   }
 
   std::filesystem::path path_;
   mutable std::ifstream stream_;
   const std::array<uint8_t, 8> xor_key_;
-  std::optional<protocol::BlockHeader> next_header_;
   std::streamsize file_size_ = 0;
+  Element next_;
 };
 
 }  // namespace hornet::data

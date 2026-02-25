@@ -25,6 +25,18 @@
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
+    },
+    {
+      "name": "clang20-profiling",
+      "displayName": "Clang20 Profiling",
+      "description": "Clang++-20 RelWithDebInfo with frame pointers",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/clang20-profiling",
+      "toolchainFile": "${sourceDir}/clang20.toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -35,6 +47,10 @@
     {
       "name": "clang20-release-all",
       "configurePreset": "clang20-release"
+    },
+    {
+      "name": "clang20-profiling-all",
+      "configurePreset": "clang20-profiling"
     }
   ]
 }

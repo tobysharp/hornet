@@ -11,7 +11,9 @@
 #include <ostream>
 #include <span>
 
+#include "hornetlib/crypto/cpuinfo.h"
 #include "hornetlib/crypto/sha256.h"
+#include "hornetlib/crypto/sha256_ni.h"
 #include "hornetlib/util/as_span.h"
 #include "hornetlib/util/throw.h"
 
@@ -29,7 +31,11 @@ bytes32_t Sha256(Iter begin, Iter end) {
   static_assert(std::is_trivially_copyable_v<T>,
                 "Sha256: iterator value type must be trivially copyable.");
   const size_t count = static_cast<size_t>(end - begin);
-  return SHA256::Hash(util::AsByteSpan<T>({count > 0 ? &*begin : nullptr, count}));
+  const auto span = util::AsByteSpan<T>({count > 0 ? &*begin : nullptr, count});
+  if (HasSHAExtensions())
+    return SHA256::Hash_SHANI(span);
+  else
+    return SHA256::Hash(span);
 }
 
 // Overload for trivially copyable types, spans, and ranges.
@@ -44,7 +50,7 @@ inline bytes32_t Sha256(const T &value) {
                 }) {
     return Sha256(value.begin(), value.end());
   } else if constexpr (std::is_trivially_copyable_v<T>) {
-    return SHA256::Hash(util::AsByteSpan<T>({&value, 1}));
+    return Sha256(util::AsByteSpan<T>({&value, 1}));
   } else {
     static_assert(always_false_v<T>, "Unsupported type passed to Sha256.");
   }
@@ -68,10 +74,11 @@ inline void DoubleSha256Batch(const uint8_t* input,
                               const int buffer_count,
                               uint8_t* output,
                               int output_stride_bytes = 32) {
-  // TODO: Replace this scalar implementation with a vectorized one.
+  // Use SHA-NI for batch operations
   for (int i = 0; i < buffer_count; ++i) {
     const uint8_t* buffer = input + i * input_stride_bytes;
-    *reinterpret_cast<bytes32_t*>(output + i * output_stride_bytes) = DoubleSha256(buffer, buffer + buffer_length_bytes);
+    const auto hash = DoubleSha256(std::span<const uint8_t>(buffer, buffer_length_bytes));
+    *reinterpret_cast<bytes32_t*>(output + i * output_stride_bytes) = hash;
   }
 }
 

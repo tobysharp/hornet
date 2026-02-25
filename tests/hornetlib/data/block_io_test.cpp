@@ -1,5 +1,7 @@
 #include "hornetlib/data/block_io.h"
 
+#include <filesystem>
+
 #include <gtest/gtest.h>
 
 #include "hornetlib/consensus/validate_api.h"

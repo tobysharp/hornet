@@ -9,6 +9,7 @@
 
 #include "hornetlib/data/utxo/codec.h"
 #include "hornetlib/data/utxo/directory.h"
+#include "hornetlib/data/utxo/filter.h"
 #include "hornetlib/data/utxo/parallel.h"
 #include "hornetlib/data/utxo/tiled_vector.h"
 #include "hornetlib/data/utxo/search.h"
@@ -24,7 +25,8 @@ class MemoryRun {
   MemoryRun(const MemoryRun& rhs);
   MemoryRun(bool is_mutable, TiledVector<OutputKV>&& entries, const std::pair<int, int>& height_range = { std::numeric_limits<int>::max(), std::numeric_limits<int>::min() })
       : is_mutable_(is_mutable), entries_(std::move(entries)), directory_(ComputePrefixBits(entries_.Size()), entries_.begin(), entries_.end()), height_range_(height_range) {
-        // TODO: Create Bloom filter.
+        filter_.Reset(entries_.Size());
+        for (const auto& kv : entries_) filter_.Add(kv.key);
       }
     
   bool Empty() const { return entries_.Empty(); }
@@ -64,12 +66,12 @@ class MemoryRun {
   const bool is_mutable_;
   TiledVector<OutputKV> entries_;
   Directory directory_;
-  // TODO: Bloom filter.
+  Filter filter_;
   std::pair<int, int> height_range_ = { std::numeric_limits<int>::max(), std::numeric_limits<int>::min() };
 };
 
 inline MemoryRun::MemoryRun(const MemoryRun& rhs) 
-  : is_mutable_(rhs.is_mutable_), entries_(rhs.entries_), directory_(rhs.directory_), height_range_(rhs.height_range_) {
+  : is_mutable_(rhs.is_mutable_), entries_(rhs.entries_), directory_(rhs.directory_), filter_(rhs.filter_), height_range_(rhs.height_range_) {
 }
 
 inline QueryResult MemoryRun::Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int since, int before) const {
@@ -78,8 +80,6 @@ inline QueryResult MemoryRun::Query(std::span<const OutputKey> keys, std::span<O
   // In an immutable run, we can only guarantee correct results if the entire run is contained within the queried time range.
   if (!IsMutable() && before < height_range_.second) 
     util::ThrowInvalidArgument("Queried height already merged to immutable.");
-
-  // TODO: Check Bloom filter for quick exit.
 
   static constexpr int kRanges = 8;
   return ParallelSum<QueryResult>(SplitQuery(keys, rids, kRanges), {}, [&](const QueryRange& range) -> QueryResult {
@@ -125,13 +125,13 @@ inline QueryResult MemoryRun::QueryImpl(std::span<const OutputKey> keys, std::sp
     // Get the key for this query.
     const auto& key = keys[index];
     
+    // Check the Bloom filter for quick exit, with false positive rate ~0.01.
+    if (!filter_.MayContain(key)) continue;
+
     // Tighten bounds when available externally (e.g. directory).
     const auto [lo, hi] = directory_.LookupRange(key);
     lower = std::max(lower, entries_.begin() + lo);  // Lower bound is monotonically increasing...
     upper = entries_.begin() + hi;                   // while upper bound resets for each key.
-
-    // Tighten bounds again by galloping forwards until we pass over the key.
-    std::tie(lower, upper) = GallopingRangeSearch(lower, upper, key);
 
     // Binary search in the remaining range for the first item that's ordered >= the query key.
     auto it = std::lower_bound(lower, upper, key);
@@ -159,7 +159,9 @@ inline void MemoryRun::EraseSince(int height) {
   // Run partially overlaps with undo range.
   entries_.EraseIf([&](const OutputKV& kv) { return kv.data.height >= height; });
   directory_.Rebuild(entries_.begin(), entries_.end());
-  // TODO: Optionally rebuild Bloom filter.
+  filter_.Reset(entries_.Size());
+  for (const auto& kv : entries_) filter_.Add(kv.key);
+
   height_range_.second = height;
 }
 
@@ -168,6 +170,7 @@ inline int MemoryRun::AddEntry(const OutputKV& kv, int bucket) {
   const int offset = entries_.Size();
   while (bucket <= cur_bucket) directory_[bucket++] = offset;
   entries_.PushBack(kv);
+  filter_.Add(kv.key);
   return bucket;
 }
 
@@ -187,6 +190,7 @@ inline int MemoryRun::AddEntry(const OutputKV& kv, int bucket) {
 
   // Initialize output.
   MemoryRun dst{is_mutable, prefix_bits};
+  dst.filter_.Reset(approx_entries);
 
   // Initialize heap and destination height range.
   std::priority_queue<Cursor, std::vector<Cursor>, std::greater<Cursor>> heap;
@@ -222,7 +226,6 @@ inline int MemoryRun::AddEntry(const OutputKV& kv, int bucket) {
   // Finish directory.
   while (next_bucket < dst.directory_.Size()) dst.directory_[next_bucket++] = dst.entries_.Size();
 
-  // TODO: Create Bloom filter.
   return dst;
 }
 

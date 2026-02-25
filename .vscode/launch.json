@@ -82,7 +82,7 @@
       "args": [
         "--blocksdir=\"/nvme1/bitcoin/blocks\"",
         "--datadir=\"/hornet/validate\"",
-        "--length=2000"
+        "--length=200000"
       ],
       "cwd": "${workspaceFolder}/build"
     }        

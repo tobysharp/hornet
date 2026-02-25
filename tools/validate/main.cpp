@@ -57,7 +57,7 @@ void LoadHeaders(const Options& options, Metrics* metrics, data::Timechain* time
       } else if (reader) {  // Otherwise read a block from file.
         header.emplace();
         reader >> *header;
-        // If it's not the next block we need, put in in the cache instead.
+        // If it's not the next block we need, put it in the cache instead.
         if (header->GetPreviousBlockHash() != tip->hash) {
           cache.insert(std::pair{header->GetPreviousBlockHash(), *header});
           header.reset();
@@ -170,7 +170,7 @@ int main(int argc, char** argv) {
           cache.erase(it);
         } else if (reader) {  // Otherwise read a block from file.
           reader >> block;
-          // If it's not the next block we need, put in in the cache instead.
+          // If it's not the next block we need, put it in the cache instead.
           if (block->Header().GetPreviousBlockHash() != prev_hash)
             cache.insert(std::pair{block->Header().GetPreviousBlockHash(), std::move(block)});
         } else {

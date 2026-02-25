@@ -76,7 +76,7 @@ namespace hornet::consensus::rules {
 [[nodiscard]] inline Result ValidateInputSpend(const SpendRecord& spend, int height) {
   // clang-format off
   static const std::array ruleset = {
-    Rule{ValidateCoinbaseMaturity}
+    Rule{ValidateCoinbaseMaturity}    // Coinbase outputs MUST NOT be spent until 100 blocks after their creation.
     // TODO: Others
   };
   //clang-format on
