@@ -13,11 +13,27 @@ namespace hornet::data::utxo {
 
 class Index {
  public:
+  class Pin {
+   public:
+    Pin();
+    Pin(Index& index, int height);
+    Pin(Pin&& rhs) noexcept;
+    Pin(const Pin&) = delete;
+    ~Pin();
+    Pin& operator=(Pin&& rhs);
+    Pin& operator=(const Pin&) = delete;
+    void Reset();
+   private:
+    void Swap(Pin& rhs);
+    Index* index_;
+    int height_;
+  };
+
   Index();
 
   QueryResult Query(std::span<const OutputKey> keys, std::span<OutputId> ids, int since, int before) const;
   TiledVector<OutputKV> MakeAppendBuffer() const { return ages_[0]->MakeEntries(); }
-  void Append(TiledVector<OutputKV>&& entries, int height);
+  Pin Append(TiledVector<OutputKV>&& entries, int height);
   void EraseSince(int height);
   int GetContiguousLength() const;
   bool ContainsHeight(int height) const;
@@ -61,9 +77,11 @@ inline QueryResult Index::Query(std::span<const OutputKey> keys, std::span<Outpu
   });
 }
 
-inline void Index::Append(TiledVector<OutputKV>&& entries, int height) {
+inline Index::Pin Index::Append(TiledVector<OutputKV>&& entries, int height) {
   Assert(std::is_sorted(entries.begin(), entries.end()));
+  Pin pin{*this, height};
   ages_[0]->Append(std::move(entries), {height, height + 1});
+  return pin;
 }
 
 inline void Index::EraseSince(int height) {
@@ -132,6 +150,40 @@ inline bool Index::ContainsHeight(int height) const {
     k *= kMergeFanIn;
   }
   return count;
+}
+
+inline Index::Pin::Pin() : index_(nullptr), height_(-1) {
+}
+
+inline Index::Pin::Pin(Index& index, int height) : index_(&index), height_(height) {
+  index_->ages_[kMutableAges - 1]->PinHeight(height_);
+}
+
+inline Index::Pin::Pin(Pin&& rhs) noexcept : Pin() {
+  Swap(rhs);
+}
+
+inline Index::Pin::~Pin() {
+  Reset();
+}
+    
+inline Index::Pin& Index::Pin::operator=(Pin&& rhs) {
+  if (this != &rhs) {
+    Reset();
+    Swap(rhs);
+  }
+  return *this;
+}
+
+inline void Index::Pin::Reset() {
+  if (index_) index_->ages_[kMutableAges - 1]->UnpinHeight(height_);
+  index_ = nullptr;
+  height_ = -1;
+}
+
+inline void Index::Pin::Swap(Pin& rhs) {
+  std::swap(index_, rhs.index_);
+  std::swap(height_, rhs.height_);
 }
 
 }  // namespace hornet::data::utxo

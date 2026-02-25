@@ -22,7 +22,10 @@ class Compacter {
   }
 
   ~Compacter() {
-    abort_ = true;
+    {
+      std::lock_guard lk(mu_);
+      abort_ = true;
+    }
     cv_.notify_all();
     for (auto& thread : threads_)
       if (thread.joinable()) thread.join();
@@ -45,7 +48,10 @@ class Compacter {
 
   void Resume() {
     Assert(running_ == 0);
-    paused_ = false;
+    {
+      std::lock_guard lk(mu_);
+      paused_ = false;
+    }
     cv_.notify_all();
   }
 
@@ -83,8 +89,8 @@ class Compacter {
   MergeFn merge_;
 
   std::mutex mu_;
-  std::atomic<bool> abort_;
-  std::atomic<bool> paused_;
+  bool abort_;
+  bool paused_;
   std::atomic<int> running_;
   std::condition_variable cv_;
   std::set<int> ready_;

@@ -11,6 +11,7 @@
 #include "hornetlib/data/utxo/types.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/transaction.h"
+#include "hornetlib/util/metrics.h"
 
 namespace hornet::data::utxo {
 
@@ -31,9 +32,13 @@ class SpendJoiner {
 
   State GetState() const { return state_; }
   int GetHeight() const { return height_; }
+  const std::shared_ptr<const protocol::Block>& GetBlock() const { return block_; }
   
   bool IsAdvanceReady() const;
-  void Advance();
+
+  enum class Action { Advance, Wait, Join, Retire };
+  struct StepResult { State state; Action action; };
+  StepResult Advance();
   
   bool IsJoinReady() const { return state_ == State::Fetched; }
   consensus::Result Join(auto&& callback);
@@ -42,6 +47,10 @@ class SpendJoiner {
   bool WaitForFetch() const;
 
   void Cancel();
+
+  enum Timer { Time_Parse, Time_Append, Time_Query, Time_Fetch, Time_Join, Time_Count };
+  using Metrics = util::Metrics<Time_Count>;
+  const Metrics& GetMetrics() const { return metrics_; }
 
  private:
   void Parse();
@@ -62,40 +71,51 @@ class SpendJoiner {
   int query_before_ = 0;
   int found_funded_ = 0;
   int fetch_count_ = 0;
+  std::optional<Database::Pin> pin_;
   std::vector<InputHeader> inputs_;
   std::vector<OutputKey> keys_;
   std::vector<OutputId> rids_;
   std::vector<OutputDetail> outputs_;
   std::vector<uint8_t> scripts_;
+  Metrics metrics_;
 };
 
 inline void SpendJoiner::Parse() {
   Assert(state_ == State::Init);
-  for (int i = 0; i < block_->GetTransactionCount(); ++i) {
-    const auto tx = block_->Transaction(i);
-    for (int j = 0; j < tx.InputCount(); ++j) {
-      const auto& prevout = tx.Input(j).previous_output;
-      if (!prevout.IsNull()) {
-        inputs_.push_back({i, j});
-        keys_.push_back(tx.Input(j).previous_output);
-      }
-    }
-  }
+
+  const auto timer = metrics_.AddScoped(Time_Parse);
+
+  int size = 0;
+  for (const auto tx : block_->Transactions())
+    for (const auto& input : tx.Inputs())
+      size += !input.previous_output.IsNull();
+
+  inputs_.resize(size);
+  keys_.resize(size);
+  rids_.resize(size);
+  outputs_.resize(size);
+
+  const int local_count = Database::ParseBlockPrevouts(*block_, height_, inputs_, keys_, rids_, outputs_, scripts_);
+  if (local_count < 0) return GotoError();
+  found_funded_ = fetch_count_ = local_count;
+
   // Sort by keys, ready for query.
-  SortTogether(keys_.begin(), keys_.end(), inputs_.begin());
+  SortTogether(keys_.begin(), keys_.end(), inputs_.begin(), rids_.begin(), outputs_.begin());
   state_ = State::Parsed;
 }
 
 inline void SpendJoiner::Append() {
   Assert(state_ == State::Parsed);
-  db_.Append(*block_, height_);  // TODO: Enable out-of-order appends
+  const auto timer = metrics_.AddScoped(Time_Append);
+  pin_ = db_.Append(*block_, height_);
   state_ = State::Appended;
 }
 
 inline void SpendJoiner::Query() {
   Assert(state_ == State::Appended || state_ == State::QueriedPartial || state_ == State::FetchedPartial);
-  rids_.resize(keys_.size());
-  outputs_.resize(keys_.size());
+ 
+  const auto timer = metrics_.AddScoped(Time_Query);
+
   const int commit_height = db_.GetContiguousLength();
   const int query_since = query_before_;  // Initially zero.
   if (query_since >= commit_height) return;
@@ -124,11 +144,11 @@ inline void SpendJoiner::Query() {
 inline void SpendJoiner::Fetch() {
   Assert(state_ == State::Queried || state_ == State::QueriedPartial);
 
+  const auto timer = metrics_.AddScoped(Time_Fetch);
+
   if (state_ == State::QueriedPartial) {
     // Since the previous action was a partial query, we haven't yet sorted the rid's.
-    SortTogether(rids_.begin(), rids_.end(), inputs_.begin(), keys_.begin()/*, outputs_.begin() */);
-    // We only need to include outputs_ in the permutation if this isn't the first fetch, which implies
-    // partial query -> partial fetch -> 2nd partial query, a code path we don't currently support.
+    SortTogether(rids_.begin(), rids_.end(), inputs_.begin(), keys_.begin(), outputs_.begin());
   }
 
   fetch_count_ += db_.Fetch(rids_, outputs_, &scripts_);
@@ -154,6 +174,8 @@ inline void SpendJoiner::Fetch() {
 inline consensus::Result SpendJoiner::Join(auto&& callback) {
   Assert(state_ == State::Fetched);
   Assert(inputs_.size() == outputs_.size());
+
+  const auto timer = metrics_.AddScoped(Time_Join);
 
   consensus::Result rv = {};
   std::atomic<bool> failed = false;
@@ -199,7 +221,7 @@ inline bool SpendJoiner::IsAdvanceReady() const {
   }
 }
 
-inline void SpendJoiner::Advance() {
+inline SpendJoiner::StepResult SpendJoiner::Advance() {
   switch (state_) {
     case State::Init:           Parse();  break;
     case State::Parsed:         Append(); break;
@@ -211,11 +233,18 @@ inline void SpendJoiner::Advance() {
       else Fetch(); 
       break;
     default:
+      break;
   }
+
+  if (IsAdvanceReady()) return {state_, Action::Advance};
+  if (state_ == State::FetchedPartial) return {state_, Action::Wait};
+  if (state_ == State::Fetched) return {state_, Action::Join};
+  return {state_, Action::Retire};
 }
 
 
 inline void SpendJoiner::ReleaseQuery() {
+  pin_.reset();
   release_query_ = true;
   release_query_.notify_all();
 }

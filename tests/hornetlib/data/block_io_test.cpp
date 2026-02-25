@@ -7,13 +7,19 @@
 #include "hornetlib/data/utxo/database_view.h"
 #include "hornetlib/data/utxo/joiner.h"
 #include "hornetlib/data/timechain.h"
+#include "testutil/data_path.h"
 #include "testutil/temp_folder.h"
 
 namespace hornet::data {
 namespace {
 
 TEST(BlockIOTest, TestFileRead) {
-  BlockReader reader{"/tmp/blocks.bin"};
+  const auto path = test::GetDataPath("ValidationPipelineTest_ProcessMainnet50Blocks.bin");
+  if (!std::filesystem::exists(path)) {
+    FAIL() << "Missing block test vector: " << path;
+  }
+
+  BlockReader reader{path};
   Timechain timechain;
 
   test::TempFolder folder;

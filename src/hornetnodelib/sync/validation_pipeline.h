@@ -9,6 +9,7 @@
 #include <thread>
 #include <vector>
 
+#include "hornetlib/consensus/types.h"
 #include "hornetlib/consensus/validate_api.h"
 #include "hornetlib/data/timechain.h"
 #include "hornetlib/data/utxo/database.h"
@@ -16,6 +17,8 @@
 #include "hornetlib/data/utxo/joiner.h"
 #include "hornetlib/data/utxo/spend_pipeline.h"
 #include "hornetlib/protocol/block.h"
+#include "hornetlib/util/assert.h"
+#include "hornetlib/util/log.h"
 #include "hornetlib/util/thread_safe_queue.h"
 #include "hornetlib/util/throw.h"
 #include "hornetlib/util/timeout.h"
@@ -30,19 +33,33 @@ class ValidationPipeline {
   // Constructs the validation pipeline.
   // pipeline_depth: The number of blocks that can be processed concurrently.
   // This determines the number of threads in both the validation and spend pipelines.
+  // max_active_count: The maximum number of blocks that can be in the pipeline at once.
+  // If -1, defaults to pipeline_depth * 4.
   ValidationPipeline(data::Timechain& timechain, data::utxo::Database& db,
-                     CompleteCallback callback, int pipeline_depth = 8)
-      : timechain_(timechain), on_complete_(std::move(callback)), spend_pipeline_(db, pipeline_depth) {
+                     CompleteCallback callback, int pipeline_depth = 8, int max_active_count = -1)
+      : timechain_(timechain), on_complete_(std::move(callback)), 
+        spend_pipeline_(db, pipeline_depth, [this](auto joiner) { OnSpendComplete(std::move(joiner)); }),
+        max_active_count_(max_active_count > 0 ? max_active_count : pipeline_depth * 4) {
     for (int i = 0; i < pipeline_depth; ++i) {
       workers_.emplace_back([this] { WorkerLoop(); });
     }
   }
 
   ~ValidationPipeline() {
-    queue_.Stop();
-    spend_pipeline_.Stop();
+    Abort();
     for (auto& t : workers_)
       if (t.joinable()) t.join();
+    workers_.clear();
+  }
+
+  void Abort() {
+    {
+      std::lock_guard lock{wait_mutex_};
+      max_active_count_ = 0;
+      submit_cv_.notify_all();
+    }
+    queue_.Stop();
+    spend_pipeline_.Abort();
   }
 
   // Submits a block for validation. Can be out of height order.
@@ -50,20 +67,41 @@ class ValidationPipeline {
     if (height == 0)
       util::ThrowInvalidArgument(
           "ValidationPipeline::Submit: Genesis block should not be submitted.");
-    ++active_count_;
-    auto joiner = spend_pipeline_.Add(block, height);
-    queue_.Push({height, std::move(block), std::move(joiner)});
+    
+    {
+      std::unique_lock lock{wait_mutex_};
+      
+      using namespace std::chrono_literals;
+      while (!spend_pipeline_.IsStalled() && !submit_cv_.wait_for(lock, 100ms, [&] {
+        return max_active_count_ == 0 || active_count_ < max_active_count_;
+      })) {}
+
+      if (active_count_ >= max_active_count_) {
+        lock.unlock();
+        Abort();
+        util::ThrowRuntimeError("ValidationPipeline deadlocked and aborted.");
+      }
+      ++active_count_;
+    }
+    spend_pipeline_.Add(block, height);
   }
 
-  bool Wait(const util::Timeout& timeout) {
-    if (active_count_ == 0) return true;
-
+  bool Wait(const util::Timeout& timeout = util::Timeout::Infinite()) {
     std::unique_lock lock{wait_mutex_};
+    auto predicate = [this] { return active_count_ == 0 || max_active_count_ == 0; };
     if (timeout.IsInfinite()) {
-      wait_cv_.wait(lock, [this] { return active_count_ == 0; });
+      wait_cv_.wait(lock, predicate);
       return true;
     } else
-      return wait_cv_.wait_until(lock, timeout.Deadline(), [this] { return active_count_ == 0; });
+      return wait_cv_.wait_until(lock, timeout.Deadline(), predicate);
+  }
+
+  std::pair<long long, long long> GetValidationMetrics() const {
+    return {total_validate_time_ns.load(), total_validate_calls.load()};
+  }
+
+  const data::utxo::SpendPipeline::Metrics& GetSpendMetrics() const {
+    return spend_pipeline_.GetMetrics();
   }
 
  private:
@@ -82,19 +120,22 @@ class ValidationPipeline {
     bool operator<(const JobResult& rhs) const { return height > rhs.height; }
   };
 
+  void OnSpendComplete(std::shared_ptr<data::utxo::SpendJoiner> joiner) {
+    ++validation_pending_;
+    queue_.Push({joiner->GetHeight(), joiner->GetBlock(), std::move(joiner)});
+  }
+
   void WorkerLoop() {
     std::optional<Job> job;
     while ((job = queue_.WaitPop())) {
       try {
-        // If this validation job doesn't yet have all its dependencies ready, and there is other
-        // work to be done, defer this job until later in preference of a more productive work item.
-        if (!job->joiner->IsJoinReady() && !queue_.Empty()) {
-          queue_.Push(std::move(*job));
-          continue;
-        }
-
         // Perform consensus validation for the current job, and store the result.
+        auto start = std::chrono::high_resolution_clock::now();
         const auto result = Validate(*job);
+        auto end = std::chrono::high_resolution_clock::now();
+        total_validate_time_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+        total_validate_calls++;
+
         {
           std::lock_guard lock{retire_mutex_};
           completed_.push(JobResult{job->height, std::move(job->block), result});
@@ -105,8 +146,14 @@ class ValidationPipeline {
 
       } catch (const data::utxo::SpendJoiner::CancelledException& e) {
         // Job was cancelled, presumably due to shutdown.
+        {
+          std::lock_guard wait_lock{wait_mutex_};
+          if (--active_count_ == 0) wait_cv_.notify_all();
+        }
+        submit_cv_.notify_all();
         break;
       }
+      --validation_pending_;
     }
   }
 
@@ -116,6 +163,7 @@ class ValidationPipeline {
     const auto headers = timechain_.ReadHeaders();
     const auto parent_it =
         headers->FindStable(job.height - 1, block.Header().GetPreviousBlockHash());
+    if (!parent_it) return consensus::Error::Header_ParentNotFound;
     const auto ancestry_view = headers->GetValidationView(parent_it);
     const data::utxo::DatabaseView utxo{job.joiner};
     return consensus::ValidateBlock(block, *parent_it, *ancestry_view, GetCurrentTime(), utxo);
@@ -132,11 +180,13 @@ class ValidationPipeline {
       completed_.pop();
 
       lock.unlock();
-      on_complete_(item.block, item.height, item.result);
-      if (--active_count_ == 0) {
+      if (on_complete_)
+        on_complete_(item.block, item.height, item.result);
+      {
         std::lock_guard wait_lock{wait_mutex_};
-        wait_cv_.notify_all();
+        if (--active_count_ == 0) wait_cv_.notify_all();
       }
+      submit_cv_.notify_all();
       lock.lock();
     }
   }
@@ -158,10 +208,15 @@ class ValidationPipeline {
   std::mutex retire_mutex_;
   int next_complete_height_ = 1;  // Genesis is never validated.
   std::priority_queue<JobResult, std::vector<JobResult>> completed_;
-
-  std::atomic<int> active_count_ = 0;
+  int max_active_count_;
+  int active_count_ = 0;
+  std::atomic<int> validation_pending_ = 0;
   std::mutex wait_mutex_;
   std::condition_variable wait_cv_;
+  std::condition_variable submit_cv_;
+
+  std::atomic<long long> total_validate_time_ns{0};
+  std::atomic<long long> total_validate_calls{0};
 };
 
 }  // namespace hornet::node::sync

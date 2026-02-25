@@ -13,6 +13,7 @@
 #include "hornetlib/protocol/message/getheaders.h"
 #include "hornetlib/protocol/message/headers.h"
 #include "hornetlib/protocol/message/verack.h"
+#include "hornetlib/util/event.h"
 #include "hornetlib/util/notify.h"
 #include "hornetnodelib/dispatch/broadcaster.h"
 #include "hornetnodelib/dispatch/event_handler.h"
@@ -27,15 +28,21 @@ namespace hornet::node::sync {
 // Class for managing initial block download
 class SyncManager : public dispatch::EventHandler {
  public:
+  struct Events {
+    hornet::util::Event<const data::Key&, const std::shared_ptr<const protocol::Block>&> on_block_validated;
+  };
+
   SyncManager(data::Timechain& timechain, BlockValidationBinding validation)
       : header_sync_(timechain, header_sync_handler_),
         block_sync_(timechain, validation, block_sync_handler_),
         timechain_(timechain) {}
   SyncManager() = delete;
 
+  Events& GetEvents() { return events_; }
+
   virtual void OnHandshakeComplete(net::SharedPeer peer) override {
     std::string notify = "Peer " + std::to_string(peer->GetId()) + " handshake completed 🤝";
-    hornet::util::NotifyEvent("peers/handshake", notify, util::EventType::Info);
+    hornet::util::NotifyEvent("peers/handshake", notify, hornet::util::EventType::Info);
 
     {
       const net::SharedPeer sync = sync_.lock();
@@ -126,9 +133,9 @@ class SyncManager : public dispatch::EventHandler {
     SyncManager& manager_;
   } header_sync_handler_ = *this;
 
-  class BlockSyncHandler final : public SyncHandler {
+  class BlockSyncHandlerImpl final : public BlockSyncHandler {
    public:
-    BlockSyncHandler(SyncManager& manager) : manager_(manager) {}
+    BlockSyncHandlerImpl(SyncManager& manager) : manager_(manager) {}
     virtual void OnComplete(net::WeakPeer) override {}
     virtual bool OnRequest(net::WeakPeer peer,
                            std::unique_ptr<protocol::Message> message) override {
@@ -136,6 +143,9 @@ class SyncManager : public dispatch::EventHandler {
     }
     virtual void OnError(net::WeakPeer peer, std::string_view error) override {
       manager_.OnSyncError(peer, error);
+    }
+    virtual void OnBlockValidated(net::WeakPeer, const data::Key& key, const std::shared_ptr<const protocol::Block>& block) override {
+      manager_.events_.on_block_validated.Broadcast(key, block);
     }
 
    private:
@@ -165,6 +175,7 @@ class SyncManager : public dispatch::EventHandler {
   HeaderSync header_sync_;
   BlockSync block_sync_;
   data::Timechain& timechain_;
+  struct Events events_;
 };
 
 }  // namespace hornet::node::sync

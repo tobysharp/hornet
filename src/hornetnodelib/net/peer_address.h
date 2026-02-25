@@ -9,6 +9,7 @@
 #include <ostream>
 #include <string>
 
+#include "hornetlib/util/throw.h"
 #include "hornetnodelib/net/constants.h"
 
 namespace hornet::node::net {

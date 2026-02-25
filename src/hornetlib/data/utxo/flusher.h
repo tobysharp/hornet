@@ -32,12 +32,11 @@ class Flusher {
 
  private:
   int Pop() noexcept {
-    int value = height_;
+    int value = height_.exchange(kIdle);
     while (value == kIdle) {
       height_.wait(kIdle);  // Sleep until height_ changes or explicitly signaled.
-      value = height_;
+      value = height_.exchange(kIdle);
     }
-    height_ = kIdle;
     return value;
   }
 

@@ -358,5 +358,92 @@ TEST(SpendJoinerTest, TestPartialFetchMisalignment) {
   EXPECT_TRUE(found_key1);
 }
 
+TEST(SpendJoinerTest, TestIntraBlockFunding_CorrectOrder) {
+  test::TempFolder dir;
+  Database db{dir.Path()};
+
+  auto block = std::make_shared<protocol::Block>();
+  block->SetHeader(protocol::BlockHeader{});
+
+  // Tx 0: Funding (Coinbase-like)
+  {
+    protocol::Transaction tx;
+    tx.ResizeInputs(1);
+    tx.Input(0).previous_output = protocol::OutPoint::Null();
+    tx.ResizeOutputs(1);
+    tx.Output(0).value = 1000;
+    block->AddTransaction(tx);
+  }
+
+  // Tx 1: Spending (Spends Tx 0)
+  {
+    protocol::Transaction tx;
+    tx.ResizeInputs(1);
+    tx.Input(0).previous_output = {block->Transaction(0).GetHash(), 0};
+    tx.ResizeOutputs(1);
+    tx.Output(0).value = 900;
+    block->AddTransaction(tx);
+  }
+
+  SpendJoiner joiner{db, block, 1};
+  
+  while (joiner.IsAdvanceReady())
+    joiner.Advance();
+
+  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Fetched);
+  EXPECT_TRUE(joiner.IsJoinReady());
+
+  int callback_count = 0;
+  const consensus::Result result = joiner.Join([&](const consensus::SpendRecord& spend) {
+    callback_count++;
+    // Verify it's the intra-block spend
+    EXPECT_EQ(spend.funding_height, 1);
+    EXPECT_EQ(spend.amount, 1000);
+    return consensus::Result{};
+  });
+  
+  EXPECT_EQ(result, consensus::Result{});
+  // We expect 1 input total (Tx 1 input). Tx 0 input is coinbase and skipped.
+  EXPECT_EQ(callback_count, 1);
+}
+
+TEST(SpendJoinerTest, TestIntraBlockFunding_IncorrectOrder) {
+  test::TempFolder dir;
+  Database db{dir.Path()};
+
+  auto block = std::make_shared<protocol::Block>();
+  block->SetHeader(protocol::BlockHeader{});
+
+  // Prepare Funding Tx (to get hash)
+  protocol::Transaction fund_tx;
+  fund_tx.ResizeInputs(1);
+  fund_tx.Input(0).previous_output = protocol::OutPoint::Null();
+  fund_tx.ResizeOutputs(1);
+  fund_tx.Output(0).value = 1000;
+  protocol::Hash fund_hash = fund_tx.GetHash();
+
+  // Tx 0: Spending (Spends Funding Tx)
+  {
+    protocol::Transaction tx;
+    tx.ResizeInputs(1);
+    tx.Input(0).previous_output = {fund_hash, 0};
+    tx.ResizeOutputs(1);
+    tx.Output(0).value = 900;
+    block->AddTransaction(tx);
+  }
+
+  // Tx 1: Funding
+  block->AddTransaction(fund_tx);
+
+  SpendJoiner joiner{db, block, 1};
+
+  while (joiner.IsAdvanceReady())
+    joiner.Advance();
+
+  // Should fail because it can't find the input
+  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Error);
+  EXPECT_FALSE(joiner.IsJoinReady());
+}
+
 }  // namespace
 }  // namespace hornet::data::utxo
