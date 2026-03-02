@@ -6,6 +6,7 @@
 
 #include "hornetlib/data/sidecar_binding.h"
 #include "hornetlib/data/timechain.h"
+#include "hornetlib/data/utxo/database.h"
 #include "hornetlib/protocol/handshake.h"
 #include "hornetlib/util/log.h"
 #include "hornetlib/util/timeout.h"
@@ -41,8 +42,9 @@ TEST(SyncManagerTest, TestMainnetSyncHeaders) {
     PeerNegotiator negotiator;
     loop.AddEventHandler(&negotiator);
     data::Timechain timechain;
+    data::utxo::Database database;
     auto validation = sync::BlockValidationBinding::Create(timechain);
-    sync::SyncManager sync(timechain, validation);
+    sync::SyncManager sync(timechain, database, validation);
     loop.AddEventHandler(&sync);
 
     loop.AddOutboundPeer(net::kLocalhost, node.GetPort());

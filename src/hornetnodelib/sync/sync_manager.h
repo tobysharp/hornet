@@ -9,6 +9,7 @@
 
 #include "hornetlib/data/sidecar_binding.h"
 #include "hornetlib/data/timechain.h"
+#include "hornetlib/data/utxo/database.h"
 #include "hornetlib/protocol/constants.h"
 #include "hornetlib/protocol/message/getheaders.h"
 #include "hornetlib/protocol/message/headers.h"
@@ -32,9 +33,9 @@ class SyncManager : public dispatch::EventHandler {
     hornet::util::Event<const data::Key&, const std::shared_ptr<const protocol::Block>&> on_block_validated;
   };
 
-  SyncManager(data::Timechain& timechain, BlockValidationBinding validation)
+  SyncManager(data::Timechain& timechain, data::utxo::Database& database, BlockValidationBinding validation)
       : header_sync_(timechain, header_sync_handler_),
-        block_sync_(timechain, validation, block_sync_handler_),
+        block_sync_(timechain, database, validation, block_sync_handler_),
         timechain_(timechain) {}
   SyncManager() = delete;
 

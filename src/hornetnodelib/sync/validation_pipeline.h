@@ -3,6 +3,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -11,6 +12,7 @@
 
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/consensus/validate_api.h"
+#include "hornetlib/data/key.h"
 #include "hornetlib/data/timechain.h"
 #include "hornetlib/data/utxo/database.h"
 #include "hornetlib/data/utxo/database_view.h"
@@ -18,6 +20,7 @@
 #include "hornetlib/data/utxo/spend_pipeline.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/util/assert.h"
+#include "hornetlib/util/heap.h"
 #include "hornetlib/util/log.h"
 #include "hornetlib/util/thread_safe_queue.h"
 #include "hornetlib/util/throw.h"
@@ -27,8 +30,9 @@ namespace hornet::node::sync {
 
 class ValidationPipeline {
  public:
+  // TODO: Switch to std::move_only_function when libc++ adds support (C++23).
   using CompleteCallback =
-      std::function<void(const std::shared_ptr<const protocol::Block>&, int, consensus::Result)>;
+      std::function<void(const std::shared_ptr<const protocol::Block>&, const data::Key&, consensus::Result)>;
 
   // Constructs the validation pipeline.
   // pipeline_depth: The number of blocks that can be processed concurrently.
@@ -36,9 +40,9 @@ class ValidationPipeline {
   // max_active_count: The maximum number of blocks that can be in the pipeline at once.
   // If -1, defaults to pipeline_depth * 4.
   ValidationPipeline(data::Timechain& timechain, data::utxo::Database& db,
-                     CompleteCallback callback, int pipeline_depth = 8, int max_active_count = -1)
-      : timechain_(timechain), on_complete_(std::move(callback)), 
-        spend_pipeline_(db, pipeline_depth, [this](auto joiner) { OnSpendComplete(std::move(joiner)); }),
+                     int pipeline_depth = 8, int max_active_count = -1)
+      : timechain_(timechain), 
+        spend_pipeline_(db, pipeline_depth),
         max_active_count_(max_active_count > 0 ? max_active_count : pipeline_depth * 4) {
     for (int i = 0; i < pipeline_depth; ++i) {
       workers_.emplace_back([this] { WorkerLoop(); });
@@ -63,7 +67,8 @@ class ValidationPipeline {
   }
 
   // Submits a block for validation. Can be out of height order.
-  void Submit(std::shared_ptr<const protocol::Block> block, int height, bool assume_valid = false) {
+  void Submit(std::shared_ptr<const protocol::Block> block, int height, bool assume_valid,
+              CompleteCallback on_complete) {
     if (height == 0)
       util::ThrowInvalidArgument(
           "ValidationPipeline::Submit: Genesis block should not be submitted.");
@@ -83,7 +88,12 @@ class ValidationPipeline {
       }
       ++active_count_;
     }
-    spend_pipeline_.Add(block, height, assume_valid);
+    spend_pipeline_.Add(block, height, assume_valid, 
+      [this, callback = std::move(on_complete)](std::shared_ptr<data::utxo::SpendJoiner> joiner) { 
+        ++validation_pending_;
+        queue_.Push({joiner->GetHeight(), joiner->GetBlock(), std::move(joiner), callback});
+      }
+    );
   }
 
   bool Wait(const util::Timeout& timeout = util::Timeout::Infinite()) {
@@ -109,21 +119,18 @@ class ValidationPipeline {
     int height;
     std::shared_ptr<const protocol::Block> block;
     std::shared_ptr<data::utxo::SpendJoiner> joiner;
+    CompleteCallback on_complete;
   };
 
   struct JobResult {
     int height;
     std::shared_ptr<const protocol::Block> block;
     consensus::Result result;
+    CompleteCallback on_complete;
 
     // Lesser priority is given to the greater height.
     bool operator<(const JobResult& rhs) const { return height > rhs.height; }
   };
-
-  void OnSpendComplete(std::shared_ptr<data::utxo::SpendJoiner> joiner) {
-    ++validation_pending_;
-    queue_.Push({joiner->GetHeight(), joiner->GetBlock(), std::move(joiner)});
-  }
 
   void WorkerLoop() {
     std::optional<Job> job;
@@ -138,7 +145,7 @@ class ValidationPipeline {
 
         {
           std::lock_guard lock{retire_mutex_};
-          completed_.push(JobResult{job->height, std::move(job->block), result});
+          completed_.Push(JobResult{job->height, std::move(job->block), result, std::move(job->on_complete)});
         }
 
         // Retire completions in order as they are ready.
@@ -177,14 +184,13 @@ class ValidationPipeline {
     std::unique_lock lock{retire_mutex_, std::try_to_lock};
     if (!lock.owns_lock()) return;  // Someone else has the retire lock, leave them to it.
 
-    for (; !completed_.empty() && completed_.top().height == next_complete_height_;
+    for (; !completed_.Empty() && completed_.Top().height == next_complete_height_;
          ++next_complete_height_) {
-      const auto item = std::move(completed_.top());
-      completed_.pop();
 
+      const auto item = completed_.Pop();
       lock.unlock();
-      if (on_complete_)
-        on_complete_(item.block, item.height, item.result);
+      if (item.on_complete)
+        item.on_complete(item.block, {item.height, item.block->Header().ComputeHash()}, item.result);
       {
         std::lock_guard wait_lock{wait_mutex_};
         if (--active_count_ == 0) wait_cv_.notify_all();
@@ -202,7 +208,6 @@ class ValidationPipeline {
   }
 
   data::Timechain& timechain_;
-  CompleteCallback on_complete_;
   data::utxo::SpendPipeline spend_pipeline_;
 
   util::ThreadSafeQueue<Job> queue_;
@@ -210,7 +215,7 @@ class ValidationPipeline {
 
   std::mutex retire_mutex_;
   int next_complete_height_ = 1;  // Genesis is never validated.
-  std::priority_queue<JobResult, std::vector<JobResult>> completed_;
+  util::Heap<JobResult> completed_;
   int max_active_count_;
   int active_count_ = 0;
   std::atomic<int> validation_pending_ = 0;

@@ -13,6 +13,7 @@
 
 #include "hornetlib/consensus/merkle.h"
 #include "hornetlib/consensus/types.h"
+#include "hornetlib/data/key.h"
 #include "hornetlib/data/timechain.h"
 #include "hornetlib/data/utxo/database.h"
 #include "hornetlib/protocol/block.h"
@@ -47,10 +48,10 @@ struct Completions {
   std::atomic<bool> success = true;
   consensus::Result rv = consensus::Result::Ok;
 
-  void operator()(const std::shared_ptr<const protocol::Block>&, int height,
+  void operator()(const std::shared_ptr<const protocol::Block>&, const data::Key& id,
                       consensus::Result result) {
     if (!result) {
-      LogDebug() << "Warning: Validation failed at height " << height << " with code " << (int)result.Error();
+      LogDebug() << "Warning: Validation failed at height " << id.height << " with code " << (int)result.Error();
       bool expected = true;
       if (success.compare_exchange_strong(expected, false))
         rv = result;
@@ -68,11 +69,11 @@ consensus::Result ValidateInOrder(const std::filesystem::path& path) {
   data::utxo::Database db(dir.Path());
   Completions callback;
   const auto timechain = BuildHeaderChain(data);
-  ValidationPipeline pipeline(*timechain, db, std::ref(callback));
+  ValidationPipeline pipeline(*timechain, db);
 
   // Submit all validations in order and wait for drain.
   for (int height = 1; height < data.Length(); ++height)
-    pipeline.Submit(data[height], height);
+    pipeline.Submit(data[height], height, false, std::ref(callback));
   EXPECT_TRUE(pipeline.Wait(5s));
 
   // Check that every block completed.
@@ -89,14 +90,14 @@ consensus::Result ValidateOutOfOrder(const std::filesystem::path& path) {
   data::utxo::Database db(dir.Path());
   Completions callback;
   const auto timechain = BuildHeaderChain(data);
-  ValidationPipeline pipeline(*timechain, db, std::ref(callback));
+  ValidationPipeline pipeline(*timechain, db);
 
   // Submit all validations out of order and wait for drain.
   for (int height = 1; height < data.Length(); height += 3) {
     for (int offset : {1, 2, 0}) {
       const int submit = height + offset;
       if (submit < data.Length())    
-        pipeline.Submit(data[submit], submit);
+        pipeline.Submit(data[submit], submit, false, std::ref(callback));
     }
   }
   EXPECT_TRUE(pipeline.Wait(5s));
@@ -115,7 +116,7 @@ consensus::Result ValidateShuffle(const std::filesystem::path& path) {
   data::utxo::Database db(dir.Path());
   Completions callback;
   const auto timechain = BuildHeaderChain(data);
-  ValidationPipeline pipeline(*timechain, db, std::ref(callback), 1, data.Length());
+  ValidationPipeline pipeline(*timechain, db, 1, data.Length());
 
   // Submit all validations out of order and wait for drain.
   std::vector<int> heights(data.Length() - 1);
@@ -123,7 +124,7 @@ consensus::Result ValidateShuffle(const std::filesystem::path& path) {
   std::shuffle(heights.begin(), heights.end(), std::mt19937{69'420});
 
   for (int height : heights)
-    pipeline.Submit(data[height], height);
+    pipeline.Submit(data[height], height, false, std::ref(callback));
   EXPECT_TRUE(pipeline.Wait(5s));
 
   // Check that every block completed.
@@ -222,16 +223,16 @@ TEST(ValidationPipelineTest, DetectDeadlock) {
   const auto timechain = BuildHeaderChain(data);
 
   // max_active_count = 5
-  ValidationPipeline pipeline(*timechain, db, std::ref(callback), 4, 5);
+  ValidationPipeline pipeline(*timechain, db, 4, 5);
 
   // Submit blocks 2 to 6 (5 blocks). This fills the pipeline.
   // Block 1 is missing, so they will stall in the spend pipeline.
   for (int height = 2; height <= 6; ++height) {
-    pipeline.Submit(data[height], height);
+    pipeline.Submit(data[height], height, false, std::ref(callback));
   }
 
   // Submit one more block. This should trigger the deadlock detection.
-  EXPECT_THROW({ pipeline.Submit(data[7], 7); }, std::runtime_error);
+  EXPECT_THROW({ pipeline.Submit(data[7], 7, false, std::ref(callback)); }, std::runtime_error);
 }
 
 }  // namespace
