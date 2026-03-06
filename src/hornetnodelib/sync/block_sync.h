@@ -4,10 +4,12 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <format>
 #include <memory>
+#include <mutex>
 #include <thread>
 #include <variant>
 
@@ -41,9 +43,6 @@ class BlockSync {
             BlockValidationBinding validation, BlockSyncHandler& handler);
   ~BlockSync();
 
-  // Sets the maximum number of bytes allowed in the queue
-  void SetMaxQueueBytes(int max_queue_bytes) { max_queue_bytes_ = max_queue_bytes; }
-
   // Begins downloading and validating blocks from a given peer.
   void StartSync(net::WeakPeer peer);
 
@@ -56,29 +55,24 @@ class BlockSync {
     std::shared_ptr<const protocol::Block> block;
   };
 
-  struct CompletionState {
-    net::WeakPeer peer;
-    bool is_final;
-  };
-
   static int SizeInBytes(const Item& item) { return sizeof(Item) + item.block->SizeBytes(); }
 
   enum class RequestState { Active, Deferred, Disconnected, End };
 
-  // Validates queued blocks, and adds them to the timechain.
+  // Dequeues blocks and submits them to the validation pipeline.
   void Process();
 
-  // Requests more headers via the callback supplied in RegisterPeer.
-  RequestState RequestNextBlock(net::WeakPeer weak);
+  // Requests more blocks from the peer via handler_.OnRequest.
+  RequestState RequestNextBlocks(net::WeakPeer weak);
 
   // Gets the next block ID to request from a peer.
-  std::optional<data::Key> GetNextBlockId() const;
+  std::optional<data::Key> GetNextBlockId(const data::HeaderTimechain& headers) const;
 
   consensus::Result ValidateItem(const Item& item);
   void HandleError(const net::WeakPeer& peer, consensus::Error error);
 
   void OnValidateComplete(const std::shared_ptr<const protocol::Block>& block, const data::Key& id,
-                          consensus::Result result, const CompletionState& state);
+                          consensus::Result result, const net::WeakPeer& weak);
 
   data::Timechain& timechain_;
   BlockValidationBinding validation_;
@@ -87,21 +81,14 @@ class BlockSync {
   util::ThreadSafeQueue<Item> queue_;
   std::thread worker_thread_;         // Background worker thread for processing.
   std::atomic<int> queue_bytes_ = 0;  // Size in bytes of the queued items.
-  int max_queue_bytes_ = 16 << 20;    // Default queue capacity to hide download latency.
-
-  // Note that in BlockSync we don't have the request_active_ flag that we have in HeaderSync,
-  // because this flag enforces serial requests -- for getheaders we need to wait to learn the
-  // hash of the last requested header before we can request more. But for getdata messages we
-  // don't have the same constraint since the hashes are already known. Therefore we may request
-  // multiple blocks simultaneously, provided we can cope with the memory bandwidth. Hence we
-  // don't need and don't want the request_active_ flag that enforces just one in-flight request.
-
-  std::atomic_flag request_active_;
-  // EDIT: Right now, we *do* still have the request_active_ flag, because we're going to start
-  // with the simplest possible logic for block sync, and incrementally add features like multiple
-  // simultaneous in-flight requests.
-
-  data::Key request_;
+  mutable std::mutex request_mutex_;       // Protects the variables below.
+  data::Key last_request_;                 // The id of the last block that was requested.
+  std::vector<data::Key> pending_;         // The ids of all the pending block requests.
+  int next_request_height_ = 0;            // The height of the next block to be requested.
+  
+  static constexpr int kMaxInFlight = 16;  // Max number of inflight block requests.
+  static constexpr int kMaxBlockBytes = 4 << 20;
+  static constexpr int kMaxBufferedBytes = kMaxInFlight * kMaxBlockBytes * 2;
 };
 
 inline BlockSync::BlockSync(data::Timechain& timechain, data::utxo::Database& database,
@@ -118,17 +105,15 @@ inline BlockSync::~BlockSync() {
 }
 
 // Returns the next block key to request from a peer.
-inline std::optional<data::Key> BlockSync::GetNextBlockId() const {
-  // Takes a read lock on the timechain while we determine the next block to request.
-  const auto headers = timechain_.ReadHeaders();
-
-  // Checks whether the last requested block is still in the main chain.
-  if (request_.height > 0 && request_.height < headers->ChainLength() &&
-      headers->GetChainHash(request_.height) == request_.hash) {
+inline std::optional<data::Key> BlockSync::GetNextBlockId(const data::HeaderTimechain& headers) const {
+  // Checks whether the last requested block is still in the main chain. If so, that implies
+  // there has not been a reorg above us in the chain since the last request.
+  if (last_request_.height > 0 && last_request_.height < headers.ChainLength() &&
+      headers.GetChainHash(last_request_.height) == last_request_.hash) {
     // The last requested block is still in the main chain, so we can simply
     // request the next block in the chain.
-    if (headers->ChainLength() > request_.height + 1)
-      return data::Key{request_.height + 1, headers->GetChainHash(request_.height + 1)};
+    if (headers.ChainLength() > last_request_.height + 1)
+      return data::Key{last_request_.height + 1, headers.GetChainHash(last_request_.height + 1)};
     else return std::nullopt;
   }
 
@@ -137,73 +122,87 @@ inline std::optional<data::Key> BlockSync::GetNextBlockId() const {
   // to ask it for the first unvalidated block in the chain.
   const auto unvalidated = validation_.Sidecar().FindInChainIf(
       1, [](BlockValidationStatus status) { return status == BlockValidationStatus::Unvalidated; });
-  if (unvalidated) return data::Key{*unvalidated, headers->GetChainHash(*unvalidated)};
+  if (unvalidated) return data::Key{*unvalidated, headers.GetChainHash(*unvalidated)};
   else return std::nullopt;
 }
 
-inline BlockSync::RequestState BlockSync::RequestNextBlock(net::WeakPeer weak) {
-  // Stop requesting after we fill the queue.
-  if (queue_bytes_ >= max_queue_bytes_) return RequestState::Deferred;
+inline BlockSync::RequestState BlockSync::RequestNextBlocks(net::WeakPeer weak) {
   const auto peer = weak.lock();
-  if (!peer) return RequestState::Disconnected;
-  // Proceeds only if we have an empty request slot available.
-  if (!request_active_.test_and_set(std::memory_order::acquire)) {
-    // Only one thread at a time can get into this scope.
+  if (!peer) return RequestState::Disconnected;  // Peer has been disconnected.
 
-    // Queries the block-validation sidecar to see which block we should request next.
-    std::optional<data::Key> next = GetNextBlockId();
-    if (!next.has_value()) {
-      request_active_.clear(std::memory_order::release);
-      return RequestState::End;  // No more blocks to request.
-    }
+  // After we take this scoped lock on the header timechain, we can be sure that we won't experience a reorg of the
+  // chain while we're holding the lock.
+  const auto headers = timechain_.ReadHeaders();
+  std::lock_guard lock(request_mutex_);
+  // First we determine the next unvalidated block to be requested.
+  const auto next = GetNextBlockId(headers);
+  if (!next) return RequestState::End;  // No more blocks to request.
 
-    // Saves the block key into request_ and queues the GetData message for the peer.
-    request_ = *next;
-    // LogDebug() << "Block height " << request_.height << " requested.";
+  next_request_height_ = next->height;
+  bool requested = false;
+  while (next_request_height_ >= 1 && next_request_height_ < headers->ChainLength()) {
+    const int buffered_bytes = queue_bytes_ + (std::ssize(pending_) + 1) * kMaxBlockBytes;
+    if (std::ssize(pending_) >= kMaxInFlight || buffered_bytes >= kMaxBufferedBytes)
+      return requested ? RequestState::Active : RequestState::Deferred;
+
+    const data::Key key{next_request_height_, headers->GetChainHash(next_request_height_)};
     protocol::message::GetData getdata;
-    getdata.AddInventory(protocol::Inventory::WitnessBlock(request_.hash));
-    handler_.OnRequest(peer, std::make_unique<protocol::message::GetData>(std::move(getdata)));
-    return RequestState::Active;
+    getdata.AddInventory(protocol::Inventory::WitnessBlock(key.hash));
+    handler_.OnRequest(weak, std::make_unique<protocol::message::GetData>(std::move(getdata)));
+    pending_.push_back(key);
+    ++next_request_height_;
+    last_request_ = key;
+    requested = true;
   }
-  return RequestState::Deferred;
+  return requested ? RequestState::Active : RequestState::End;
 }
 
 inline void BlockSync::StartSync(net::WeakPeer peer) {
-  Assert(!request_active_.test());
-  if (RequestNextBlock(peer) == RequestState::End) {
+  {
+    std::lock_guard lock(request_mutex_);
+    Assert(pending_.empty());
+  }
+  if (RequestNextBlocks(peer) == RequestState::End) {
     handler_.OnComplete(peer);  // No blocks will ever reach the queue.
   }
 }
 
 inline void BlockSync::OnBlock(net::SharedPeer peer, const protocol::message::Block& message) {
-  const data::Key expected = request_;
-  if (!request_active_.test() || expected.height < 0) {
-    LogWarn() << "Ignoring unsolicited or cancelled block from peer " << peer->GetId() << ".";
-    return;
-  }
-
   // Note the block is shared rather than copied, for performance.
   const std::shared_ptr<const protocol::Block> block = message.GetBlock();
 
-  // Before pushing the block onto the validation queue, check the received block header against
-  // the header we requested from. If the headers don't have the same hash, we already know we need
-  // to fail validation and disconnect the peer.
-  if (block->Header().ComputeHash() != expected.hash) {
-    // If the block's hash does not match the requested hash, we have a protocol violation.
-    handler_.OnError(peer, "Received block hash does not match requested hash.");
-    return;
+  data::Key received;
+  {
+    std::lock_guard lock(request_mutex_);
+
+    if (pending_.empty() || last_request_.height < 0) {
+      LogWarn() << "Ignoring unsolicited or cancelled block from peer " << peer->GetId() << ".";
+      return;
+    }
+
+    // Match the received block hash against outstanding requested block hashes.
+    for (auto it = pending_.begin(); it != pending_.end(); ++it) {
+      if (it->hash == block->Header().ComputeHash()) {
+        received = *it;
+        *it = pending_.back();
+        pending_.pop_back();
+        break;
+      }
+    }
+    // If no match is found, treat it as a protocol violation.
+    if (received.height < 0) {
+      handler_.OnError(peer, "Received block hash does not match any requested hash.");
+      return;
+    }
   }
 
   // Pushes work onto the thread-safe async work queue.
-  Item item{peer, expected, block};
+  Item item{peer, received, block};
   queue_bytes_ += SizeInBytes(item);
   queue_.Push(std::move(item));
 
-  // Now we have queued the block, free up one request slot for another download.
-  request_active_.clear(std::memory_order::release);
-
   // Consider requesting the next block immediately, if we have space in the queue.
-  RequestNextBlock(peer);
+  RequestNextBlocks(peer);
 }
 
 inline void BlockSync::Process() {
@@ -211,24 +210,23 @@ inline void BlockSync::Process() {
     queue_bytes_ -= SizeInBytes(*item);
 
     // As soon as we pop from the queue, we can consider filling the empty queue slot.
-    const auto request_state = RequestNextBlock(item->peer);
+    RequestNextBlocks(item->peer);
 
-    CompletionState completion_state{item->peer, request_state == RequestState::End};
     pipeline_.Submit(
         item->block, item->id.height, /*assume_valid =*/true,
-        [this, state = std::move(completion_state)](
+        [this, weak = std::move(item->peer)](
             const std::shared_ptr<const protocol::Block>& block, const data::Key& id,
-            consensus::Result result) { OnValidateComplete(block, id, result, state); });
+            consensus::Result result) { OnValidateComplete(block, id, result, weak); });
   }
 }
 
 inline void BlockSync::OnValidateComplete(const std::shared_ptr<const protocol::Block>& block,
                                           const data::Key& id, consensus::Result result,
-                                          const CompletionState& state) {
+                                          const net::WeakPeer& weak) {
   // If validation fails, disconnect/ban the peer that provided it,
   // delete this block and any downstream blocks, and cancel any downstream block requests.
   if (!result) {
-    HandleError(state.peer, result.Error());
+    HandleError(weak, result.Error());
     return;
   }
 
@@ -237,7 +235,7 @@ inline void BlockSync::OnValidateComplete(const std::shared_ptr<const protocol::
   LogDebug() << "Block height " << id.height << " validated, " << block->SizeBytes() << " bytes.";
   validation_.Set(id, BlockValidationStatus::StructureValid);
 
-  handler_.OnBlockValidated(state.peer, id, block);
+  handler_.OnBlockValidated(weak, id, block);
 
   // TODO: Update the current UTXO set and the active chain tip, once all necessary validation is
   // complete. We might choose to do this in a separate thread for increased parallelism.
@@ -245,7 +243,11 @@ inline void BlockSync::OnValidateComplete(const std::shared_ptr<const protocol::
   // TODO: According to the active policy, store this block to disk, or move it to the block
   // cache, or just let it vanish after we're done with validation.
 
-  if (state.is_final) handler_.OnComplete(state.peer);
+  // When we have validated the last block in the main chain, signal completion.
+  // TODO: Consider whether we want to validate blocks on other forks too.
+  const auto headers = timechain_.ReadHeaders();
+  if (headers->ChainLength() == id.height + 1 && headers->GetChainHash(id.height) == id.hash)
+    handler_.OnComplete(weak);
 }
 
 inline void BlockSync::HandleError(const net::WeakPeer& peer, consensus::Error error) {
@@ -254,16 +256,17 @@ inline void BlockSync::HandleError(const net::WeakPeer& peer, consensus::Error e
   // Drops peer immediately, and potentially applies misbehavior penalties.
   handler_.OnError(peer, msg);
 
-  // Removes any queued blocks from the same peer.
-  queue_.EraseIf([&](const Item& queued) { return peer == queued.peer; });
+  // Removes any queued blocks, and deletes any in-flight block download requests.
+  queue_.Clear();
+  queue_bytes_ = 0;
+  {
+    std::lock_guard lock(request_mutex_);
+    pending_.clear();
+    last_request_ = {};
+  }
 
-  // Deletes any in-flight block download requests pertaining to this peer.
-  request_active_.clear();
-  request_ = {};
-
-  // In a design where blocks are downloaded ahead of validation, we would need to
-  // track which blocks came from which peer, and delete downstream blocks from
-  // misbehaving peers. Since download and validation are currently coupled, this is not needed.
+  // TODO: In a multi-peer design, we would need to track which blocks came from which peer, 
+  // and delete only the downstream blocks and requests from a misbehaving peer. 
 }
 
 }  // namespace hornet::node::sync
