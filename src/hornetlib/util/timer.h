@@ -33,9 +33,9 @@ class Timer {
    public:
     Scope(Timer& timer) : owner_(&timer) {}
     ~Scope() { End(); }
-    void End() { 
+    void End() {
       if (owner_ == nullptr) return;
-      owner_->AddTiming(TimePoint{} - start_); 
+      owner_->AddTiming(TimePoint{} - start_);
       owner_ = nullptr;
     }
    private:
@@ -45,9 +45,9 @@ class Timer {
 
   Scope AddScoped() { return *this; }
 
-  void Add(auto&& func) {
+  auto Add(auto&& func) {
     const auto scoped = AddScoped();
-    func();
+    return func();
   }
 
   void AddTiming(const Timing& rhs) {
@@ -63,17 +63,16 @@ class Timer {
     return *this;
   }
 
-  const std::chrono::duration<double> Seconds() const {
-    return std::chrono::nanoseconds{thread_time_};
-  }
-  const std::chrono::duration<double> CpuSeconds() const {
-    return std::chrono::nanoseconds{thread_cpu_};
-  }
+  void Reset() { thread_time_ = thread_cpu_ = instances_ = 0; }
+
+  double Seconds() const { return 1e-9 * thread_time_; }
+  double CpuSeconds() const { return 1e-9 * thread_cpu_; }
+  double Occupancy() const { return static_cast<double>(thread_cpu_) / thread_time_; }
 
   std::chrono::nanoseconds Nanoseconds() const { return std::chrono::nanoseconds{thread_time_}; }
 
   int64_t Instances() const { return instances_; }
-  
+
  private:
   static std::chrono::duration<double> GetCpuTime() {
     struct timespec ts;

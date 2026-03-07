@@ -74,7 +74,7 @@ void LoadHeaders(const Options& options, Metrics* metrics, data::Timechain* time
 void PrintMetrics(const Metrics& metrics, int length,
                   const node::sync::ValidationPipeline& pipeline) {
   std::cout << "Total time " << metrics[Op_Total].Seconds() << " ("
-            << (length / metrics[Op_Total].Seconds().count()) << " blocks/s)" << std::endl;
+            << (length / metrics[Op_Total].Seconds()) << " blocks/s)" << std::endl;
   std::cout << "including " << std::endl;
   for (int op : {Op_Blocks, Op_Submit, Op_Wait}) {
     std::cout << "\t" << metrics[op].Seconds() << " " << kOpNames[op]

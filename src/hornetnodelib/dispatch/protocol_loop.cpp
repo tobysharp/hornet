@@ -15,7 +15,9 @@
 #include "hornetlib/protocol/message_factory.h"
 #include "hornetlib/protocol/parser.h"
 #include "hornetlib/util/log.h"
+#include "hornetlib/util/notify.h"
 #include "hornetlib/util/timeout.h"
+#include "hornetlib/util/timer.h"
 #include "hornetnodelib/dispatch/broadcaster.h"
 #include "hornetnodelib/dispatch/event_handler.h"
 #include "hornetnodelib/dispatch/protocol_loop.h"
@@ -55,20 +57,23 @@ void ProtocolLoop::RunMessageLoop(BreakCondition condition /* = BreakOnTimeout{}
   // being read, etc. Beyond this task parallelization, much of the work within each task
   // can also be parallelized and split up among a pool of worker threads for efficiency.
 
+  util::Timer timer; 
+
   NotifyLoop();
   while (!abort_ && !condition()) {
-    // Poll.
-    auto polled = PollReadWrite();
-    // Read and parse.
-    ReadToInbox(polled.read);
-    // Dispatch.
-    ProcessMessages();
-    // Frame and write.
-    WriteFromOutbox(polled.write);
-    // Notify.
-    NotifyEvents();
-    // Bookkeeping.
-    Cleanup();
+    timer.Add([&] {
+      auto polled = PollReadWrite();  // Poll.
+      ReadToInbox(polled.read);       // Read and parse.
+      ProcessMessages();              // Dispatch.
+      WriteFromOutbox(polled.write);  // Frame and write.
+      NotifyEvents();                   // Notify.
+      Cleanup();                        // Bookkeeping.
+    });
+  
+    if (timer.Seconds() > 1.0) {
+      util::NotifyMetric("ProtocolLoop/Occupancy", {{"occupancy", timer.Occupancy() * 100.0}});
+      timer.Reset();
+    }
   }
 }
 

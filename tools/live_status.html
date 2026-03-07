@@ -227,7 +227,7 @@
 </header>
 
 <main>
-  <div class="card">
+  <div class="card" style="display: flex; flex-direction: column;">
     <div class="kv">
       <div id="label_headers">Headers validated</div>
       <div id="headers_total" class="num">—</div>
@@ -243,6 +243,19 @@
     <div style="margin-top:10px">
       <div class="muted" style="margin-bottom:6px">Recent Events</div>
       <div id="events"></div>
+    </div>
+    <div style="margin-top:auto; padding-top:16px; border-top:1px dashed #1b2130">
+      <div class="muted" style="margin-bottom:10px; font-size:12px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase">Performance</div>
+      <div class="kv" style="grid-template-columns:auto 1fr; font-size:12px; font-family:ui-monospace, monospace; gap:6px 8px">
+        <div id="lbl_blk_s" class="muted">Blocks / sec</div>
+        <div id="metrics_blk_s" class="num">—</div>
+        <div id="lbl_req" class="muted">Blocks requested</div>
+        <div id="metrics_req" class="num">—</div>
+        <div id="lbl_queue" class="muted">Validation queue size</div>
+        <div id="metrics_queue" class="num">—</div>
+        <div id="lbl_cpu" class="muted">Protocol thread occupancy</div>
+        <div id="metrics_cpu" class="num">—</div>
+      </div>
     </div>
   </div>
 
@@ -269,6 +282,10 @@
   const labelHeaders = document.getElementById('label_headers');
   const labelBlocks = document.getElementById('label_blocks');
   const labelProgress = document.getElementById('label_progress');
+  const blkSEl = document.getElementById('metrics_blk_s'); const lblBlkS = document.getElementById('lbl_blk_s');
+  const reqEl = document.getElementById('metrics_req'); const lblReq = document.getElementById('lbl_req');
+  const queueEl = document.getElementById('metrics_queue'); const lblQueue = document.getElementById('lbl_queue');
+  const cpuEl = document.getElementById('metrics_cpu'); const lblCpu = document.getElementById('lbl_cpu');
 
   // Freeze
   let uiPaused = false;
@@ -279,6 +296,7 @@
 
   // Helpers
   function fmtInt(n) { return (typeof n === 'number') ? n.toLocaleString() : n; }
+  function fmtBytes(n) { return (typeof n === 'number') ? (n / (1024*1024)).toFixed(1) + " MB" : n; }
   function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
   function formatLogPrefix(level, time_us) {
     if (!Number.isFinite(time_us)) return '';
@@ -307,6 +325,10 @@
     headers_total: { el: hEl, labelEl: labelHeaders, fmt: fmtInt },
     blocks_validated: { el: bEl, labelEl: labelBlocks, fmt: fmtInt },
     progress_bar: { el: barEl, labelEl: labelProgress },
+    blocks_per_s: { el: blkSEl, labelEl: lblBlkS, fmt: fmtInt },
+    blocks_requested: { el: reqEl, labelEl: lblReq, fmt: fmtInt },
+    validation_queue: { el: queueEl, labelEl: lblQueue, fmt: fmtBytes },
+    occupancy: { el: cpuEl, labelEl: lblCpu, fmt: (x) => `${Math.round(x)}%` },
   };
   let lastPacketSeen = 0;
   let lastHeaders = NaN;

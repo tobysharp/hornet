@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <format>
 #include <memory>
@@ -55,6 +56,40 @@ class BlockSync {
     std::shared_ptr<const protocol::Block> block;
   };
 
+  struct Counters {
+    struct Counter {
+      std::atomic<int64_t> live = 0;
+      int64_t snapshot = 0;
+      void operator++() { ++live; }
+      void operator--() { --live; }
+      void Snap() { snapshot = live; }
+      int64_t Delta() const { return live - snapshot; }
+      operator int64_t() const { return live; }
+    };
+    Counter requested, pending, received, submitted, validated, flush_due_ns;
+    void OnRequest() { ++requested; ++pending; }
+    void OnReceive() { --pending; ++received; }
+    void OnValidate() { ++validated; }
+    void OnSubmit() { ++submitted; }
+    void Snapshot() { for (auto* x : {&requested, &pending, &received, &submitted, &validated}) x->Snap(); }
+    int64_t TickNs() {
+      using namespace std::chrono_literals;
+      static constexpr int64_t kFlushPeriodNs = std::chrono::duration_cast<std::chrono::nanoseconds>(1s).count();
+      const int64_t now = NowNs();            // The current wall-clock time.
+      int64_t due = flush_due_ns.live;  // The time that we are due for another flush.
+      if (now < due) return 0;
+      if (!flush_due_ns.live.compare_exchange_strong(due, now + kFlushPeriodNs)) return 0;
+      const int64_t prev = flush_due_ns.snapshot;  // The time when we made the last flush.
+      flush_due_ns.snapshot = now;                 // Update the time of the "last" flush to the current time.
+      if (prev == 0) {
+        Snapshot();
+        return 0;
+      }
+      return now - prev;
+    }
+    static int64_t NowNs() { return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
+  };
+
   static int SizeInBytes(const Item& item) { return sizeof(Item) + item.block->SizeBytes(); }
 
   enum class RequestState { Active, Deferred, Disconnected, End };
@@ -74,6 +109,8 @@ class BlockSync {
   void OnValidateComplete(const std::shared_ptr<const protocol::Block>& block, const data::Key& id,
                           consensus::Result result, const net::WeakPeer& weak);
 
+  void MaybeFlush() const;
+
   data::Timechain& timechain_;
   BlockValidationBinding validation_;
   BlockSyncHandler& handler_;
@@ -81,12 +118,13 @@ class BlockSync {
   util::ThreadSafeQueue<Item> queue_;
   std::thread worker_thread_;         // Background worker thread for processing.
   std::atomic<int> queue_bytes_ = 0;  // Size in bytes of the queued items.
-  mutable std::mutex request_mutex_;       // Protects the variables below.
-  data::Key last_request_;                 // The id of the last block that was requested.
-  std::vector<data::Key> pending_;         // The ids of all the pending block requests.
-  int next_request_height_ = 0;            // The height of the next block to be requested.
-  
-  static constexpr int kMaxInFlight = 16;  // Max number of inflight block requests.
+  mutable std::mutex request_mutex_;  // Protects the variables below.
+  data::Key last_request_;            // The id of the last block that was requested.
+  std::vector<data::Key> pending_;    // The ids of all the pending block requests.
+  int next_request_height_ = 0;       // The height of the next block to be requested.
+  mutable Counters perf_;
+
+  static constexpr int kMaxInFlight = 128;  // Max number of inflight block requests.
   static constexpr int kMaxBlockBytes = 4 << 20;
   static constexpr int kMaxBufferedBytes = kMaxInFlight * kMaxBlockBytes * 2;
 };
@@ -105,7 +143,8 @@ inline BlockSync::~BlockSync() {
 }
 
 // Returns the next block key to request from a peer.
-inline std::optional<data::Key> BlockSync::GetNextBlockId(const data::HeaderTimechain& headers) const {
+inline std::optional<data::Key> BlockSync::GetNextBlockId(
+    const data::HeaderTimechain& headers) const {
   // Checks whether the last requested block is still in the main chain. If so, that implies
   // there has not been a reorg above us in the chain since the last request.
   if (last_request_.height > 0 && last_request_.height < headers.ChainLength() &&
@@ -130,8 +169,8 @@ inline BlockSync::RequestState BlockSync::RequestNextBlocks(net::WeakPeer weak) 
   const auto peer = weak.lock();
   if (!peer) return RequestState::Disconnected;  // Peer has been disconnected.
 
-  // After we take this scoped lock on the header timechain, we can be sure that we won't experience a reorg of the
-  // chain while we're holding the lock.
+  // After we take this scoped lock on the header timechain, we can be sure that we won't experience
+  // a reorg of the chain while we're holding the lock.
   const auto headers = timechain_.ReadHeaders();
   std::lock_guard lock(request_mutex_);
   // First we determine the next unvalidated block to be requested.
@@ -149,6 +188,7 @@ inline BlockSync::RequestState BlockSync::RequestNextBlocks(net::WeakPeer weak) 
     protocol::message::GetData getdata;
     getdata.AddInventory(protocol::Inventory::WitnessBlock(key.hash));
     handler_.OnRequest(weak, std::make_unique<protocol::message::GetData>(std::move(getdata)));
+    perf_.OnRequest();
     pending_.push_back(key);
     ++next_request_height_;
     last_request_ = key;
@@ -162,6 +202,7 @@ inline void BlockSync::StartSync(net::WeakPeer peer) {
     std::lock_guard lock(request_mutex_);
     Assert(pending_.empty());
   }
+  std::construct_at(&perf_);
   if (RequestNextBlocks(peer) == RequestState::End) {
     handler_.OnComplete(peer);  // No blocks will ever reach the queue.
   }
@@ -200,9 +241,11 @@ inline void BlockSync::OnBlock(net::SharedPeer peer, const protocol::message::Bl
   Item item{peer, received, block};
   queue_bytes_ += SizeInBytes(item);
   queue_.Push(std::move(item));
+  perf_.OnReceive();
 
   // Consider requesting the next block immediately, if we have space in the queue.
   RequestNextBlocks(peer);
+  MaybeFlush();
 }
 
 inline void BlockSync::Process() {
@@ -211,12 +254,14 @@ inline void BlockSync::Process() {
 
     // As soon as we pop from the queue, we can consider filling the empty queue slot.
     RequestNextBlocks(item->peer);
-
+    perf_.OnSubmit();
     pipeline_.Submit(
         item->block, item->id.height, /*assume_valid =*/true,
-        [this, weak = std::move(item->peer)](
-            const std::shared_ptr<const protocol::Block>& block, const data::Key& id,
-            consensus::Result result) { OnValidateComplete(block, id, result, weak); });
+        [this, weak = std::move(item->peer)](const std::shared_ptr<const protocol::Block>& block,
+                                             const data::Key& id, consensus::Result result) {
+          OnValidateComplete(block, id, result, weak);
+        });
+    MaybeFlush();
   }
 }
 
@@ -236,6 +281,7 @@ inline void BlockSync::OnValidateComplete(const std::shared_ptr<const protocol::
   validation_.Set(id, BlockValidationStatus::StructureValid);
 
   handler_.OnBlockValidated(weak, id, block);
+  perf_.OnValidate();
 
   // TODO: Update the current UTXO set and the active chain tip, once all necessary validation is
   // complete. We might choose to do this in a separate thread for increased parallelism.
@@ -248,6 +294,8 @@ inline void BlockSync::OnValidateComplete(const std::shared_ptr<const protocol::
   const auto headers = timechain_.ReadHeaders();
   if (headers->ChainLength() == id.height + 1 && headers->GetChainHash(id.height) == id.hash)
     handler_.OnComplete(weak);
+
+  MaybeFlush();
 }
 
 inline void BlockSync::HandleError(const net::WeakPeer& peer, consensus::Error error) {
@@ -265,8 +313,23 @@ inline void BlockSync::HandleError(const net::WeakPeer& peer, consensus::Error e
     last_request_ = {};
   }
 
-  // TODO: In a multi-peer design, we would need to track which blocks came from which peer, 
-  // and delete only the downstream blocks and requests from a misbehaving peer. 
+  // TODO: In a multi-peer design, we would need to track which blocks came from which peer,
+  // and delete only the downstream blocks and requests from a misbehaving peer.
+}
+
+inline void BlockSync::MaybeFlush() const {
+  const int64_t dt_ns = perf_.TickNs();
+  if (dt_ns <= 0) return;
+  
+  const auto per_s = [dt_ns](const auto& counter) -> int64_t {
+    return (counter.Delta() * 1'000'000'000ll) / dt_ns;
+  };
+  util::NotifyMetric("SyncManager/BlockSync", util::NotificationMap{
+    {"blocks_per_s", per_s(perf_.validated)},
+    {"blocks_requested", (int64_t)perf_.pending},
+    {"validation_queue", (int64_t)queue_bytes_}
+  });
+  perf_.Snapshot();
 }
 
 }  // namespace hornet::node::sync
