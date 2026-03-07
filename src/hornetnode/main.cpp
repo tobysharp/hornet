@@ -30,12 +30,12 @@ int main(int argc, char** argv) {
   util::CommandLineParser parser("Hornet Node", "0.0.1");
   parser.AddOption("connect", &options.connect, "Connect to a specific peer");
   parser.AddOption("notifytcp", &options.notify_tcp_port, "Send notifications over TCP to the specified port");
-
+  parser.AddOption("datadir", &options.data_dir, "Directory where block and UTXO data is stored");
   if (!parser.Parse(argc, argv))
     return 1;
 
   {
-    Controller controller;
+    Controller controller(options.data_dir);
     if (!options.connect.host.empty())
       controller.SetConnectAddress(options.connect);
     if (options.notify_tcp_port > 0) {
