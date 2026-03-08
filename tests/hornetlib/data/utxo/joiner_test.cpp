@@ -46,10 +46,12 @@ TEST(SpendJoinerTest, TestPreemptiveSerial) {
 
       // Join the block's transactions with their inputs' funding prevouts.
       int64_t total_spend = 0;
-      const consensus::Result result = joiner.Join([&](const consensus::SpendRecord& spend) {
-        EXPECT_LT(spend.funding_height, height);
-        EXPECT_GE(spend.amount, 0);
-        total_spend += spend.amount;
+      const consensus::Result result = joiner.Join([&](const protocol::TransactionConstView&, std::span<const consensus::SpendRecord> spends) {
+        for (const auto& spend : spends) {
+          EXPECT_LT(spend.funding_height, height);
+          EXPECT_GE(spend.amount, 0);
+          total_spend += spend.amount;
+        }
         return consensus::Result{};
       });
       EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Joined);
@@ -85,9 +87,11 @@ TEST(SpendJoinerTest, TestPreemptiveInvalidBlock) {
       EXPECT_TRUE(joiner.IsJoinReady());
 
       // Join the block's transactions with their inputs' funding prevouts.
-      const consensus::Result result = joiner.Join([height](const consensus::SpendRecord& spend) {
-        EXPECT_LT(spend.funding_height, height);
-        EXPECT_GT(spend.amount, 0);
+      const consensus::Result result = joiner.Join([height](const protocol::TransactionConstView&, std::span<const consensus::SpendRecord> spends) {
+        for (const auto& spend : spends) {
+          EXPECT_LT(spend.funding_height, height);
+          EXPECT_GT(spend.amount, 0);
+        }
         return consensus::Result{};
       });
       EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Joined);
@@ -133,9 +137,11 @@ TEST(SpendJoinerTest, TestPreemptiveInvalidBlock) {
       EXPECT_TRUE(joiner.IsJoinReady());
 
       // Join the block's transactions with their inputs' funding prevouts.
-      const consensus::Result result = joiner.Join([i](const consensus::SpendRecord& spend) {
-        EXPECT_LT(spend.funding_height, i);
-        EXPECT_GT(spend.amount, 0);
+      const consensus::Result result = joiner.Join([i](const protocol::TransactionConstView&, std::span<const consensus::SpendRecord> spends) {
+        for (const auto& spend : spends) {
+          EXPECT_LT(spend.funding_height, i);
+          EXPECT_GT(spend.amount, 0);
+        }
         return consensus::Result{};
       });
       EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Joined);
@@ -173,8 +179,8 @@ TEST(SpendJoinerTest, TestPartialFetchBug) {
   
   // Because Block 1 is missing from DB, and Block 2 likely spends it,
   // and query range is [0, 1), Block 1 outputs won't be found.
-  // Also query_before_ (1) < height_ (2), so it goes to QueriedPartial.
-  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::QueriedPartial);
+  // Also query_before_ (1) < height_ (2), so it goes to QueriedPart.
+  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::QueriedPart);
   
   // This next step should crash due to the bug in Table::Unpack called via Fetch.
   joiner.Advance(); // Fetch
@@ -204,11 +210,11 @@ TEST(SpendJoinerTest, TestIncrementalResolution) {
   // Query. Should be partial because Block 1 is missing from DB.
   // It will query [0, 1) (Genesis).
   joiner.Advance();
-  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::QueriedPartial);
+  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::QueriedPart);
 
   // Fetch. Should fetch Genesis outputs.
   joiner.Advance();
-  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::FetchedPartial);
+  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::FetchedPart);
 
   // Now append Block 1 to DB.
   db.Append(*block1, 1);
@@ -222,7 +228,7 @@ TEST(SpendJoinerTest, TestIncrementalResolution) {
   EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Fetched);
 
   // Join.
-  auto result = joiner.Join([](const consensus::SpendRecord&) { return consensus::Result{}; });
+  auto result = joiner.Join([](const protocol::TransactionConstView&, std::span<const consensus::SpendRecord>) { return consensus::Result{}; });
   EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Joined);
   EXPECT_TRUE(result);
 }
@@ -321,12 +327,12 @@ TEST(SpendJoinerTest, TestPartialFetchMisalignment) {
   // Query 1: Partial. DB has Block 0 (Height 0). Block 1 is missing.
   // Query range [0, 1). Should find key0. key1 is not found.
   joiner.Advance();
-  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::QueriedPartial);
+  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::QueriedPart);
 
   // Fetch 1: Partial. Fetches data for key0.
   // outputs_ now has data for key0.
   joiner.Advance();
-  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::FetchedPartial);
+  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::FetchedPart);
 
   // 5. Append Block 2 to DB.
   db.Append(*block2, 2);
@@ -342,15 +348,15 @@ TEST(SpendJoinerTest, TestPartialFetchMisalignment) {
   // Input spending key1 -> Funding Height 1.
   bool found_key0 = false;
   bool found_key1 = false;
-  auto result = joiner.Join([&](const consensus::SpendRecord& spend) {
-    if (spend.spend_input_index == 0) {
-      // Spending key0. Should have height 0.
-      EXPECT_EQ(spend.funding_height, 1) << "Input 0 (Key0) should have funding height 1";
-      found_key0 = true;
-    } else if (spend.spend_input_index == 1) {
-      // Spending key1. Should have height 1.
-      EXPECT_EQ(spend.funding_height, 2) << "Input 1 (Key1) should have funding height 2";
-      found_key1 = true;
+  auto result = joiner.Join([&](const protocol::TransactionConstView&, std::span<const consensus::SpendRecord> spends) {
+    for (const auto& spend : spends) {
+      if (spend.spend_input_index == 0) {
+        EXPECT_EQ(spend.funding_height, 1) << "Input 0 (Key0) should have funding height 1";
+        found_key0 = true;
+      } else if (spend.spend_input_index == 1) {
+        EXPECT_EQ(spend.funding_height, 2) << "Input 1 (Key1) should have funding height 2";
+        found_key1 = true;
+      }
     }
     return consensus::Result{};
   });
@@ -395,11 +401,12 @@ TEST(SpendJoinerTest, TestIntraBlockFunding_CorrectOrder) {
   EXPECT_TRUE(joiner.IsJoinReady());
 
   int callback_count = 0;
-  const consensus::Result result = joiner.Join([&](const consensus::SpendRecord& spend) {
-    callback_count++;
-    // Verify it's the intra-block spend
-    EXPECT_EQ(spend.funding_height, 1);
-    EXPECT_EQ(spend.amount, 1000);
+  const consensus::Result result = joiner.Join([&](const protocol::TransactionConstView&, std::span<const consensus::SpendRecord> spends) {
+    for (const auto& spend : spends) {
+      callback_count++;
+      EXPECT_EQ(spend.funding_height, 1);
+      EXPECT_EQ(spend.amount, 1000);
+    }
     return consensus::Result{};
   });
   
@@ -445,11 +452,11 @@ TEST(SpendJoinerTest, RejectsIntraBlockCoinbaseSpendViaConsensusValidation) {
 
   ASSERT_TRUE(joiner.IsJoinReady());
 
-  const auto result = joiner.Join([](const consensus::SpendRecord& spend_record) {
-    return consensus::rules::ValidateInputSpend(spend_record, kHeight);
+  const auto result = joiner.Join([](const protocol::TransactionConstView& tx, std::span<const consensus::SpendRecord> spends) {
+    return consensus::rules::ValidateInputSpend(tx, spends, kHeight);
   });
 
-  EXPECT_EQ(result, consensus::Error::Transaction_PrematureSpend);
+  EXPECT_EQ(result, consensus::Error::Input_PrematureSpend);
 }
 
 TEST(SpendJoinerTest, TestIntraBlockFunding_IncorrectOrder) {

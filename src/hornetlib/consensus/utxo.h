@@ -16,7 +16,6 @@ struct SpendRecord {
   uint32_t funding_flags;
   int64_t amount;
   std::span<const uint8_t> pubkey_script;
-  protocol::TransactionConstView tx;
   int spend_input_index;
 
   bool IsCoinbase() const { return funding_flags & 1; }
@@ -30,20 +29,22 @@ class UnspentOutputsView {
   virtual Result QueryPrevoutsUnspent(const protocol::Block& block) const = 0;
 
   template <typename Fn>
-  Result ForEachSpend(const protocol::Block& block, Fn&& fn) const {
+  Result ForEachTransaction(const protocol::Block& block, Fn&& fn) const {
     struct Wrapper {
-      static Result Thunk(const SpendRecord& spend, const void* user) {
+      static Result Thunk(const protocol::TransactionConstView& tx,
+                          std::span<const SpendRecord> spends, const void* user) {
         const auto* f = static_cast<const Fn*>(user);
-        return (*f)(spend);
+        return (*f)(tx, spends);
       }
     };
-    return EnumerateSpends(block, &Wrapper::Thunk, &fn);
+    return EnumerateTransactions(block, &Wrapper::Thunk, &fn);
   }
 
  protected:
-  using Callback = Result (*)(const SpendRecord&, const void* user);
-  virtual Result EnumerateSpends(const protocol::Block& block, const Callback cb,
-                                 const void* user) const = 0;
+  using Callback = Result (*)(const protocol::TransactionConstView& tx,
+                              std::span<const SpendRecord> spend, const void* user);
+  virtual Result EnumerateTransactions(const protocol::Block& block, const Callback cb,
+                                       const void* user) const = 0;
 };
 
 }  // namespace hornet::consensus

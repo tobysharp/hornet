@@ -23,9 +23,9 @@ namespace hornet::consensus::rules {
 }
 
 [[nodiscard]] inline Result ValidateSpending(const BlockSpendingContext& context) {
-  return context.unspent.ForEachSpend(context.block,
-    [&](const SpendRecord& spend) { 
-      return ValidateInputSpend(spend, context.height);
+  return context.unspent.ForEachTransaction(context.block,
+    [&](const protocol::TransactionConstView& tx, std::span<const SpendRecord> spends) { 
+      return ValidateInputSpend(tx, spends, context.height);
     });
 }
 

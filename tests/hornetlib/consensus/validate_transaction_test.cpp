@@ -179,12 +179,11 @@ TEST(ValidatorTest, EnforcesCoinbaseMaturityBoundary) {
                     .funding_flags = 1,
                     .amount = 50'000'000,
                     .pubkey_script = {},
-                    .tx = funding_tx,
                     .spend_input_index = 0};
 
-  EXPECT_EQ(rules::ValidateCoinbaseMaturity(rules::InputSpendingContext{.spend = spend, .height = 1099}),
-            Error::Transaction_PrematureSpend);
-  EXPECT_TRUE(rules::ValidateCoinbaseMaturity(rules::InputSpendingContext{.spend = spend, .height = 1100}));
+  EXPECT_EQ(rules::ValidateCoinbaseMaturity(rules::InputSpendingContext{.tx = funding_tx, .spends = {&spend, 1}, .height = 1099}),
+            Error::Input_PrematureSpend);
+  EXPECT_TRUE(rules::ValidateCoinbaseMaturity(rules::InputSpendingContext{.tx = funding_tx, .spends = {&spend, 1}, .height = 1100}));
 }
 
 }  // namespace
