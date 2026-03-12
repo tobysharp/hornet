@@ -39,9 +39,9 @@ class ValidationPipeline {
   // This determines the number of threads in both the validation and spend pipelines.
   // max_active_count: The maximum number of blocks that can be in the pipeline at once.
   // If -1, defaults to pipeline_depth * 4.
-  ValidationPipeline(data::Timechain& timechain, data::utxo::Database& db,
-                     int pipeline_depth = 8, int max_active_count = -1)
-      : timechain_(timechain), 
+  ValidationPipeline(data::Timechain& timechain, data::utxo::Database& db, int pipeline_depth = 8,
+                     int max_active_count = -1)
+      : timechain_(timechain),
         spend_pipeline_(db, pipeline_depth),
         max_active_count_(max_active_count > 0 ? max_active_count : pipeline_depth * 4) {
     for (int i = 0; i < pipeline_depth; ++i) {
@@ -67,19 +67,17 @@ class ValidationPipeline {
   }
 
   // Submits a block for validation. Can be out of height order.
-  void Submit(std::shared_ptr<const protocol::Block> block, int height, bool assume_valid,
-              CompleteCallback on_complete) {
-    if (height == 0)
-      util::ThrowInvalidArgument(
-          "ValidationPipeline::Submit: Genesis block should not be submitted.");
-    
+  void Submit(std::shared_ptr<const protocol::Block> block, int height, CompleteCallback on_complete) {
+    if (height == 0) util::ThrowInvalidArgument("ValidationPipeline::Submit: Genesis block should not be submitted.");
+
     {
       std::unique_lock lock{wait_mutex_};
-      
+
       using namespace std::chrono_literals;
       while (!spend_pipeline_.IsStalled() && !submit_cv_.wait_for(lock, 100ms, [&] {
         return max_active_count_ == 0 || active_count_ < max_active_count_;
-      })) {}
+      })) {
+      }
 
       if (active_count_ >= max_active_count_) {
         lock.unlock();
@@ -88,12 +86,11 @@ class ValidationPipeline {
       }
       ++active_count_;
     }
-    spend_pipeline_.Add(block, height, assume_valid, 
-      [this, callback = std::move(on_complete)](std::shared_ptr<data::utxo::SpendJoiner> joiner) { 
-        ++validation_pending_;
-        queue_.Push({joiner->GetHeight(), joiner->GetBlock(), std::move(joiner), callback});
-      }
-    );
+    spend_pipeline_.Add(block, height, false,
+                        [this, callback = std::move(on_complete)](std::shared_ptr<data::utxo::SpendJoiner> joiner) {
+                          ++validation_pending_;
+                          queue_.Push({joiner->GetHeight(), joiner->GetBlock(), std::move(joiner), callback});
+                        });
   }
 
   bool Wait(const util::Timeout& timeout = util::Timeout::Infinite()) {
@@ -102,17 +99,14 @@ class ValidationPipeline {
     if (timeout.IsInfinite()) {
       wait_cv_.wait(lock, predicate);
       return true;
-    } else
-      return wait_cv_.wait_until(lock, timeout.Deadline(), predicate);
+    } else return wait_cv_.wait_until(lock, timeout.Deadline(), predicate);
   }
 
   std::pair<long long, long long> GetValidationMetrics() const {
     return {total_validate_time_ns.load(), total_validate_calls.load()};
   }
 
-  const data::utxo::SpendPipeline::Metrics& GetSpendMetrics() const {
-    return spend_pipeline_.GetMetrics();
-  }
+  const data::utxo::SpendPipeline::Metrics& GetSpendMetrics() const { return spend_pipeline_.GetMetrics(); }
 
  private:
   struct Job {
@@ -168,15 +162,11 @@ class ValidationPipeline {
   consensus::Result Validate(const Job& job) {
     const auto& block = *(job.block);
     const auto headers = timechain_.ReadHeaders();
-    const auto parent_it =
-        headers->FindStable(job.height - 1, block.Header().GetPreviousBlockHash());
+    const auto parent_it = headers->FindStable(job.height - 1, block.Header().GetPreviousBlockHash());
     if (!parent_it) return consensus::Error::Header_ParentNotFound;
     const auto ancestry_view = headers->GetValidationView(parent_it);
     const data::utxo::DatabaseView utxo{job.joiner};
-    if (job.joiner->IsAssumeValid()) 
-      return consensus::ValidateBlockExceptScripts(block, *parent_it, *ancestry_view, GetCurrentTime(), utxo);
-    else
-      return consensus::ValidateBlock(block, *parent_it, *ancestry_view, GetCurrentTime(), utxo);
+    return consensus::ValidateBlock(block, *parent_it, *ancestry_view, GetCurrentTime(), utxo);
   }
 
   // Retires completed jobs in height order, if we can take the retirement lock.
@@ -184,9 +174,7 @@ class ValidationPipeline {
     std::unique_lock lock{retire_mutex_, std::try_to_lock};
     if (!lock.owns_lock()) return;  // Someone else has the retire lock, leave them to it.
 
-    for (; !completed_.Empty() && completed_.Top().height == next_complete_height_;
-         ++next_complete_height_) {
-
+    for (; !completed_.Empty() && completed_.Top().height == next_complete_height_; ++next_complete_height_) {
       const auto item = completed_.Pop();
       lock.unlock();
       if (item.on_complete)
@@ -202,8 +190,7 @@ class ValidationPipeline {
 
   // Returns the current epoch time in milliseconds for consensus validation.
   static int64_t GetCurrentTime() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-               std::chrono::system_clock::now().time_since_epoch())
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
         .count();
   }
 

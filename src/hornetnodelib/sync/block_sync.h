@@ -40,8 +40,8 @@ class BlockSyncHandler : public SyncHandler {
 
 class BlockSync {
  public:
-  BlockSync(data::Timechain& timechain, data::utxo::Database& database,
-            BlockValidationBinding validation, BlockSyncHandler& handler);
+  BlockSync(data::Timechain& timechain, data::utxo::Database& database, BlockValidationBinding validation,
+            BlockSyncHandler& handler);
   ~BlockSync();
 
   // Begins downloading and validating blocks from a given peer.
@@ -67,15 +67,23 @@ class BlockSync {
       operator int64_t() const { return live; }
     };
     Counter requested, pending, received, submitted, validated, flush_due_ns;
-    void OnRequest() { ++requested; ++pending; }
-    void OnReceive() { --pending; ++received; }
+    void OnRequest() {
+      ++requested;
+      ++pending;
+    }
+    void OnReceive() {
+      --pending;
+      ++received;
+    }
     void OnValidate() { ++validated; }
     void OnSubmit() { ++submitted; }
-    void Snapshot() { for (auto* x : {&requested, &pending, &received, &submitted, &validated}) x->Snap(); }
+    void Snapshot() {
+      for (auto* x : {&requested, &pending, &received, &submitted, &validated}) x->Snap();
+    }
     int64_t TickNs() {
       using namespace std::chrono_literals;
       static constexpr int64_t kFlushPeriodNs = std::chrono::duration_cast<std::chrono::nanoseconds>(1s).count();
-      const int64_t now = NowNs();            // The current wall-clock time.
+      const int64_t now = NowNs();      // The current wall-clock time.
       int64_t due = flush_due_ns.live;  // The time that we are due for another flush.
       if (now < due) return 0;
       if (!flush_due_ns.live.compare_exchange_strong(due, now + kFlushPeriodNs)) return 0;
@@ -87,7 +95,10 @@ class BlockSync {
       }
       return now - prev;
     }
-    static int64_t NowNs() { return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
+    static int64_t NowNs() {
+      return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
+          .count();
+    }
   };
 
   static int SizeInBytes(const Item& item) { return sizeof(Item) + item.block->SizeBytes(); }
@@ -143,8 +154,7 @@ inline BlockSync::~BlockSync() {
 }
 
 // Returns the next block key to request from a peer.
-inline std::optional<data::Key> BlockSync::GetNextBlockId(
-    const data::HeaderTimechain& headers) const {
+inline std::optional<data::Key> BlockSync::GetNextBlockId(const data::HeaderTimechain& headers) const {
   // Checks whether the last requested block is still in the main chain. If so, that implies
   // there has not been a reorg above us in the chain since the last request.
   if (last_request_.height > 0 && last_request_.height < headers.ChainLength() &&
@@ -255,19 +265,17 @@ inline void BlockSync::Process() {
     // As soon as we pop from the queue, we can consider filling the empty queue slot.
     RequestNextBlocks(item->peer);
     perf_.OnSubmit();
-    pipeline_.Submit(
-        item->block, item->id.height, /*assume_valid =*/true,
-        [this, weak = std::move(item->peer)](const std::shared_ptr<const protocol::Block>& block,
-                                             const data::Key& id, consensus::Result result) {
-          OnValidateComplete(block, id, result, weak);
-        });
+    pipeline_.Submit(item->block, item->id.height,
+                     [this, weak = std::move(item->peer)](const std::shared_ptr<const protocol::Block>& block,
+                                                          const data::Key& id, consensus::Result result) {
+                       OnValidateComplete(block, id, result, weak);
+                     });
     MaybeFlush();
   }
 }
 
-inline void BlockSync::OnValidateComplete(const std::shared_ptr<const protocol::Block>& block,
-                                          const data::Key& id, consensus::Result result,
-                                          const net::WeakPeer& weak) {
+inline void BlockSync::OnValidateComplete(const std::shared_ptr<const protocol::Block>& block, const data::Key& id,
+                                          consensus::Result result, const net::WeakPeer& weak) {
   // If validation fails, disconnect/ban the peer that provided it,
   // delete this block and any downstream blocks, and cancel any downstream block requests.
   if (!result) {
@@ -292,8 +300,7 @@ inline void BlockSync::OnValidateComplete(const std::shared_ptr<const protocol::
   // When we have validated the last block in the main chain, signal completion.
   // TODO: Consider whether we want to validate blocks on other forks too.
   const auto headers = timechain_.ReadHeaders();
-  if (headers->ChainLength() == id.height + 1 && headers->GetChainHash(id.height) == id.hash)
-    handler_.OnComplete(weak);
+  if (headers->ChainLength() == id.height + 1 && headers->GetChainHash(id.height) == id.hash) handler_.OnComplete(weak);
 
   MaybeFlush();
 }
@@ -320,15 +327,11 @@ inline void BlockSync::HandleError(const net::WeakPeer& peer, consensus::Error e
 inline void BlockSync::MaybeFlush() const {
   const int64_t dt_ns = perf_.TickNs();
   if (dt_ns <= 0) return;
-  
-  const auto per_s = [dt_ns](const auto& counter) -> int64_t {
-    return (counter.Delta() * 1'000'000'000ll) / dt_ns;
-  };
-  util::NotifyMetric("SyncManager/BlockSync", util::NotificationMap{
-    {"blocks_per_s", per_s(perf_.validated)},
-    {"blocks_requested", (int64_t)perf_.pending},
-    {"validation_queue", (int64_t)queue_bytes_}
-  });
+
+  const auto per_s = [dt_ns](const auto& counter) -> int64_t { return (counter.Delta() * 1'000'000'000ll) / dt_ns; };
+  util::NotifyMetric("SyncManager/BlockSync", util::NotificationMap{{"blocks_per_s", per_s(perf_.validated)},
+                                                                    {"blocks_requested", (int64_t)perf_.pending},
+                                                                    {"validation_queue", (int64_t)queue_bytes_}});
   perf_.Snapshot();
 }
 

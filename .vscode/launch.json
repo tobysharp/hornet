@@ -40,7 +40,8 @@
       "program": "${workspaceFolder}/build/clang20-debug/hornetnode",
       "args": [
         "--connect=127.0.0.1:8333",
-        "--notifytcp=8646"
+        "--notifytcp=8646",
+        "--datadir=/hornet/data"
       ],
       "cwd": "${workspaceFolder}/build",
       "stopAtEntry": false
@@ -81,8 +82,7 @@
       "program": "${workspaceFolder}/build/clang20-debug/validate",
       "args": [
         "--blocksdir=\"/nvme1/bitcoin/blocks\"",
-        "--datadir=\"/hornet/validate\"",
-        "--length=200000"
+        "--datadir=\"/hornet/data\""
       ],
       "cwd": "${workspaceFolder}/build"
     }        

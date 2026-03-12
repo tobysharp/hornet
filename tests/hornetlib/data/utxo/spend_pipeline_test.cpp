@@ -47,9 +47,11 @@ TEST_F(SpendPipelineTest, ProcessBlocks) {
     // Wait for the joiner to be ready.
     EXPECT_TRUE(joiner->WaitForFetch());
     
-    const consensus::Result result = joiner->Join([i](const consensus::SpendRecord& spend) {
-        EXPECT_LT(spend.funding_height, i);
-        EXPECT_GT(spend.amount, 0);
+    const consensus::Result result = joiner->Join([i](const protocol::TransactionConstView&, std::span<const consensus::SpendRecord> spends) {
+        for (const auto& spend : spends) {
+          EXPECT_LT(spend.funding_height, i);
+          EXPECT_GT(spend.amount, 0);
+        }
         return consensus::Result{};
     });
     
@@ -81,9 +83,11 @@ TEST_F(SpendPipelineTest, ProcessBlocksOutOfOrder) {
     int height = i + 1;
     EXPECT_TRUE(joiners[height]->WaitForFetch());
     
-    const consensus::Result result = joiners[height]->Join([height](const consensus::SpendRecord& spend) {
-        EXPECT_LT(spend.funding_height, height);
-        EXPECT_GT(spend.amount, 0);
+    const consensus::Result result = joiners[height]->Join([height](const protocol::TransactionConstView&, std::span<const consensus::SpendRecord> spends) {
+        for (const auto& spend : spends) {
+          EXPECT_LT(spend.funding_height, height);
+          EXPECT_GT(spend.amount, 0);
+        }
         return consensus::Result{};
     });
     EXPECT_EQ(result, consensus::Result{});
@@ -98,7 +102,7 @@ TEST_F(SpendPipelineTest, ProcessInvalidBlock) {
   auto joiner0 = pipeline_->Add(chain[1], 1);
 
   EXPECT_TRUE(joiner0->WaitForFetch());
-  EXPECT_EQ(joiner0->Join([](const consensus::SpendRecord&) { return consensus::Result{}; }), consensus::Result{});
+  EXPECT_EQ(joiner0->Join([](const protocol::TransactionConstView&, std::span<const consensus::SpendRecord>) { return consensus::Result{}; }), consensus::Result{});
 
   // Add an invalid block that spends a non-existent output.
   auto block1 = std::make_shared<protocol::Block>(chain.Sample());

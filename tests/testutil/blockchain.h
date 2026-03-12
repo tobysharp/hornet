@@ -32,6 +32,7 @@ class Blockchain {
   Blockchain(const std::string& filename);
   bool Empty() const { return blocks_.empty(); }
   int Length() const { return std::ssize(blocks_); }
+  std::shared_ptr<protocol::Block> Back() { return blocks_.back(); }
   std::shared_ptr<const protocol::Block> operator[](int index) const { return blocks_[index]; }
   std::shared_ptr<protocol::Block> operator[](int index) { return blocks_[index]; }
   void Append(std::shared_ptr<protocol::Block> block);

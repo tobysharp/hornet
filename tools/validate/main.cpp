@@ -176,7 +176,7 @@ int main(int argc, char** argv) {
 
       // If we found a block to add on this turn, add it now.
       metrics.Add(Op_Submit, [&] {
-        if (block != nullptr) pipeline.Submit(std::move(block), height++, true, on_complete);
+        if (block != nullptr) pipeline.Submit(std::move(block), height++, on_complete);
       });
     }
     metrics.Add(Op_Wait, [&] { pipeline.Wait(); });

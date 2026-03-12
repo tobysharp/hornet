@@ -73,7 +73,7 @@ consensus::Result ValidateInOrder(const std::filesystem::path& path) {
 
   // Submit all validations in order and wait for drain.
   for (int height = 1; height < data.Length(); ++height)
-    pipeline.Submit(data[height], height, false, std::ref(callback));
+    pipeline.Submit(data[height], height, std::ref(callback));
   EXPECT_TRUE(pipeline.Wait(5s));
 
   // Check that every block completed.
@@ -97,7 +97,7 @@ consensus::Result ValidateOutOfOrder(const std::filesystem::path& path) {
     for (int offset : {1, 2, 0}) {
       const int submit = height + offset;
       if (submit < data.Length())    
-        pipeline.Submit(data[submit], submit, false, std::ref(callback));
+        pipeline.Submit(data[submit], submit, std::ref(callback));
     }
   }
   EXPECT_TRUE(pipeline.Wait(5s));
@@ -124,7 +124,7 @@ consensus::Result ValidateShuffle(const std::filesystem::path& path) {
   std::shuffle(heights.begin(), heights.end(), std::mt19937{69'420});
 
   for (int height : heights)
-    pipeline.Submit(data[height], height, false, std::ref(callback));
+    pipeline.Submit(data[height], height, std::ref(callback));
   EXPECT_TRUE(pipeline.Wait(5s));
 
   // Check that every block completed.
@@ -188,7 +188,7 @@ TEST(ValidationPipelineTest, ProcessInvalidUTXO) {
     FAIL() << "Test file \"" << path << "\" was missing. Run tools/minetests.sh then re-run test.";
   }
 
-  const consensus::Error expected = consensus::Error::Transaction_NotUnspent;
+  const consensus::Error expected = consensus::Error::Spending_PrevoutNotUnspent;
   EXPECT_EQ(ValidateInOrder(path), expected);
   EXPECT_EQ(ValidateOutOfOrder(path), expected);
   EXPECT_EQ(ValidateShuffle(path), expected);
@@ -228,11 +228,11 @@ TEST(ValidationPipelineTest, DetectDeadlock) {
   // Submit blocks 2 to 6 (5 blocks). This fills the pipeline.
   // Block 1 is missing, so they will stall in the spend pipeline.
   for (int height = 2; height <= 6; ++height) {
-    pipeline.Submit(data[height], height, false, std::ref(callback));
+    pipeline.Submit(data[height], height, std::ref(callback));
   }
 
   // Submit one more block. This should trigger the deadlock detection.
-  EXPECT_THROW({ pipeline.Submit(data[7], 7, false, std::ref(callback)); }, std::runtime_error);
+  EXPECT_THROW({ pipeline.Submit(data[7], 7, std::ref(callback)); }, std::runtime_error);
 }
 
 }  // namespace

@@ -28,8 +28,7 @@ inline constexpr BIP BIP66  = BIP::StrictDERSignatures;
 inline constexpr BIP BIP113 = BIP::LockTimeMedianPast;
 inline constexpr BIP BIP141 = BIP::SegWit;
 
-// Returns true if the specified BIP is enabled at the given block height.
-inline bool IsBIPEnabledAtHeight(BIP bip, int height) {
+inline int GetSoftForkActivationHeight(BIP bip) {
   static const std::map<BIP, int> kBIPActivationHeights = {
     {BIP::HeightInCoinbase,     227'931},
     {BIP::CheckLockTimeVerify,  388'381},
@@ -38,7 +37,12 @@ inline bool IsBIPEnabledAtHeight(BIP bip, int height) {
     {BIP::SegWit,               481'824}
   };
   Assert(kBIPActivationHeights.contains(bip));
-  return height >= kBIPActivationHeights.at(bip);  // Throws std::out_of_range if not found.
+  return kBIPActivationHeights.at(bip);  // Throws std::out_of_range if not found.
+}
+
+// Returns true if the specified BIP is enabled at the given block height.
+inline bool IsBIPEnabledAtHeight(BIP bip, int height) {
+  return height >= GetSoftForkActivationHeight(bip);  // Throws std::out_of_range if not found.
 }
 
 // clang-format on

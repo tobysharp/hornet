@@ -73,17 +73,5 @@ namespace hornet::consensus::rules {
   return ValidateRules(ruleset, context.height, context);
 }
 
-[[nodiscard]] inline Result ValidateInputSpend(const SpendRecord& spend, int height) {
-  // clang-format off
-  static const std::array ruleset = {
-    Rule{ValidateCoinbaseMaturity}    // Coinbase outputs MUST NOT be spent until 100 blocks after their creation.
-    // TODO: Others
-  };
-  //clang-format on
-  const InputSpendingContext context{spend, height};
-  return ValidateRules(ruleset, height, context);
-}
-
-
 
 }  // namespace hornet::consensus::rules

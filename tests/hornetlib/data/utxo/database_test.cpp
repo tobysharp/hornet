@@ -66,15 +66,15 @@ TEST(DatabaseTest, RejectsSameBlockCoinbaseSpendViaLocalPrevoutPath) {
   ASSERT_EQ(rids[0], kLocalOutputId);
 
   const protocol::Block& const_block = block;
+  const auto tx_view = const_block.Transaction(inputs[0].tx_index);
   const consensus::SpendRecord local_spend{.funding_height = outputs[0].header.height,
                                            .funding_flags = outputs[0].header.flags,
                                            .amount = outputs[0].header.amount,
                                            .pubkey_script = outputs[0].script.Span(scripts),
-                                           .tx = const_block.Transaction(inputs[0].tx_index),
                                            .spend_input_index = inputs[0].input_index};
 
-  EXPECT_EQ(consensus::rules::ValidateInputSpend(local_spend, kHeight),
-            consensus::Error::Transaction_PrematureSpend);
+  EXPECT_EQ(consensus::rules::ValidateSpendingTransaction(tx_view, {&local_spend, 1}, kHeight),
+            consensus::Error::Spending_PrematureSpend);
 }
 
 TEST(DatabaseTest, TestSpentOutputsNotFound_MutableSerial) {
