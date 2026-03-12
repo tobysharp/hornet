@@ -5,11 +5,13 @@
 #pragma once
 
 #include <atomic>
+#include <filesystem>
 #include <thread>
 
 #include "hornetlib/data/keyframe_sidecar.h"
 #include "hornetlib/data/sidecar_binding.h"
 #include "hornetlib/data/timechain.h"
+#include "hornetlib/data/utxo/database.h"
 #include "hornetnodelib/dispatch/peer_negotiator.h"
 #include "hornetnodelib/dispatch/protocol_loop.h"
 #include "hornetnodelib/net/peer_address.h"
@@ -24,7 +26,7 @@ class Controller {
  public:
   using BreakCondition = dispatch::ProtocolLoop::BreakCondition;
 
-  Controller();
+  Controller(const std::filesystem::path& data_dir = ".");
   ~Controller();
 
   void SetConnectAddress(const net::PeerAddress& address) {
@@ -47,6 +49,7 @@ class Controller {
 
  private:
   data::Timechain timechain_;  // The timechain managed by this controller.
+  data::utxo::Database database_;  // The current UTXO state data.
   sync::BlockValidationBinding block_validation_status_;  // Tracks block validation status.
 
   std::thread message_loop_thread_;      // Thread for processing protocol messages.
@@ -56,7 +59,7 @@ class Controller {
   net::PeerManager peer_manager_;             // Manages network peers.
   dispatch::PeerNegotiator peer_negotiator_;  // Negotiates peer connections.
   net::PeerAddress connect_address_;          // Address to connect to if specified.
-  
+
   sync::SyncManager sync_manager_;  // Handles initial synchronization of the timechain with peers.
 };
 

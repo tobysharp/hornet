@@ -6,10 +6,11 @@
 
 namespace hornet::node {
 
-Controller::Controller()
-    : block_validation_status_(decltype(block_validation_status_)::Create(timechain_)),
+Controller::Controller(const std::filesystem::path& data_dir /* = "." */)
+    : database_(data_dir),
+      block_validation_status_(decltype(block_validation_status_)::Create(timechain_)),
       message_loop_(peer_manager_),
-      sync_manager_(timechain_, block_validation_status_) {
+      sync_manager_(timechain_, database_, block_validation_status_) {
   message_loop_.AddEventHandler(&peer_negotiator_);
   message_loop_.AddEventHandler(&sync_manager_);
 }

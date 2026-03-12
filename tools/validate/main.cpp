@@ -74,7 +74,7 @@ void LoadHeaders(const Options& options, Metrics* metrics, data::Timechain* time
 void PrintMetrics(const Metrics& metrics, int length,
                   const node::sync::ValidationPipeline& pipeline) {
   std::cout << "Total time " << metrics[Op_Total].Seconds() << " ("
-            << (length / metrics[Op_Total].Seconds().count()) << " blocks/s)" << std::endl;
+            << (length / metrics[Op_Total].Seconds()) << " blocks/s)" << std::endl;
   std::cout << "including " << std::endl;
   for (int op : {Op_Blocks, Op_Submit, Op_Wait}) {
     std::cout << "\t" << metrics[op].Seconds() << " " << kOpNames[op]
@@ -136,14 +136,14 @@ int main(int argc, char** argv) {
   data::Timechain timechain;
   LoadHeaders(options, &metrics, &timechain);
 
-  const auto on_complete = [](const std::shared_ptr<const protocol::Block>&, int height,
+  const auto on_complete = [](const std::shared_ptr<const protocol::Block>&, const data::Key& id,
                               consensus::Result result) {
-    if (!result) util::ThrowRuntimeError("Block height ", height, " failed validation.");
-    if (height % 100'000 == 0) LogInfo() << height << " blocks validated...";
+    if (!result) util::ThrowRuntimeError("Block height ", id.height, " failed validation.");
+    if (id.height % 100'000 == 0) LogInfo() << id.height << " blocks validated...";
   };
 
   data::utxo::Database database{options.data_dir};
-  node::sync::ValidationPipeline pipeline{timechain, database, on_complete, 16};
+  node::sync::ValidationPipeline pipeline{timechain, database, 16};
   metrics.Add(Op_Total, [&] {
     LogDebug() << "Reading blocks [" << 1 << ", " << options.length << ")...";
     // ChainReader reader{options.data_dir};
@@ -176,7 +176,7 @@ int main(int argc, char** argv) {
 
       // If we found a block to add on this turn, add it now.
       metrics.Add(Op_Submit, [&] {
-        if (block != nullptr) pipeline.Submit(std::move(block), height++, true);
+        if (block != nullptr) pipeline.Submit(std::move(block), height++, true, on_complete);
       });
     }
     metrics.Add(Op_Wait, [&] { pipeline.Wait(); });

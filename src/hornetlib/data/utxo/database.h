@@ -28,7 +28,7 @@ class Database {
 
   // Constructs an unspent output database with the given duration (in blocks) as the recent
   // window, i.e. the period during which outputs may be removed before being permanently committed.
-  Database(const std::filesystem::path& folder);
+  Database(const std::filesystem::path& folder = ".");
 
   static std::vector<OutputKey> ExtractSpentKeys(const protocol::Block& block);
 

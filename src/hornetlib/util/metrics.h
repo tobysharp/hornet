@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <numeric>
 
 #include "hornetlib/util/timer.h"
 
@@ -17,11 +18,21 @@ class Metrics {
     return Metrics{*this} += rhs;
   }
   auto AddScoped(int op) { return timers_[op].AddScoped(); }
-  void Add(int index, auto&& func) {
-    timers_[index].Add(std::move(func));
+  auto Add(int index, auto&& func) {
+    return timers_[index].Add(std::forward<decltype(func)>(func));
   }
   Timer& operator [](int index) { return timers_[index]; }
   const Timer& operator [](int index) const { return timers_[index]; }
+
+  double TotalCpuSeconds() const {
+    return std::accumulate(timers_.begin(), timers_.end(), 0.0,
+                           [](double sum, const auto& t) { return sum + t.CpuSeconds().count(); });
+  }
+  
+  double TotalSeconds() const {
+    return std::accumulate(timers_.begin(), timers_.end(), 0.0,
+                           [](double sum, const auto& t) { return sum + t.Seconds().count(); });
+  }
 
  private:
   std::array<Timer, kCount> timers_;
