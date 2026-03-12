@@ -73,20 +73,5 @@ namespace hornet::consensus::rules {
   return ValidateRules(ruleset, context.height, context);
 }
 
-[[nodiscard]] inline Result ValidateInputSpend(const protocol::TransactionConstView& tx, std::span<const SpendRecord> spends, int height) {
-  // clang-format off
-  static const std::array ruleset = {
-    Rule{ValidateCoinbaseMaturity},         // Coinbase outputs MUST NOT be spent until 100 blocks after their creation.
-    Rule{ValidateInputAmountsNonNegative},  // Each spend amount MUST be non-negative.
-    Rule{ValidateInputAmountsSum},          // The sum of all spend amounts MUST NOT exceed the money supply limit.
-    Rule{ValidateScripts}                   // The locking script concatenated with the sig script MUST evaluate to TRUE.
-    // TODO: Others
-  };
-  //clang-format on
-  const InputSpendingContext context{tx, spends, height};
-  return ValidateRules(ruleset, height, context);
-}
-
-
 
 }  // namespace hornet::consensus::rules

@@ -116,7 +116,7 @@ inline QueryResult MemoryRun::QueryImpl(std::span<const OutputKey> keys, std::sp
   const int size = std::ssize(keys);
   // We can skip over previously found rid's if we can guarantee we won't find a newer entry here
   // than one that was found previously, i.e. if we're searching from genesis.
-  const bool overwrite = since > 0;
+  const bool overwrite = since > 1;
   auto lower = entries_.begin(), upper = entries_.end();
   for (int index = 0; index < size; ++index) {
     if (rids[index] == kLocalOutputId || rids[index] == kSpentOutputId || (!overwrite && rids[index] != kNullOutputId))

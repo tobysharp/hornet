@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <ranges>
 #include <vector>
 
 #include "hornetlib/consensus/types.h"
@@ -26,8 +27,8 @@ class SpendJoiner {
     const char* what() const noexcept override { return "SpendJoiner cancelled."; }
   };
 
-  SpendJoiner(Database& db, std::shared_ptr<const protocol::Block> block, int height, bool assume_valid = false)
-      : state_(State::Init), db_(db), block_(block), height_(height), assume_valid_(assume_valid) {}
+  SpendJoiner(Database& db, std::shared_ptr<const protocol::Block> block, int height, bool disable_fetch = false)
+      : state_(State::Init), db_(db), block_(block), height_(height), disable_fetch_(disable_fetch) {}
 
   State GetState() const { return state_; }
   int GetHeight() const { return height_; }
@@ -43,8 +44,9 @@ class SpendJoiner {
   StepResult Advance();
 
   bool IsJoinReady() const { return state_ == State::Fetched; }
-  bool IsAssumeValid() const { return assume_valid_; }
+  bool IsAssumeValid() const { return disable_fetch_; }
   consensus::Result Join(auto&& callback);
+  bool AllOutPointsUnique() const;
 
   bool WaitForQuery() const;
   bool WaitForFetch() const;
@@ -71,7 +73,7 @@ class SpendJoiner {
   Database& db_;
   std::shared_ptr<const protocol::Block> block_;
   const int height_;
-  const bool assume_valid_;
+  const bool disable_fetch_;
   int query_before_ = 0;
   int found_funded_ = 0;
   int fetch_count_ = 0;
@@ -81,7 +83,7 @@ class SpendJoiner {
   std::vector<OutputId> rids_;
   std::vector<OutputDetail> outputs_;
   std::vector<uint8_t> scripts_;
-  Metrics metrics_;
+  mutable Metrics metrics_;
 };
 
 inline void SpendJoiner::Parse() {
@@ -91,7 +93,7 @@ inline void SpendJoiner::Parse() {
   ScopedProfiler profiler("Parse", height_);
 
   int size = 0;
-  for (const auto tx : block_->Transactions())
+  for (const auto& tx : block_->Transactions())
     for (const auto& input : tx.Inputs()) size += !input.previous_output.IsNull();
 
   inputs_.resize(size);
@@ -148,7 +150,7 @@ inline void SpendJoiner::Query() {
 // Fetch the output records from the outputs table.
 inline void SpendJoiner::Fetch() {
   Assert(state_ == State::Queried || state_ == State::QueriedPart);
-  Assert(!assume_valid_);
+  Assert(!disable_fetch_);
 
   const auto timer = metrics_.AddScoped(Time_Fetch);
   ScopedProfiler profiler("Fetch", height_);
@@ -180,7 +182,7 @@ inline void SpendJoiner::Fetch() {
 inline consensus::Result SpendJoiner::Join(auto&& callback) {
   Assert(state_ == State::Fetched);
   Assert(inputs_.size() == outputs_.size());
-  Assert(!assume_valid_);
+  Assert(!disable_fetch_);
 
   const auto timer = metrics_.AddScoped(Time_Join);
 
@@ -238,9 +240,9 @@ inline bool SpendJoiner::IsAdvanceReady() const {
     case State::Appended:
       return true;
     case State::QueriedPart:
-      return !assume_valid_ || height_ <= db_.GetContiguousLength();
+      return !disable_fetch_ || height_ <= db_.GetContiguousLength();
     case State::Queried:
-      return !assume_valid_;
+      return !disable_fetch_;
     case State::FetchedPart:
       // We could permit small incremental queries, but we may prefer to wait until all residual
       // data has arrived. return query_before_ < db_.GetContiguousLength();
@@ -263,11 +265,11 @@ inline SpendJoiner::StepResult SpendJoiner::Advance() {
       Query();
       break;
     case State::Queried:
-      if (!assume_valid_) Fetch();
+      if (!disable_fetch_) Fetch();
       break;
     case State::QueriedPart:
       if (db_.GetContiguousLength() >= height_) Query();
-      else if (!assume_valid_) Fetch();
+      else if (!disable_fetch_) Fetch();
       break;
     default:
       break;
@@ -275,14 +277,13 @@ inline SpendJoiner::StepResult SpendJoiner::Advance() {
 
   if (IsAdvanceReady()) return {state_, Action::Advance};
   if (state_ == State::FetchedPart) return {state_, Action::Wait};
-  if (state_ == State::QueriedPart && assume_valid_) return {state_, Action::Wait};
+  if (state_ == State::QueriedPart && disable_fetch_) return {state_, Action::Wait};
   if (state_ == State::Fetched) return {state_, Action::Join};
 
   return {state_, Action::Retire};
 }
 
 inline void SpendJoiner::ReleaseQuery() {
-  pin_.reset();
   release_query_ = true;
   release_query_.notify_all();
 }
@@ -305,6 +306,7 @@ inline bool SpendJoiner::WaitForQuery() const {
 }
 
 inline bool SpendJoiner::WaitForFetch() const {
+  Assert(!disable_fetch_);
   release_fetch_.wait(false);
   if (state_ == State::Cancelled) throw CancelledException{};
   return state_ != State::Error;
@@ -314,6 +316,34 @@ inline void SpendJoiner::Cancel() {
   state_ = State::Cancelled;
   ReleaseQuery();
   ReleaseFetch();
+}
+
+inline bool SpendJoiner::AllOutPointsUnique() const {
+  // Ensure that WaitForQuery() returns prior to calling this function.
+  Assert(release_query_);
+  Assert(db_.GetContiguousLength() >= height_);
+  Assert(pin_.has_value());
+  const auto timer = metrics_.AddScoped(Time_Query);
+
+  // Count all the outputs.
+  int outputs = 0;
+  for (const auto& tx : block_->Transactions())
+    outputs += tx.OutputCount();
+
+  // Create the output id keys and sort them.
+  std::vector<protocol::OutPoint> keys(outputs);
+  auto it = keys.begin();
+  for (const auto& tx : block_->Transactions()) {
+    const auto& txid = tx.GetHash();
+    for (int i = 0; i < tx.OutputCount(); ++i)
+      *it++ = {txid, static_cast<uint32_t>(i)};
+  }
+  std::ranges::sort(keys);
+
+  // Perform the query.
+  std::vector<OutputId> rids(keys.size());
+  const auto found = db_.Query(keys, rids, height_);
+  return found == 0;
 }
 
 }  // namespace hornet::data::utxo

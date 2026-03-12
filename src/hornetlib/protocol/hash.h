@@ -13,6 +13,8 @@
 #include <ios>
 #include <ostream>
 
+#include "hornetlib/util/hex.h"
+
 // Proof-of-work types and relationships:
 //
 // Hash -> compare leq -> Target <- .Expand() <- CompactTarget
@@ -58,6 +60,18 @@ struct Hash : public std::array<uint8_t, 32> {
 };
 
 }  // namespace hornet::protocol
+
+namespace hornet {
+
+// _hash: 256-bit, big endian, returns std::array<uint8_t, 32>.
+template <util::HexLiteral<65> H>
+consteval protocol::Hash operator""_sha256() {
+  constexpr auto& chars = H.chars;
+  return util::ApplyToSequence<64>(
+      [&]<size_t... I>() { return util::DecodeHexString<chars[I]...>(true); });
+}
+
+}
 
 namespace std {
 

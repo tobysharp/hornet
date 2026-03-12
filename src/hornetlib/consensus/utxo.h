@@ -26,7 +26,11 @@ class UnspentOutputsView {
  public:
   virtual ~UnspentOutputsView() = default;
 
+  // Returns success if every spending input in this block references an existing unspent output.  
   virtual Result QueryPrevoutsUnspent(const protocol::Block& block) const = 0;
+
+  // Returns success if none of this block's transaction outputs already exist as unspent outputs (BIP30).
+  virtual Result QueryOutPointsUnique(const protocol::Block& block) const = 0;
 
   template <typename Fn>
   Result ForEachTransaction(const protocol::Block& block, Fn&& fn) const {

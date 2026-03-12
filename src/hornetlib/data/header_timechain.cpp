@@ -157,6 +157,11 @@ uint32_t HeaderTimechain::ValidationView::TimestampAt(int height) const {
   return timechain_.GetAncestorAtHeight(tip_, height).GetTimestamp();
 }
 
+const protocol::Hash& HeaderTimechain::ValidationView::HashAt(int height) const {
+  if (height > tip_.GetHeight()) util::ThrowRuntimeError("Couldn't find an ancestor at height ", height);
+  return timechain_.GetChainHash(height);
+}
+
 std::vector<uint32_t> HeaderTimechain::ValidationView::LastNTimestamps(int count) const {
   std::vector<uint32_t> result;
   result.reserve(count);

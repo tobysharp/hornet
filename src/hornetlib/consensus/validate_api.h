@@ -28,16 +28,6 @@ using rules::ValidateTransaction;
   return rules::ValidateContextual(rules::BlockEnvironmentContext{block, view, view.Length()});
 }
 
-[[nodiscard]] inline Result ValidateNonSpending(const protocol::Block& block,
-                                                const HeaderAncestryView& view) {
-  return rules::ValidateNonSpending(rules::BlockEnvironmentContext{block, view, view.Length()});
-}
-
-[[nodiscard]] inline Result ValidateSpending(const protocol::Block& block,
-                                             const UnspentOutputsView& unspent, const int height) {
-  return rules::ValidateSpending(rules::BlockSpendingContext{block, unspent, height});
-}
-
 [[nodiscard]] inline Result ValidateBlock(const protocol::Block& block,
                                           const protocol::BlockHeader& parent,
                                           const HeaderAncestryView& view,
@@ -46,12 +36,12 @@ using rules::ValidateTransaction;
   return rules::ValidateBlock(block, parent, view, current_time, unspent);
 }
 
-[[nodiscard]] inline Result ValidateBlockExceptScripts(const protocol::Block& block,
+[[nodiscard]] inline Result ValidateBlockNoScripts(const protocol::Block& block,
                                           const protocol::BlockHeader& parent,
                                           const HeaderAncestryView& view,
                                           const int64_t current_time,
                                           const UnspentOutputsView& unspent) {
-  return rules::ValidateBlockExceptScripts(block, parent, view, current_time, unspent);
+  return rules::ValidateBlockNoScripts(block, parent, view, current_time, unspent);
 }
 
 }  // namespace hornet::consensus

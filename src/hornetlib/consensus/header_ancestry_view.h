@@ -9,6 +9,7 @@
 #include <optional>
 #include <vector>
 
+#include "hornetlib/protocol/hash.h"
 #include "hornetlib/util/assert.h"
 
 namespace hornet::consensus {
@@ -26,6 +27,9 @@ class HeaderAncestryView {
 
   // Returns the length of the current chain.
   virtual int Length() const = 0;
+
+  // Returns the hash of an ancestor block at the given height.
+  virtual const protocol::Hash& HashAt(int height) const = 0;
 
   // Returns the timestamp of an ancestor at the given height.
   virtual uint32_t TimestampAt(int height) const = 0;

@@ -149,6 +149,7 @@ class HeaderTimechain::ValidationView : public consensus::HeaderAncestryView {
     tip_ = tip;
   }
   virtual int Length() const override;
+  virtual const protocol::Hash& HashAt(int height) const override;
   virtual uint32_t TimestampAt(int height) const override;
   virtual std::vector<uint32_t> LastNTimestamps(int count) const override;
 

@@ -11,28 +11,6 @@
 
 namespace hornet::consensus::rules {
 
-// Performs non-spending validation, aligned with the combination of Core's CheckBlock and ContextualCheckBlock functions.
-[[nodiscard]] inline Result ValidateNonSpending(const BlockEnvironmentContext& context) {
-  // clang-format off
-  static const auto ruleset = std::make_tuple(
-    Rule{ValidateStructural},           
-    Rule{ValidateContextual}
-  );
-  //clang-format on
-  return ValidateRules(ruleset, context.height, context);
-}
-
-[[nodiscard]] inline Result ValidateSpending(const BlockSpendingContext& context) {
-  return context.unspent.ForEachTransaction(context.block,
-    [&](const protocol::TransactionConstView& tx, std::span<const SpendRecord> spends) { 
-      return ValidateInputSpend(tx, spends, context.height);
-    });
-}
-
-[[nodiscard]] inline Result ValidateUnspent(const BlockSpendingContext& context) {
-  return context.unspent.QueryPrevoutsUnspent(context.block);
-}
-
 [[nodiscard]] inline Result ValidateBlock(const protocol::Block& block,
                                         const protocol::BlockHeader& parent,
                                         const HeaderAncestryView& view,
@@ -41,28 +19,21 @@ namespace hornet::consensus::rules {
   // clang-format off
   static const auto ruleset = std::make_tuple(
     Rule{ValidateHeader,          MakeHeaderContext},
-    Rule{ValidateNonSpending,     MakeEnvironmentContext},
-    Rule{ValidateSpending,        MakeBlockSpendingContext}
+    Rule{ValidateStructural,      MakeEnvironmentContext},
+    Rule{ValidateContextual,      MakeEnvironmentContext},
+    Rule{ValidateSpending,        MakeBlockSpendContext}
   );
   //clang-format on                                            
   const BlockValidationContext context{block, parent, view, current_time, unspent};
   return ValidateRules(ruleset, view.Length(), context);
 }
 
-[[nodiscard]] inline Result ValidateBlockExceptScripts(const protocol::Block& block,
+[[nodiscard]] inline Result ValidateBlockNoScripts(const protocol::Block& block,
                                         const protocol::BlockHeader& parent,
                                         const HeaderAncestryView& view,
                                         const int64_t current_time,
                                         const UnspentOutputsView& unspent) {
-  // clang-format off
-  static const auto ruleset = std::make_tuple(
-    Rule{ValidateHeader,          MakeHeaderContext},
-    Rule{ValidateNonSpending,     MakeEnvironmentContext},
-    Rule{ValidateUnspent,         MakeBlockSpendingContext}
-  );
-  //clang-format on                                            
-  const BlockValidationContext context{block, parent, view, current_time, unspent};
-  return ValidateRules(ruleset, view.Length(), context);
+  return ValidateBlock(block, parent, view, current_time, unspent);
 }
 
 }  // namespace hornet::consensus::rules
