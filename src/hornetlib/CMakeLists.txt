@@ -1,5 +1,4 @@
 add_library(hornetlib STATIC
-   crypto/sha256_ni.cpp
    data/header_timechain.cpp
    protocol/block.cpp
    protocol/message_factory.cpp
@@ -15,7 +14,12 @@ target_compile_features(hornetlib PRIVATE cxx_std_20)
 target_include_directories(hornetlib PUBLIC ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(hornetlib PRIVATE uring)
 
-# Compile SHA-NI implementation with required CPU flags
-set_source_files_properties(crypto/sha256_ni.cpp
-    PROPERTIES COMPILE_FLAGS "-msha -msse4.1"
-)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64|i[3-6]86|x86)$")
+    target_sources(hornetlib PRIVATE crypto/sha256_ni.cpp)
+    target_compile_definitions(hornetlib PUBLIC HORNET_HAS_SHA_NI=1)
+
+    # Compile SHA-NI implementation with required CPU flags.
+    set_source_files_properties(crypto/sha256_ni.cpp
+        PROPERTIES COMPILE_FLAGS "-msha -msse4.1"
+    )
+endif()

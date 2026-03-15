@@ -32,6 +32,7 @@ static void BM_SHA256_Scalar(benchmark::State& state) {
 }
 
 // Benchmark SHA-NI SHA256
+#if defined(HORNET_HAS_SHA_NI)
 static void BM_SHA256_SHANI(benchmark::State& state) {
   if (!HasSHAExtensions()) {
     state.SkipWithError("SHA-NI not supported on this CPU");
@@ -45,6 +46,7 @@ static void BM_SHA256_SHANI(benchmark::State& state) {
   }
   state.SetBytesProcessed(state.iterations() * state.range(0));
 }
+#endif
 
 // Benchmark double-SHA256 scalar
 static void BM_DoubleSHA256_Scalar(benchmark::State& state) {
@@ -57,6 +59,7 @@ static void BM_DoubleSHA256_Scalar(benchmark::State& state) {
 }
 
 // Benchmark double-SHA256 with SHA-NI
+#if defined(HORNET_HAS_SHA_NI)
 static void BM_DoubleSHA256_SHANI(benchmark::State& state) {
   if (!HasSHAExtensions()) {
     state.SkipWithError("SHA-NI not supported on this CPU");
@@ -72,6 +75,7 @@ static void BM_DoubleSHA256_SHANI(benchmark::State& state) {
   }
   state.SetBytesProcessed(state.iterations() * state.range(0));
 }
+#endif
 
 // Benchmark batched double-SHA256 (current scalar implementation)
 static void BM_DoubleSHA256Batch_Scalar(benchmark::State& state) {
@@ -95,6 +99,7 @@ static void BM_DoubleSHA256Batch_Scalar(benchmark::State& state) {
 }
 
 // Benchmark batched double-SHA256 using SHA-NI (simple loop, no interleaving)
+#if defined(HORNET_HAS_SHA_NI)
 static void BM_DoubleSHA256Batch_SHANI(benchmark::State& state) {
   if (!HasSHAExtensions()) {
     state.SkipWithError("SHA-NI not supported on this CPU");
@@ -122,6 +127,7 @@ static void BM_DoubleSHA256Batch_SHANI(benchmark::State& state) {
   state.SetItemsProcessed(state.iterations() * batch_size);
   state.SetBytesProcessed(state.iterations() * batch_size * input_size);
 }
+#endif
 
 // Register benchmarks for different input sizes
 // Common sizes:
@@ -133,10 +139,14 @@ static void BM_DoubleSHA256Batch_SHANI(benchmark::State& state) {
 // - 250-500 bytes: common transaction sizes
 // - 1KB-10KB: large transactions
 BENCHMARK(BM_SHA256_Scalar)->Arg(32)->Arg(64)->Arg(80)->Arg(192)->Arg(226)->Arg(250)->Arg(500)->Arg(1024)->Arg(10240);
+#if defined(HORNET_HAS_SHA_NI)
 BENCHMARK(BM_SHA256_SHANI)->Arg(32)->Arg(64)->Arg(80)->Arg(192)->Arg(226)->Arg(250)->Arg(500)->Arg(1024)->Arg(10240);
+#endif
 
 BENCHMARK(BM_DoubleSHA256_Scalar)->Arg(32)->Arg(64)->Arg(80)->Arg(192)->Arg(226)->Arg(250)->Arg(500)->Arg(1024);
+#if defined(HORNET_HAS_SHA_NI)
 BENCHMARK(BM_DoubleSHA256_SHANI)->Arg(32)->Arg(64)->Arg(80)->Arg(192)->Arg(226)->Arg(250)->Arg(500)->Arg(1024);
+#endif
 
 // Batch benchmarks: Args(batch_size, input_size)
 // Test both block headers (80 bytes) and typical transactions (226 bytes)
@@ -145,9 +155,11 @@ BENCHMARK(BM_DoubleSHA256Batch_Scalar)->Args({2, 80})->Args({4, 80})->Args({8, 8
     ->Args({2, 64})->Args({4, 64})->Args({8, 64})->Args({16, 64})
     ->Args({2, 226})->Args({4, 226})->Args({8, 226})->Args({16, 226});
 
+#if defined(HORNET_HAS_SHA_NI)
 BENCHMARK(BM_DoubleSHA256Batch_SHANI)->Args({2, 80})->Args({4, 80})->Args({8, 80})
     ->Args({16, 80})->Args({32, 80})->Args({100, 80})
     ->Args({2, 64})->Args({4, 64})->Args({8, 64})->Args({16, 64})
     ->Args({2, 226})->Args({4, 226})->Args({8, 226})->Args({16, 226});
+#endif
 
 BENCHMARK_MAIN();

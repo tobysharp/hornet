@@ -7,7 +7,6 @@ add_executable(hornetlib_tests
    consensus/validate_spending_test.cpp
    consensus/validate_transaction_test.cpp
    crypto/hash_test.cpp
-   crypto_sha256_test.cpp
    data/block_io_test.cpp
    data/chain_tree_test.cpp
    data/hashed_tree_test.cpp
@@ -55,6 +54,10 @@ add_executable(hornetlib_tests
    util/thread_safe_queue_test.cpp
    util/notify_test.cpp
 )
+
+if(HORNET_HAS_SHA_NI)
+   target_sources(hornetlib_tests PRIVATE crypto/sha256_test.cpp)
+endif()
 
 target_compile_features(hornetlib_tests PRIVATE cxx_std_20)
 target_link_libraries(hornetlib_tests PRIVATE hornetlib testutil gtest_main)

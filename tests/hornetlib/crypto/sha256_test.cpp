@@ -6,7 +6,6 @@
 #include <gtest/gtest.h>
 
 #include "hornetlib/crypto/cpuinfo.h"
-#include "hornetlib/crypto/hash.h"
 #include "hornetlib/crypto/sha256.h"
 #include "hornetlib/crypto/sha256_ni.h"
 

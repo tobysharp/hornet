@@ -32,10 +32,11 @@ bytes32_t Sha256(Iter begin, Iter end) {
                 "Sha256: iterator value type must be trivially copyable.");
   const size_t count = static_cast<size_t>(end - begin);
   const auto span = util::AsByteSpan<T>({count > 0 ? &*begin : nullptr, count});
+#if defined(HORNET_HAS_SHA_NI)
   if (HasSHAExtensions())
     return SHA256::Hash_SHANI(span);
-  else
-    return SHA256::Hash(span);
+#endif
+  return SHA256::Hash(span);
 }
 
 // Overload for trivially copyable types, spans, and ranges.
