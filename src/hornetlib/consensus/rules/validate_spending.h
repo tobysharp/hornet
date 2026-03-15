@@ -36,6 +36,7 @@ struct InputSpendContext {
   // clang-format off
   static const auto ruleset = std::make_tuple(
     Rule{ValidateCoinbaseMaturity}         // Coinbase outputs MUST NOT be spent until 100 blocks after their creation.
+    // Rule{ValidateInputValueInRange}
   );
   //clang-format on
   const InputSpendContext context{tx, spend, height};
@@ -50,6 +51,8 @@ struct TransactionSpendContext {
   const protocol::TransactionConstView tx;
   std::span<const SpendRecord> spends;
   const int height;
+  const int64_t inputs_sum = std::reduce(spends.begin(), spends.end(), 0ll, [](int64_t sum, const auto& spend) { return sum + spend.amount; });
+  const int64_t outputs_sum = std::reduce(tx.Outputs().begin(), tx.Outputs().end(), 0ll, [](int64_t sum, const auto& output) { return sum + output.value; });
 };
 
 [[nodiscard]] inline Result ValidateSpendingInputs(const TransactionSpendContext& context) {
@@ -59,10 +62,17 @@ struct TransactionSpendContext {
   return {};
 }
 
+// The sum of output values in a transaction MUST NOT exceed the sum of all input values being spent.
+[[nodiscard]] inline Result ValidateOutputValuesAtMostInputValues(const TransactionSpendContext& context) {
+  if (context.outputs_sum > context.inputs_sum) return Error::Spending_OutputAmountsExceedInputAmounts;
+  return {};
+}
+
 [[nodiscard]] inline Result ValidateSpendingTransaction(const protocol::TransactionConstView& tx, std::span<const SpendRecord> spends, int height) {
   // clang-format off
   static const auto ruleset = std::make_tuple(
-    Rule{ValidateSpendingInputs}
+    Rule{ValidateSpendingInputs},
+    Rule{ValidateOutputValuesAtMostInputValues}
   );
   //clang-format on
   const TransactionSpendContext context{tx, spends, height};
@@ -126,8 +136,8 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
 [[nodiscard]] inline Result ValidateSpending(const BlockSpendContext& context) {
   // clang-format off
   static const auto ruleset = std::make_tuple(
-    Rule{ValidateInputPrevoutsUnspent},
     Rule{ValidateOutPointsUnique},
+    Rule{ValidateInputPrevoutsUnspent},
     Rule{ValidateSpendingTransactions}
   );
   // clang-format on

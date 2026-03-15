@@ -53,5 +53,20 @@ TEST(ValidateSpendingTest, ProcessFullySpentDuplicateOutPoint) {
   });
 }
 
+TEST(ValidateSpendingTest, ProcessOutputAmountsExceedInputAmounts) {
+  test::ExpectValidationResult([] {
+    test::Blockchain data;
+
+    // We load a pre-mined chain so coinbase outputs are mature and spendable.
+    data.Load(test::GetDataPath("ValidationPipelineTest_ProcessBlocks.bin"));
+
+    // Append a valid spending block, then corrupt one spend so its outputs exceed its inputs.
+    data.Append(data.Sample(2, true));
+    data.Back()->Transaction(1).Output(0).value += 1;
+    FixMerkleRoot(*data.Back());
+    return data;
+  }, consensus::Error::Spending_OutputAmountsExceedInputAmounts);
+}
+
 }  // namespace
 }  // namespace hornet
