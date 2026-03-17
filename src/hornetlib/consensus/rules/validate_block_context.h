@@ -52,7 +52,7 @@ inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transacti
 // All transactions in the block MUST be final given the block height and locktime rules.
 [[nodiscard]] inline Result ValidateTransactionFinality(
     const BlockEnvironmentContext& context) {
-  const int64_t current_locktime = IsBIPEnabledAtHeight(BIP::LockTimeMedianPast, context.height)
+  const int64_t current_locktime = IsBIPActiveAtHeight(BIP::LockTimeMedianPast, context.height)
                                        ? context.view.MedianTimePast()
                                        : context.block.Header().GetTimestamp();
   for (const auto& tx : context.block.Transactions()) {

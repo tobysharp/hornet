@@ -50,6 +50,7 @@ class SpendJoiner {
 
   bool WaitForQuery() const;
   bool WaitForFetch() const;
+  bool WaitForDependencies() const;
 
   void Cancel();
 
@@ -305,6 +306,15 @@ inline bool SpendJoiner::WaitForQuery() const {
   return state_ != State::Error;
 }
 
+// Blocks until all previous blocks have been appended to the database, ready to call AllOutPointsUnique.
+inline bool SpendJoiner::WaitForDependencies() const {
+  // NOTE: In practice, we're not specifically waiting for the dependencies, but rather for the Query
+  // action to complete, which in turn implies the dependencies are present. This is a practical simplification.
+  release_query_.wait(false);
+  if (state_ == State::Cancelled) throw CancelledException{};
+  return db_.GetContiguousLength() >= height_;
+}
+
 inline bool SpendJoiner::WaitForFetch() const {
   Assert(!disable_fetch_);
   release_fetch_.wait(false);
@@ -319,8 +329,7 @@ inline void SpendJoiner::Cancel() {
 }
 
 inline bool SpendJoiner::AllOutPointsUnique() const {
-  // Ensure that WaitForQuery() returns prior to calling this function.
-  Assert(release_query_);
+  // Ensure that dependencies are in place before calling this method, e.g. by calling WaitForDependencies.
   Assert(db_.GetContiguousLength() >= height_);
   Assert(pin_.has_value());
   const auto timer = metrics_.AddScoped(Time_Query);

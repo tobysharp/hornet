@@ -172,13 +172,9 @@ TEST(ValidationPipelineTest, ProcessInvalidMerkleRoot) {
 TEST(ValidationPipelineTest, ProcessInvalidUTXO) {
   const auto path = CurrentTestVectorPath();
   if (!std::filesystem::exists(path))  {
-    // Construct test data file.
-    test::Blockchain data;
-    constexpr int kLength = 104;
-    for (int height = 1; height < kLength; ++height)
-      data.Append(data.Sample(1'000, true));  // Create maturity-valid chain with spendable outputs.
+    test::Blockchain data{test::GetDataPath("ValidationPipelineTest_ProcessBlocks.bin")};
 
-    auto block = data[kLength - 1];
+    const auto block = data.Back();
     block->Transaction(1).Input(0).previous_output.hash[0]++;  // Corrupt exactly one spend input txid.
     auto header = block->Header();
     header.SetMerkleRoot(consensus::ComputeMerkleRoot(*block).hash);

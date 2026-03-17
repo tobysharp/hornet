@@ -38,6 +38,7 @@ class HeaderTimechain : public ChainTree<protocol::BlockHeader, model::HeaderCon
   ConstIterator ChainTip() const;
   Iterator ChainTip();
   const protocol::Hash& GetChainHash(int height) const;
+  const protocol::Hash& GetHash(BaseConstIterator it) const;
   std::unique_ptr<ValidationView> GetValidationView(BaseConstIterator tip) const;
   std::optional<Locator> MakeLocator(int height, const protocol::Hash& hash) const;
   BaseConstIterator FindStable(int height, const protocol::Hash& hash) const;
@@ -151,7 +152,7 @@ class HeaderTimechain::ValidationView : public consensus::HeaderAncestryView {
   virtual int Length() const override;
   virtual const protocol::Hash& HashAt(int height) const override;
   virtual uint32_t TimestampAt(int height) const override;
-  virtual std::vector<uint32_t> LastNTimestamps(int count) const override;
+  virtual std::vector<uint32_t> LastNTimestamps(int height, int count) const override;
 
  private:
   const HeaderTimechain& timechain_;

@@ -106,10 +106,10 @@ TEST(HeaderTimechainTest, ValidationViewProvidesTimestamps) {
   auto view = tc.GetValidationView(tip);
   EXPECT_EQ(view->TimestampAt(1), 1u);
 
-  const auto stamps = view->LastNTimestamps(2);
+  const auto stamps = view->LastNTimestamps(tip->height, 2);
   ASSERT_EQ(stamps.size(), 2u);
-  EXPECT_EQ(stamps[0], 2u);
-  EXPECT_EQ(stamps[1], 1u);
+  EXPECT_EQ(stamps[0], 1u);
+  EXPECT_EQ(stamps[1], 2u);
 }
 
 TEST(HeaderTimechainTest, PreventsHeaderMutation) {

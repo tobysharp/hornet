@@ -22,7 +22,7 @@ struct Rule {
 
   template <typename... Args>
   Result operator()(const int height, Args&&... args) const {
-    if (bip && !IsBIPEnabledAtHeight(*bip, height)) return {};
+    if (bip && !IsBIPActiveAtHeight(*bip, height)) return {};
     return fn(proj(std::forward<Args>(args)...));
   }
 };

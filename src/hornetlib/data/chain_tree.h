@@ -30,27 +30,23 @@ struct DefaultContextPolicy {
 
   using Context = ContextWrapper<TData>;
 
-  const protocol::Hash& GetChainHash(int height) const {
-    return old_chain_hashes[height - 1 - fork_height];
-  }
+  const protocol::Hash& GetChainHash(int height) const { return old_chain_hashes[height - 1 - fork_height]; }
   Context Extend(const Context& parent, const TData& next) const {
-    return Context{
-        .data = next, .hash = GetChainHash(parent.height + 1), .height = parent.height + 1};
+    return Context{.data = next, .hash = GetChainHash(parent.height + 1), .height = parent.height + 1};
   }
   Context Rewind(const Context& child, const TData& prev) const {
-    return Context{
-        .data = prev, .hash = GetChainHash(child.height - 1), .height = child.height - 1};
+    return Context{.data = prev, .hash = GetChainHash(child.height - 1), .height = child.height - 1};
   }
 };
 
 // This concept defines the requirements for a type to be a valid context policy.
 // It must provide Extend and Rewind methods with the correct signatures.
-template<typename TPolicy, typename TData, typename TContext>
+template <typename TPolicy, typename TData, typename TContext>
 concept ContextPolicy = requires(const TPolicy& policy, const TData& data, const TContext& context) {
-    // Check that an expression like this is valid...
-    { policy.Extend(context, data) } -> std::convertible_to<TContext>;
-    // ...and that an expression like this is also valid.
-    { policy.Rewind(context, data) } -> std::convertible_to<TContext>;
+  // Check that an expression like this is valid...
+  { policy.Extend(context, data) } -> std::convertible_to<TContext>;
+  // ...and that an expression like this is also valid.
+  { policy.Rewind(context, data) } -> std::convertible_to<TContext>;
 };
 
 // Locator is used to resolve an element *either* by height in the main branch,
@@ -78,18 +74,10 @@ class ChainTree {
     Context context;
     int root_height;  // Used for pruning the DAG.
 
-    const TData& Data() const {
-      return context.data;
-    }
-    TData& Data() {
-      return context.data;
-    }
-    const protocol::Hash& GetHash() const {
-      return context.hash;
-    }
-    int Height() const {
-      return context.height;
-    }
+    const TData& Data() const { return context.data; }
+    TData& Data() { return context.data; }
+    const protocol::Hash& GetHash() const { return context.hash; }
+    int Height() const { return context.height; }
   };
   using Iterator = AncestorIterator<false>;
   using ConstIterator = AncestorIterator<true>;
@@ -98,18 +86,10 @@ class ChainTree {
   using PromoteResult = std::pair<Iterator, std::vector<protocol::Hash>>;
 
   // Public methods
-  bool Empty() const {
-    return chain_.empty();
-  }
-  int Size() const {
-    return std::ssize(chain_) + forest_.Size();
-  }
-  int ChainLength() const {
-    return std::ssize(chain_);
-  }
-  int ChainTipHeight() const {
-    return ChainLength() - 1;
-  }
+  bool Empty() const { return chain_.empty(); }
+  int Size() const { return std::ssize(chain_) + forest_.Size(); }
+  int ChainLength() const { return std::ssize(chain_); }
+  int ChainTipHeight() const { return ChainLength() - 1; }
   const TData& ChainElement(int height) const {
     Assert(height >= 0 && height < ChainLength());
     return chain_[height];
@@ -140,7 +120,7 @@ class ChainTree {
   void PruneForest(int min_height);
 
   // Navigation
-  const TData& GetAncestorAtHeight(ConstIterator tip, int height) const;
+  ConstIterator FindAncestorAtHeight(ConstIterator tip, int height) const;
   auto AncestorsToHeight(ConstIterator start, int end_height) const;
 
  protected:
@@ -174,10 +154,9 @@ inline int ChainTree<TData, TContext>::PushToChain(const Context& context) {
 }
 
 template <typename TData, typename TContext>
-inline ChainTree<TData, TContext>::Iterator ChainTree<TData, TContext>::Add(
-    ConstIterator parent,
-    /*const protocol::Hash& parent_hash,*/
-    const Context& context) {
+inline ChainTree<TData, TContext>::Iterator ChainTree<TData, TContext>::Add(ConstIterator parent,
+                                                                            /*const protocol::Hash& parent_hash,*/
+                                                                            const Context& context) {
   // If the parent is invalid, the chain must be empty.
   bool fail = !parent.IsValid() && !chain_.empty();
   // We can only add to one parent location.
@@ -190,18 +169,15 @@ inline ChainTree<TData, TContext>::Iterator ChainTree<TData, TContext>::Add(
   if (fail) util::ThrowInvalidArgument("The parent wasn't found or didn't match the requirements.");
 
   // Now a parent is found in the chain or in the tree.
-  if (parent.ChainHeight() == ChainTipHeight())
-    return BeginChain(PushToChain(context));
-  else
-    return BeginForest(AddChild(parent.Node(), context));
+  if (parent.ChainHeight() == ChainTipHeight()) return BeginChain(PushToChain(context));
+  else return BeginForest(AddChild(parent.Node(), context));
 }
 
 // This method searches for the hash among the chain tip and the nodes of the forest only.
 template <typename TData, typename TContext>
 inline ChainTree<TData, TContext>::ConstFindResult ChainTree<TData, TContext>::FindTipOrForks(
     const protocol::Hash& hash) const {
-  if (!chain_.empty() && chain_tip_context_.hash == hash)
-    return {BeginChain(ChainTipHeight()), chain_tip_context_};
+  if (!chain_.empty() && chain_tip_context_.hash == hash) return {BeginChain(ChainTipHeight()), chain_tip_context_};
 
   const ForestConstIterator node = forest_.Find(hash);
   if (forest_.IsValidNode(node)) return {BeginForest(node), node->data.context};
@@ -211,10 +187,8 @@ inline ChainTree<TData, TContext>::ConstFindResult ChainTree<TData, TContext>::F
 
 // This method searches for the hash among the chain tip and the nodes of the forest only.
 template <typename TData, typename TContext>
-inline ChainTree<TData, TContext>::FindResult ChainTree<TData, TContext>::FindTipOrForks(
-    const protocol::Hash& hash) {
-  if (!chain_.empty() && chain_tip_context_.hash == hash)
-    return {BeginChain(ChainTipHeight()), chain_tip_context_};
+inline ChainTree<TData, TContext>::FindResult ChainTree<TData, TContext>::FindTipOrForks(const protocol::Hash& hash) {
+  if (!chain_.empty() && chain_tip_context_.hash == hash) return {BeginChain(ChainTipHeight()), chain_tip_context_};
 
   const ForestIterator node = forest_.Find(hash);
   if (forest_.IsValidNode(node)) return {BeginForest(node), node->data.context};
@@ -224,19 +198,14 @@ inline ChainTree<TData, TContext>::FindResult ChainTree<TData, TContext>::FindTi
 
 template <typename TData, typename TContext>
 inline ChainTree<TData, TContext>::Iterator ChainTree<TData, TContext>::Find(const Locator& locator) {
-  if (std::holds_alternative<int>(locator))
-    return BeginChain(std::get<int>(locator));
-  else
-    return BeginForest(forest_.Find(std::get<protocol::Hash>(locator)));
+  if (std::holds_alternative<int>(locator)) return BeginChain(std::get<int>(locator));
+  else return BeginForest(forest_.Find(std::get<protocol::Hash>(locator)));
 }
 
 template <typename TData, typename TContext>
-inline ChainTree<TData, TContext>::ConstIterator ChainTree<TData, TContext>::Find(
-    const Locator& locator) const {
-  if (std::holds_alternative<int>(locator)) 
-    return BeginChain(std::get<int>(locator));
-  else
-    return BeginForest(forest_.Find(std::get<protocol::Hash>(locator)));
+inline ChainTree<TData, TContext>::ConstIterator ChainTree<TData, TContext>::Find(const Locator& locator) const {
+  if (std::holds_alternative<int>(locator)) return BeginChain(std::get<int>(locator));
+  else return BeginForest(forest_.Find(std::get<protocol::Hash>(locator)));
 }
 
 template <typename TData, typename TContext>
@@ -295,8 +264,7 @@ inline ChainTree<TData, TContext>::PromoteResult ChainTree<TData, TContext>::Pro
   chain_tip_context_ = fork;
 
   // Now walk forward down the new branch, moving headers into the heaviest chain.
-  for (; !stack.empty(); stack.pop()) 
-    PushToChain(stack.top()->data.context);
+  for (; !stack.empty(); stack.pop()) PushToChain(stack.top()->data.context);
   result.first = ChainTip().first;
 
   // Finally delete the chain containing the new tip from the DAG.
@@ -316,8 +284,7 @@ inline void ChainTree<TData, TContext>::PruneForest(int max_keep_depth) {
   min_root_height_ = std::numeric_limits<int>::max();
   const auto range = forest_.ForwardFromOldest();
   for (auto it = range.begin(); it != range.end();) {
-    if ((it->data.root_height) < min_keep_height)
-      it = forest_.Erase(it);
+    if ((it->data.root_height) < min_keep_height) it = forest_.Erase(it);
     else {
       min_root_height_ = std::min<int>(min_root_height_, it->data.root_height);
       ++it;
@@ -326,30 +293,28 @@ inline void ChainTree<TData, TContext>::PruneForest(int max_keep_depth) {
 }
 
 template <typename TData, typename TContext>
-inline ChainTree<TData, TContext>::ForestIterator ChainTree<TData, TContext>::AddChild(
-    const ForestNode* parent, const Context& context) {
+inline ChainTree<TData, TContext>::ForestIterator ChainTree<TData, TContext>::AddChild(const ForestNode* parent,
+                                                                                       const Context& context) {
   const int root_height = parent != nullptr ? parent->data.root_height : context.height;
   min_root_height_ = std::min(min_root_height_, root_height);
   return forest_.AddChild(parent, {context, root_height});
 }
 
 template <typename TData, typename TContext>
-inline const TData& ChainTree<TData, TContext>::GetAncestorAtHeight(ConstIterator tip,
-                                                                    int height) const {
-  if (tip.InChain()) return chain_[height];
+inline ChainTree<TData, TContext>::ConstIterator ChainTree<TData, TContext>::FindAncestorAtHeight(ConstIterator tip,
+                                                                                                  int height) const {
+  Assert(height >= 0 && height <= tip.GetHeight() && tip.IsValid());
 
-  if (tip.Node()->data.root_height > height)
-    return chain_[height];
-  else {
-    for (const auto& node : forest_.UpFromNode(tip.Node()))
-      if (node.data.Height() == height) return node.data.Data();
-  }
+  if (tip.InChain() || height < tip.Node()->data.root_height) return BeginChain(height);
+
+  for (auto node = tip.Node(); node != nullptr; node = node->parent)
+    if (node->data.context.height == height) return {*this, node};
+
   util::ThrowRuntimeError("Couldn't find an ancestor at height ", height);
 }
 
 template <typename TData, typename TContext>
-inline ChainTree<TData, TContext>::ConstIterator ChainTree<TData, TContext>::BeginChain(
-    int height) const {
+inline ChainTree<TData, TContext>::ConstIterator ChainTree<TData, TContext>::BeginChain(int height) const {
   return {*this, std::max(-1, height)};
 }
 
@@ -365,14 +330,12 @@ inline ChainTree<TData, TContext>::ConstIterator ChainTree<TData, TContext>::Beg
 }
 
 template <typename TData, typename TContext>
-inline ChainTree<TData, TContext>::Iterator ChainTree<TData, TContext>::BeginForest(
-    ForestIterator node) {
+inline ChainTree<TData, TContext>::Iterator ChainTree<TData, TContext>::BeginForest(ForestIterator node) {
   return {*this, forest_.IsValidNode(node) ? &*node : nullptr};
 }
 
 template <typename TData, typename TContext>
-inline auto ChainTree<TData, TContext>::AncestorsToHeight(ConstIterator start,
-                                                          int end_height) const {
+inline auto ChainTree<TData, TContext>::AncestorsToHeight(ConstIterator start, int end_height) const {
   static_assert(std::forward_iterator<Iterator>);
   static_assert(std::sentinel_for<int, Iterator>);
   return std::ranges::subrange{start, BeginChain(end_height)};
@@ -391,15 +354,13 @@ class ChainTree<TData, TContext>::AncestorIterator {
   using difference_type = std::ptrdiff_t;
 
   using NodeType = std::conditional_t<kIsConst, const ForestNode, ForestNode>;
-  using ChainTreeType =
-      std::conditional_t<kIsConst, const ChainTree<TData, TContext>, ChainTree<TData, TContext>>;
+  using ChainTreeType = std::conditional_t<kIsConst, const ChainTree<TData, TContext>, ChainTree<TData, TContext>>;
 
   // Constructors
   AncestorIterator() : chain_tree_(nullptr), node_(), height_(-1) {}
   AncestorIterator(ChainTreeType& chain_tree, NodeType* tip = nullptr, int height = -1)
       : chain_tree_(&chain_tree), node_(tip), height_(height) {}
-  AncestorIterator(ChainTreeType& chain_tree, int height)
-      : AncestorIterator(chain_tree, nullptr, height) {}
+  AncestorIterator(ChainTreeType& chain_tree, int height) : AncestorIterator(chain_tree, nullptr, height) {}
   AncestorIterator(const AncestorIterator& rhs) = default;
   AncestorIterator(AncestorIterator&&) = default;
 
@@ -416,27 +377,18 @@ class ChainTree<TData, TContext>::AncestorIterator {
   bool operator==(const AncestorIterator& rhs) const = default;
 
   // Custom operators
-  operator bool() const {
-    return IsValid();
-  }
+  operator bool() const { return IsValid(); }
   reference operator*() const {
-    if (InChain())
-      return chain_tree_->chain_[height_];
-    else if (InTree())
-      return node_->data.Data();
-    else
-      util::ThrowRuntimeError("Tried to access a non-existent element.");
+    if (InChain()) return chain_tree_->chain_[height_];
+    else if (InTree()) return node_->data.Data();
+    else util::ThrowRuntimeError("Tried to access a non-existent element.");
   }
-  pointer operator->() const {
-    return &operator*();
-  }
+  pointer operator->() const { return &operator*(); }
   AncestorIterator& operator++() {
     if (InTree()) {
-      if (node_->parent == nullptr) 
-        height_ = node_->data.Height() - 1;
+      if (node_->parent == nullptr) height_ = node_->data.Height() - 1;
       node_ = node_->parent;
-    } else if (InChain())
-      --height_;
+    } else if (InChain()) --height_;
     return *this;
   }
   AncestorIterator operator++(int) {
@@ -447,38 +399,22 @@ class ChainTree<TData, TContext>::AncestorIterator {
 
   // Public methods
   std::optional<value_type> TryGet() const {
-    if (InChain())
-      return chain_tree_->chain_[height_];
-    else if (InTree())
-      return node_->data.Data();
-    else
-      return {};
+    if (InChain()) return chain_tree_->chain_[height_];
+    else if (InTree()) return node_->data.Data();
+    else return {};
   }
-  bool IsValid() const {
-    return InChain() || InTree();
-  }
-  int GetHeight() const {
-    return InTree() ? node_->data.Height() : height_;
-  }
-  NodeType* Node() const {
-    return node_;
-  }
-  Locator MakeLocator(const protocol::Hash& hash) const {
-    return InTree() ? Locator{hash} : Locator{height_};
-  }
+  bool IsValid() const { return InChain() || InTree(); }
+  int GetHeight() const { return InTree() ? node_->data.Height() : height_; }
+  NodeType* Node() const { return node_; }
+  Locator MakeLocator(const protocol::Hash& hash) const { return InTree() ? Locator{hash} : Locator{height_}; }
+
  protected:
   // Protected types and methods are internal to the enclosing ChainTree<TData, TMetadata> class.
   friend ChainTree<TData, TContext>;
 
-  bool InChain() const {
-    return height_ >= 0 && height_ < chain_tree_->ChainLength();
-  }
-  bool InTree() const {
-    return node_ != nullptr;
-  }
-  int ChainHeight() const {
-    return height_;
-  }
+  bool InChain() const { return height_ >= 0 && height_ < chain_tree_->ChainLength(); }
+  bool InTree() const { return node_ != nullptr; }
+  int ChainHeight() const { return height_; }
 
  private:
   // Private data is internal to this class.
