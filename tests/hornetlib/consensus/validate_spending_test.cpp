@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "hornetlib/consensus/merkle.h"
+#include "hornetlib/consensus/rules/validate_spending.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/data/header_timechain.h"
 #include "hornetlib/data/utxo/database.h"
