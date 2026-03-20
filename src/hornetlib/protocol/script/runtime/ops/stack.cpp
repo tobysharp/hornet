@@ -18,7 +18,7 @@ inline static void VerifyMinimal(const lang::Instruction& instruction) {
     if (lang::IsEncodedZero(data))
       return Op::PushEmpty;
     else if (data.size() == 1 && data[0] >= 1 && data[0] <= 16)
-      return lang::ImmediateToOp(data[0]);
+      return lang::ConstantToOp(data[0]);
     else if (data.size() == 1 && data[0] == 0x81)
       return Op::PushConstNegative1;
     else if (data.size() <= uint8_t(Op::PushSizeMax))
@@ -68,7 +68,7 @@ void RegisterStackHandlers(Dispatcher& table) {
   table[Op::PushEmpty] = &OnPushEmpty;
   for (auto op = Op::PushSize1; op <= Op::PushData4; ++op) table[op] = &OnPushData;
   table[Op::PushConstNegative1] = &OnPushConst<-1>;
-  util::UnrollRange<1, 16 + 1>([&](auto i) { table[lang::ImmediateToOp(i)] = &OnPushConst<i>; });
+  util::UnrollRange<1, 16 + 1>([&](auto i) { table[lang::ConstantToOp(i)] = &OnPushConst<i>; });
   table[Op::Duplicate] = &OnDuplicate;
   table[Op::Drop] = &OnDrop;
 }

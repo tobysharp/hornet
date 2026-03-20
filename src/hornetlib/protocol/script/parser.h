@@ -19,7 +19,17 @@ class Parser {
 
   Parser(lang::Bytes bytes) : script_(bytes), cursor_(bytes.begin()) {}
 
+  bool IsEof() const { return cursor_ >= script_.end(); }
+  bool IsValid() const { return IsEof() || Peek(); }
+
   std::optional<lang::Instruction> Next() {
+    if (cursor_ >= script_.end()) return std::nullopt;
+    const auto rv = Peek();
+    if (rv) cursor_ += rv->size;
+    return rv;
+  }
+
+  std::optional<lang::Instruction> Peek() const {
     if (cursor_ >= script_.end()) return std::nullopt;
 
     const auto it_opcode = cursor_;
@@ -27,19 +37,15 @@ class Parser {
     const auto it_pushdata = it_opcode + 1;
     const auto size = ReadInstructionSize(opcode, it_pushdata);
     if (!size || it_pushdata + size->pushdata_bytes + size->payload_bytes > script_.end()) {
-      cursor_ = script_.end();
+      // Malformed script means there are no more valid instructions, yet we didn't reach the end of the bytes.
+      // Note IsEof() will return false, indicating that we didn't cleanly parse the whole stream.
       return std::nullopt;
     }
     const auto it_payload = it_pushdata + size->pushdata_bytes;
-    cursor_ = it_payload + size->payload_bytes;
-    return lang::Instruction{.opcode = opcode, 
+    return {{.opcode = opcode, 
       .data = {size->payload_bytes > 0 ? &*it_payload : nullptr, size->payload_bytes},
-      .offset = int(it_opcode - script_.begin())};
-  }
-
-  std::optional<lang::Op> Peek() const {
-    if (cursor_ >= script_.end()) return std::nullopt;
-    return static_cast<lang::Op>(*cursor_);
+      .offset = int(it_opcode - script_.begin()),
+      .size = int(it_payload + size->payload_bytes - cursor_)}};
   }
 
   lang::Bytes Script() const {

@@ -25,6 +25,9 @@ class View {
     using value_type        = lang::Instruction;
 
     Iterator(lang::Bytes data) : parser_(data), op_(parser_.Next()) {}
+    bool IsValid() const {
+      return parser_.IsValid();
+    }
     bool operator==(EofTag) const {
       return !op_.has_value();
     }
@@ -52,16 +55,29 @@ class View {
     friend bool operator !=(EofTag eof, const Iterator& it) {
       return it != eof;
     }
+
    private:
     Parser parser_;
     std::optional<lang::Instruction> op_;
   };
 
+  class Stream {
+   public:
+    Stream(Iterator begin, EofTag end) : range_{begin, end} {}
+    operator bool() const { return range_.begin().IsValid(); }
+    auto begin() { return range_.begin(); }
+    auto end() { return range_.end(); }
+    auto begin() const { return range_.begin(); }
+    auto end() const { return range_.end(); }
+   private:
+    util::IteratorRange<Iterator, EofTag> range_;
+  };
+
   View(lang::Bytes bytes) : bytes_(bytes) {}
 
   // Returns an iterable sequence of Instruction objects.
-  auto Instructions() const {
-    return util::MakeRange<Iterator, EofTag>(bytes_, {});
+  Stream Instructions() const {
+    return {bytes_, {}};
   }
 
   // Returns true if the script starts with the given prefix.

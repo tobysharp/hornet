@@ -120,7 +120,7 @@ TEST(ScriptParserTest, PeekDoesNotAdvance) {
   if constexpr (requires(Parser q) { q.Peek(); }) {
     auto first = p.Peek();
     ASSERT_TRUE(first.has_value());
-    EXPECT_EQ(static_cast<uint8_t>(*first), 0x01);
+    EXPECT_EQ(static_cast<uint8_t>(first->opcode), 0x01);
 
     // Next should return the same instruction, then advance.
     auto n = p.Next();

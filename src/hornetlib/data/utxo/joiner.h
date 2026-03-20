@@ -19,7 +19,7 @@ namespace hornet::data::utxo {
 
 class SpendJoiner {
  public:
-  enum class State { Init, Parsed, Appended, QueriedPart, Queried, FetchedPart, Fetched, Joined, Error, Cancelled };
+  enum class State { Init, Parsed, Appended, QueriedPart, Queried, FetchedPart, Fetched, Error, Cancelled };
 
   using Callback = std::function<consensus::Result(const consensus::SpendRecord&)>;
 
@@ -45,7 +45,7 @@ class SpendJoiner {
 
   bool IsJoinReady() const { return state_ == State::Fetched; }
   bool IsAssumeValid() const { return disable_fetch_; }
-  consensus::Result Join(auto&& callback);
+  consensus::Result Join(auto&& callback) const;
   bool AllOutPointsUnique() const;
 
   bool WaitForQuery() const;
@@ -180,7 +180,7 @@ inline void SpendJoiner::Fetch() {
 }
 
 // Join a range of inputs with its found output and call back with the merged view.
-inline consensus::Result SpendJoiner::Join(auto&& callback) {
+inline consensus::Result SpendJoiner::Join(auto&& callback) const {
   Assert(state_ == State::Fetched);
   Assert(inputs_.size() == outputs_.size());
   Assert(!disable_fetch_);
@@ -226,11 +226,6 @@ inline consensus::Result SpendJoiner::Join(auto&& callback) {
       if (failed.compare_exchange_strong(expected, true)) rv = result;
     }
   });
-  inputs_.clear();
-  outputs_.clear();
-  scripts_.clear();
-  block_.reset();
-  state_ = State::Joined;
   return rv;
 }
 
