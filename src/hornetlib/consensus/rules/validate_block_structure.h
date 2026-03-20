@@ -65,7 +65,7 @@ namespace hornet::consensus::rules {
 [[nodiscard]] inline Result ValidateSignatureOps(const protocol::Block& block) {
   /* mutable */ int sig_ops = 0;
   for (const auto& tx : block.Transactions())
-    sig_ops += sigops::LegacyCount(tx);
+    sig_ops += scripts::LegacySigOpCount(tx);
   if (sig_ops > 20'000) return Error::Structure_BadSigOpCount;
   return {};
 }

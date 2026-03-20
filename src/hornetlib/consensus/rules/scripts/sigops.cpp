@@ -7,37 +7,35 @@
 #include "hornetlib/consensus/utxo.h"
 #include "hornetlib/protocol/transaction.h"
 
-namespace hornet::consensus::rules::sigops {
+namespace hornet::consensus::rules::scripts {
 
-int LegacyCount(protocol::TransactionConstView tx) {
+int LegacySigOpCount(protocol::TransactionConstView tx) {
   /* mutable */ int sum = 0;
-  for (const auto& script : tx.SignatureScripts()) sum += detail::ScriptCount(script);
-  for (const auto& script : tx.PkScripts()) sum += detail::ScriptCount(script);
+  for (const auto& script : tx.SignatureScripts()) sum += sigops::ScriptCount(script);
+  for (const auto& script : tx.PkScripts()) sum += sigops::ScriptCount(script);
   return sum;
 }
 
-int TotalCost(protocol::TransactionConstView tx, std::span<const SpendRecord> spends, uint64_t flags) {
+int SigOpCost(protocol::TransactionConstView tx, std::span<const SpendRecord> spends, uint64_t flags) {
   using namespace scripts;
   constexpr int kWitnessScale = 4;
   Assert(!IsFlag(flags, VerifyFlag::Witness) || IsFlag(flags, VerifyFlag::P2SH));
   Assert(tx.InputCount() == std::ssize(spends));
 
   // Count the number of sig-ops in legacy pubkey and sig scripts.
-  const int legacy_sig_ops = LegacyCount(tx);
+  const int legacy_cost = LegacySigOpCount(tx) * kWitnessScale;
 
   // Coin-base transactions only contribute legacy sig-ops.
-  if (tx.IsCoinBase()) return legacy_sig_ops * kWitnessScale;
+  if (tx.IsCoinBase()) return legacy_cost;
 
-  // Count the number of P2SH sig-ops if the P2SH flag is enabled.
-  const int p2sh_sig_ops = detail::P2SHCount(tx, spends, flags);
-
-  // Count the number of witness sig-ops across all inputs.
-  const int witness_sig_ops = util::Sum(0, tx.InputCount(), [&](int i) {
-    return detail::WitnessCount(tx.SignatureScript(i), spends[i].pubkey_script, tx.InputWitness(i), flags);
+  // Counts the cost of P2SH and witness sig-ops across all inputs.
+  const int spend_path_cost = util::Sum(0, tx.InputCount(), [&](int i) {
+    const SpendScripts spend{spends[i].pubkey_script, tx.SignatureScript(i), tx.InputWitness(i), flags};
+    return sigops::SpendPathCost(spend, SpendPath::Classify(spend));
   });
 
   // Scale the non-witness sig-ops by a factor of 4, and sum for the total transaction sig-op cost.
-  return (legacy_sig_ops + p2sh_sig_ops) * kWitnessScale + witness_sig_ops;
+  return legacy_cost + spend_path_cost;
 }
 
-}  // namespace hornet::consensus::rules::sigops
+}  // namespace hornet::consensus::rules::scripts

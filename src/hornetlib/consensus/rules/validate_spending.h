@@ -201,7 +201,7 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
   return context.unspent.ForEachTransaction(context.block,
     [&](const protocol::TransactionConstView& tx, std::span<const SpendRecord> spends) { 
       Assert(tx.InputCount() == std::ssize(spends));
-      sigops_cost += sigops::TotalCost(tx, spends, context.script_flags);
+      sigops_cost += scripts::SigOpCost(tx, spends, context.script_flags);
       return sigops_cost > kMaxBlockSigOpCost ? Error::Spending_BadSigOpsCost : Result::Ok;
   });
 }
