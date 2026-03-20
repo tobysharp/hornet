@@ -38,7 +38,6 @@ struct InputSpendContext {
   // clang-format off
   static const auto ruleset = std::make_tuple(
     Rule{ValidateCoinbaseMaturity}         // Coinbase outputs MUST NOT be spent until 100 blocks after their creation.
-    // Rule{ValidateInputValueInRange}
   );
   //clang-format on
   const InputSpendContext context{tx, spend, height};

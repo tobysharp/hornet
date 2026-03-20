@@ -1,5 +1,10 @@
-#include "hornetlib/consensus/merkle.h"
 #include "hornetlib/consensus/rules/validate_spending.h"
+
+#include <cstdint>
+#include <memory>
+#include <vector>
+
+#include "hornetlib/consensus/merkle.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/data/header_timechain.h"
 #include "hornetlib/data/utxo/database.h"
@@ -9,23 +14,18 @@
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/transaction.h"
 
-#include <cstdint>
-#include <memory>
-#include <vector>
-
+#include "hornetlib/consensus/validate_chain_harness.h"
 #include "testutil/blockchain.h"
 #include "testutil/temp_folder.h"
 
-#include "hornetlib/consensus/validate_chain_harness.h"
-
 #include <gtest/gtest.h>
 
-namespace hornet {
+namespace hornet::consensus::rules {
 namespace {
 
 void FixMerkleRoot(protocol::Block& block) {
   auto header = block.Header();
-  header.SetMerkleRoot(consensus::ComputeMerkleRoot(block).hash);
+  header.SetMerkleRoot(ComputeMerkleRoot(block).hash);
   block.SetHeader(header);
 }
 
@@ -50,7 +50,7 @@ class SequenceLocksHarness {
   }
 
   template <typename Callback>
-  consensus::Result ValidateCandidateTransactions(const protocol::Block& block,
+  Result ValidateCandidateTransactions(const protocol::Block& block,
                                                   Callback&& callback) const {
     data::HeaderTimechain headers;
     test::TempFolder datadir;
@@ -69,10 +69,10 @@ class SequenceLocksHarness {
         db, std::make_shared<const protocol::Block>(block), height);
 
     while (joiner->IsAdvanceReady()) joiner->Advance();
-    if (!joiner->IsJoinReady()) return consensus::Error::Spending_PrevoutNotUnspent;
+    if (!joiner->IsJoinReady()) return Error::Spending_PrevoutNotUnspent;
 
     return joiner->Join([&](const protocol::TransactionConstView& tx,
-                            std::span<const consensus::SpendRecord> spends) {
+                            std::span<const SpendRecord> spends) {
       return callback(tx, spends, *ancestry, height);
     });
   }
@@ -126,7 +126,7 @@ TEST(ValidateSpendingTest, ProcessDuplicateOutPoint) {
     // ... and just patch up the Merkle root.
     FixMerkleRoot(*data[3]);
     return data;
-  }, consensus::Error::Spending_DuplicateOutPoint);
+  }, Error::Spending_DuplicateOutPoint);
 }
 
 // Duplicating a fully-spent coinbase transaction does not violate the BIP30 check.
@@ -158,19 +158,19 @@ TEST(ValidateSpendingTest, ProcessOutputAmountsExceedInputAmounts) {
     data.Back()->Transaction(1).Output(0).value += 1;
     FixMerkleRoot(*data.Back());
     return data;
-  }, consensus::Error::Spending_OutputAmountsExceedInputAmounts);
+  }, Error::Spending_OutputAmountsExceedInputAmounts);
 }
 
 TEST(ValidateSpendingTest, SequenceLocksIgnoreVersion1Transactions) {
   const SequenceLocksHarness harness;
   const protocol::Block block = harness.MakeCandidateBlock({{120, 1u}}, 1);
   EXPECT_EQ(harness.ValidateCandidateTransactions(block, [](const protocol::TransactionConstView& tx,
-                                                            std::span<const consensus::SpendRecord> spends,
-                                                            const consensus::HeaderAncestryView& ancestry,
+                                                            std::span<const SpendRecord> spends,
+                                                            const HeaderAncestryView& ancestry,
                                                             int height) {
-              return consensus::rules::ValidateSequenceLocks({tx, spends, ancestry, height});
+              return ValidateSequenceLocks({tx, spends, ancestry, height});
             }),
-            consensus::Result{});
+            Result{});
 }
 
 TEST(ValidateSpendingTest, SequenceLocksIgnoreDisabledInputs) {
@@ -179,36 +179,36 @@ TEST(ValidateSpendingTest, SequenceLocksIgnoreDisabledInputs) {
   const SequenceLocksHarness harness;
   const protocol::Block block = harness.MakeCandidateBlock({{120, kDisableMask | 1u}});
   EXPECT_EQ(harness.ValidateCandidateTransactions(block, [](const protocol::TransactionConstView& tx,
-                                                            std::span<const consensus::SpendRecord> spends,
-                                                            const consensus::HeaderAncestryView& ancestry,
+                                                            std::span<const SpendRecord> spends,
+                                                            const HeaderAncestryView& ancestry,
                                                             int height) {
-              return consensus::rules::ValidateSequenceLocks({tx, spends, ancestry, height});
+              return ValidateSequenceLocks({tx, spends, ancestry, height});
             }),
-            consensus::Result{});
+            Result{});
 }
 
 TEST(ValidateSpendingTest, SequenceLocksRejectNonFinalHeightLock) {
   const SequenceLocksHarness harness;
   const protocol::Block block = harness.MakeCandidateBlock({{120, 21u}});
   EXPECT_EQ(harness.ValidateCandidateTransactions(block, [](const protocol::TransactionConstView& tx,
-                                                            std::span<const consensus::SpendRecord> spends,
-                                                            const consensus::HeaderAncestryView& ancestry,
+                                                            std::span<const SpendRecord> spends,
+                                                            const HeaderAncestryView& ancestry,
                                                             int height) {
-              return consensus::rules::ValidateSequenceLocks({tx, spends, ancestry, height});
+              return ValidateSequenceLocks({tx, spends, ancestry, height});
             }),
-            consensus::Error::Spending_NonFinalTransaction);
+            Error::Spending_NonFinalTransaction);
 }
 
 TEST(ValidateSpendingTest, SequenceLocksAcceptFinalHeightLock) {
   const SequenceLocksHarness harness;
   const protocol::Block block = harness.MakeCandidateBlock({{120, 20u}});
   EXPECT_EQ(harness.ValidateCandidateTransactions(block, [](const protocol::TransactionConstView& tx,
-                                                            std::span<const consensus::SpendRecord> spends,
-                                                            const consensus::HeaderAncestryView& ancestry,
+                                                            std::span<const SpendRecord> spends,
+                                                            const HeaderAncestryView& ancestry,
                                                             int height) {
-              return consensus::rules::ValidateSequenceLocks({tx, spends, ancestry, height});
+              return ValidateSequenceLocks({tx, spends, ancestry, height});
             }),
-            consensus::Result{});
+            Result{});
 }
 
 TEST(ValidateSpendingTest, SequenceLocksRejectNonFinalTimeLock) {
@@ -217,12 +217,12 @@ TEST(ValidateSpendingTest, SequenceLocksRejectNonFinalTimeLock) {
   const SequenceLocksHarness harness;
   const protocol::Block block = harness.MakeCandidateBlock({{120, kTimeMask | 24u}});
   EXPECT_EQ(harness.ValidateCandidateTransactions(block, [](const protocol::TransactionConstView& tx,
-                                                            std::span<const consensus::SpendRecord> spends,
-                                                            const consensus::HeaderAncestryView& ancestry,
+                                                            std::span<const SpendRecord> spends,
+                                                            const HeaderAncestryView& ancestry,
                                                             int height) {
-              return consensus::rules::ValidateSequenceLocks({tx, spends, ancestry, height});
+              return ValidateSequenceLocks({tx, spends, ancestry, height});
             }),
-            consensus::Error::Spending_NonFinalTransaction);
+            Error::Spending_NonFinalTransaction);
 }
 
 TEST(ValidateSpendingTest, SequenceLocksAcceptFinalTimeLock) {
@@ -231,12 +231,12 @@ TEST(ValidateSpendingTest, SequenceLocksAcceptFinalTimeLock) {
   const SequenceLocksHarness harness;
   const protocol::Block block = harness.MakeCandidateBlock({{120, kTimeMask | 23u}});
   EXPECT_EQ(harness.ValidateCandidateTransactions(block, [](const protocol::TransactionConstView& tx,
-                                                            std::span<const consensus::SpendRecord> spends,
-                                                            const consensus::HeaderAncestryView& ancestry,
+                                                            std::span<const SpendRecord> spends,
+                                                            const HeaderAncestryView& ancestry,
                                                             int height) {
-              return consensus::rules::ValidateSequenceLocks({tx, spends, ancestry, height});
+              return ValidateSequenceLocks({tx, spends, ancestry, height});
             }),
-            consensus::Result{});
+            Result{});
 }
 
 TEST(ValidateSpendingTest, SequenceLocksUseMostRestrictiveInput) {
@@ -245,25 +245,25 @@ TEST(ValidateSpendingTest, SequenceLocksUseMostRestrictiveInput) {
   const SequenceLocksHarness harness;
   const protocol::Block block = harness.MakeCandidateBlock({{120, 1u}, {120, kTimeMask | 24u}});
   EXPECT_EQ(harness.ValidateCandidateTransactions(block, [](const protocol::TransactionConstView& tx,
-                                                            std::span<const consensus::SpendRecord> spends,
-                                                            const consensus::HeaderAncestryView& ancestry,
+                                                            std::span<const SpendRecord> spends,
+                                                            const HeaderAncestryView& ancestry,
                                                             int height) {
-              return consensus::rules::ValidateSequenceLocks({tx, spends, ancestry, height});
+              return ValidateSequenceLocks({tx, spends, ancestry, height});
             }),
-            consensus::Error::Spending_NonFinalTransaction);
+            Error::Spending_NonFinalTransaction);
 }
 
 TEST(ValidateSpendingTest, SpendingTransactionSkipsSequenceLocksBeforeActivation) {
   const SequenceLocksHarness harness;
   const protocol::Block block = harness.MakeCandidateBlock({{20, 121u}});
   EXPECT_EQ(harness.ValidateCandidateTransactions(block, [](const protocol::TransactionConstView& tx,
-                                                            std::span<const consensus::SpendRecord> spends,
-                                                            const consensus::HeaderAncestryView& ancestry,
+                                                            std::span<const SpendRecord> spends,
+                                                            const HeaderAncestryView& ancestry,
                                                             int height) {
-              return consensus::rules::ValidateSpendingTransaction(tx, spends, ancestry, height);
+              return ValidateSpendingTransaction(tx, spends, ancestry, height);
             }),
-            consensus::Result{});
+            Result{});
 }
 
 }  // namespace
-}  // namespace hornet
+}  // namespace hornet::consensus::rules
