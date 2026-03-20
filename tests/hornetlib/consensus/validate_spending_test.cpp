@@ -168,7 +168,7 @@ TEST(ValidateSpendingTest, SequenceLocksIgnoreVersion1Transactions) {
                                                             std::span<const consensus::SpendRecord> spends,
                                                             const consensus::HeaderAncestryView& ancestry,
                                                             int height) {
-              return consensus::rules::ValidateSequenceLocks({tx, spends, ancestry, height});
+              return consensus::rules::ValidateSequenceLocks({tx, spends, ancestry, height, 0});
             }),
             consensus::Result{});
 }
@@ -182,7 +182,7 @@ TEST(ValidateSpendingTest, SequenceLocksIgnoreDisabledInputs) {
                                                             std::span<const consensus::SpendRecord> spends,
                                                             const consensus::HeaderAncestryView& ancestry,
                                                             int height) {
-              return consensus::rules::ValidateSequenceLocks({tx, spends, ancestry, height});
+              return consensus::rules::ValidateSequenceLocks({tx, spends, ancestry, height, 0});
             }),
             consensus::Result{});
 }
@@ -194,7 +194,7 @@ TEST(ValidateSpendingTest, SequenceLocksRejectNonFinalHeightLock) {
                                                             std::span<const consensus::SpendRecord> spends,
                                                             const consensus::HeaderAncestryView& ancestry,
                                                             int height) {
-              return consensus::rules::ValidateSequenceLocks({tx, spends, ancestry, height});
+              return consensus::rules::ValidateSequenceLocks({tx, spends, ancestry, height, 0});
             }),
             consensus::Error::Spending_NonFinalTransaction);
 }
@@ -206,7 +206,7 @@ TEST(ValidateSpendingTest, SequenceLocksAcceptFinalHeightLock) {
                                                             std::span<const consensus::SpendRecord> spends,
                                                             const consensus::HeaderAncestryView& ancestry,
                                                             int height) {
-              return consensus::rules::ValidateSequenceLocks({tx, spends, ancestry, height});
+              return consensus::rules::ValidateSequenceLocks({tx, spends, ancestry, height, 0});
             }),
             consensus::Result{});
 }
@@ -220,7 +220,7 @@ TEST(ValidateSpendingTest, SequenceLocksRejectNonFinalTimeLock) {
                                                             std::span<const consensus::SpendRecord> spends,
                                                             const consensus::HeaderAncestryView& ancestry,
                                                             int height) {
-              return consensus::rules::ValidateSequenceLocks({tx, spends, ancestry, height});
+              return consensus::rules::ValidateSequenceLocks({tx, spends, ancestry, height, 0});
             }),
             consensus::Error::Spending_NonFinalTransaction);
 }
@@ -234,7 +234,7 @@ TEST(ValidateSpendingTest, SequenceLocksAcceptFinalTimeLock) {
                                                             std::span<const consensus::SpendRecord> spends,
                                                             const consensus::HeaderAncestryView& ancestry,
                                                             int height) {
-              return consensus::rules::ValidateSequenceLocks({tx, spends, ancestry, height});
+              return consensus::rules::ValidateSequenceLocks({tx, spends, ancestry, height, 0});
             }),
             consensus::Result{});
 }

@@ -52,6 +52,9 @@ enum class Op : uint8_t {
   // Arithmetic operations.
   Add = 0x93,
 
+  // Cryptographic operations.
+  Hash160 = 0xa9,
+
   // Check signature opcodes.
   CheckSig = 0xac,
   CheckSigVerify = 0xad,
@@ -87,26 +90,35 @@ inline constexpr Op& operator++(Op& op) {
   return op = op + 1;
 }
 
-inline constexpr bool IsImmediate(int value) {
+inline constexpr bool IsConstantPushable(int value) {
   return value >= kImmediateMin && value <= kImmediateMin + (Op::PushConstMax - Op::PushConstMin);
 }
 
-inline constexpr bool IsImmediate(Op opcode) {
+inline constexpr bool IsConstantPush(Op opcode) {
   return opcode >= Op::PushConstMin && opcode <= Op::PushConstMax;
 }
 
-inline constexpr Op ImmediateToOp(int value) {
-  Assert(IsImmediate(value));
+inline constexpr Op ConstantToOp(int value) {
+  Assert(IsConstantPushable(value));
   return value == 0 ? Op::PushConst0 : Op::PushConstMin + (value - kImmediateMin);
 }
 
-inline constexpr int OpToImmediate(Op opcode) {
-  Assert(IsImmediate(opcode));
+inline constexpr int OpToConstant(Op opcode) {
+  Assert(IsConstantPush(opcode));
   return kImmediateMin + (opcode - Op::PushConstMin);
 }
 
 inline constexpr bool IsPush(Op opcode) {
   return opcode <= Op::PushConstMax;
+}
+
+inline constexpr bool IsDirectPush(Op opcode) {
+  return opcode >= Op::PushSize1 && opcode <= Op::PushSizeMax;
+}
+
+inline constexpr int DirectPushSize(Op opcode) {
+  Assert(IsDirectPush(opcode));
+  return +opcode;
 }
 
 }  // namespace hornet::protocol::script::lang

@@ -23,6 +23,8 @@
 
 namespace hornet::protocol {
 
+using Script = std::span<const uint8_t>;
+
 struct OutPoint {
   Hash hash = {};
   uint32_t index = 0;
@@ -334,6 +336,30 @@ class TransactionDetail {
   mutable util::Optional<protocol::Hash> wtxid; 
 };
 
+class WitnessView {
+ public:
+  using Element = std::span<const uint8_t>;
+
+  WitnessView() {}
+  WitnessView(std::span<const Component> components, std::span<const uint8_t> data) :
+    components_(components), data_(data) {}
+
+  int Size() const { return std::ssize(components_); }
+  bool Empty() const { return Size() == 0; }
+
+  Element operator[](int index) const {
+    return components_[index].Span(data_);
+  }
+
+  Element Back() const {
+    return operator[](Size() - 1);
+  }
+
+ private:
+  const std::span<const Component> components_;
+  const std::span<const uint8_t> data_; 
+};
+
 // The TransactionViewT class represents the join of data and metadata stored in
 // TransactionData and TransactionDetail respectively. This allows for semantically
 // meaningful operations on transaction fields and sub-fields, and hides the implementation
@@ -351,6 +377,9 @@ class TransactionViewT {
   }
   int WitnessCount() const {
     return detail_.Witnesses().Size();
+  }
+  int ComponentCount(int input) const {
+    return Witness(input).Size();
   }
   bool IsWitness() const {
     return detail_.IsWitness();
@@ -403,6 +432,9 @@ class TransactionViewT {
   }
   std::span<const struct Output> Outputs() const {
     return detail_.Outputs().Span(data_.outputs);
+  }
+  WitnessView InputWitness(int input) const {
+    return IsWitness() ? WitnessView{Witness(input).Span(data_.components), data_.scripts} : WitnessView{};
   }
   auto SignatureScripts() const {
     return std::views::iota(0, InputCount()) | 

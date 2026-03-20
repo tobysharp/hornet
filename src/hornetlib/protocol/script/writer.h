@@ -41,8 +41,8 @@ class Writer {
   // Writes an instruction to push the given integer onto the execution stack.
   Writer& PushInt(int32_t value) {
     // If the value is in [-1, 16], push as immediate data in an opcode.
-    if (lang::IsImmediate(value))
-      *this << lang::ImmediateToOp(value);
+    if (lang::IsConstantPushable(value))
+      *this << lang::ConstantToOp(value);
     else {
       // Encodes the integer in the minimum number of bytes using little-endian ordering.
       // Negatives are encoded as absolute values with a high-order sign bit.
