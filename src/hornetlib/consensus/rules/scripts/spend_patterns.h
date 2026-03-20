@@ -2,6 +2,7 @@
 
 #include <optional>
 
+#include "hornetlib/consensus/rules/scripts/verify_flags.h"
 #include "hornetlib/protocol/script/lang/op.h"
 #include "hornetlib/protocol/script/view.h"
 #include "hornetlib/protocol/transaction.h"
@@ -57,5 +58,39 @@ struct WitnessProgram {
   }
   return last;
 }
+
+struct SpendScripts {
+  protocol::Script pubkey, sig;
+  protocol::WitnessView witness;
+  uint64_t flags;
+};
+
+struct SpendPath {
+  enum Type { Legacy, P2SH, Witness, P2SHWitness };
+  Type type = Legacy;
+  std::optional<protocol::Script> redeem = {};
+  std::optional<WitnessProgram> witness = {};
+
+  [[nodiscard]] inline static SpendPath Classify(const SpendScripts& spend) {
+    // Native witness path
+    if (IsFlag(spend.flags, VerifyFlag::Witness)) {
+      if (const auto witness = WitnessProgram::Parse(spend.pubkey)) return {Witness, {}, witness};
+    }
+
+    // P2SH path
+    if (IsFlag(spend.flags, VerifyFlag::P2SH) && IsPayToScriptHash(spend.pubkey)) {
+      if (const auto redeem = ExtractRedeemScript(spend.sig)) {
+        // P2SHWitness path
+        if (IsFlag(spend.flags, VerifyFlag::Witness)) {
+          if (const auto witness = WitnessProgram::Parse(*redeem)) return {P2SHWitness, redeem, witness};
+        }
+        return {P2SH, redeem};
+      }
+    }
+
+    // Legacy path
+    return {Legacy};
+  }
+};
 
 }  // namespace hornet::consensus::rules::scripts
