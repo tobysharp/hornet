@@ -64,7 +64,8 @@ enum class Op : uint8_t {
 
 inline constexpr int OpCount = 256;
 
-inline constexpr int kImmediateMin = -1;
+inline constexpr int kPushConstantMin = -1;
+inline constexpr int kPushConstantMax = 16;
 
 inline constexpr uint8_t operator +(Op op) {
   return uint8_t(op);
@@ -91,21 +92,21 @@ inline constexpr Op& operator++(Op& op) {
 }
 
 inline constexpr bool IsConstantPushable(int value) {
-  return value >= kImmediateMin && value <= kImmediateMin + (Op::PushConstMax - Op::PushConstMin);
+  return value >= kPushConstantMin && value <= kPushConstantMax;
 }
 
 inline constexpr bool IsConstantPush(Op opcode) {
-  return opcode >= Op::PushConstMin && opcode <= Op::PushConstMax;
+  return opcode == Op::PushConst0 || (opcode >= Op::PushConst1 && opcode <= Op::PushConstMax) || opcode == Op::PushConstNegative1;
 }
 
 inline constexpr Op ConstantToOp(int value) {
   Assert(IsConstantPushable(value));
-  return value == 0 ? Op::PushConst0 : Op::PushConstMin + (value - kImmediateMin);
+  return value == 0 ? Op::PushConst0 : (Op::PushConstMin + (value - kPushConstantMin));
 }
 
 inline constexpr int OpToConstant(Op opcode) {
   Assert(IsConstantPush(opcode));
-  return kImmediateMin + (opcode - Op::PushConstMin);
+  return opcode == Op::PushConst0 ? 0 : (kPushConstantMin + (opcode - Op::PushConstMin));
 }
 
 inline constexpr bool IsPush(Op opcode) {

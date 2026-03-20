@@ -37,6 +37,7 @@ class Blockchain {
   std::shared_ptr<protocol::Block> operator[](int index) { return blocks_[index]; }
   void Append(std::shared_ptr<protocol::Block> block);
   void Append(protocol::Block block);
+  void AppendFixed(protocol::Block block);
   int UnspentSize() const { return std::ssize(unspent_); }
   const Spend& Unspent(int index) const { return unspent_[index]; }
   int SpentSize() const { return std::ssize(spent_); }
@@ -77,6 +78,13 @@ inline Blockchain::Blockchain(const std::string& filename) {
 
 inline void Blockchain::Append(protocol::Block block) {
   Append(std::make_shared<protocol::Block>(std::move(block)));
+}
+
+inline void Blockchain::AppendFixed(protocol::Block block) {
+  auto header = block.Header();
+  header.SetMerkleRoot(consensus::ComputeMerkleRoot(block).hash);
+  block.SetHeader(header);
+  Append(std::move(block));
 }
 
 // Add a simulated block to the chain.

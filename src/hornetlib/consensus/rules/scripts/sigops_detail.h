@@ -14,7 +14,7 @@
 namespace hornet::consensus::rules::scripts::sigops {
 
 template <bool kAccurate>
-int OpCodeCount(protocol::script::lang::Op opcode, protocol::script::lang::Op last) {
+inline int OpCodeCount(protocol::script::lang::Op opcode, protocol::script::lang::Op last) {
   using namespace protocol::script::lang;
   constexpr int kMaxPubKeysPerMultisig = 20;
 
@@ -32,7 +32,7 @@ int OpCodeCount(protocol::script::lang::Op opcode, protocol::script::lang::Op la
 }
 
 template <bool kAccurate = false>
-int ScriptCount(protocol::Script script) {
+inline int ScriptCount(protocol::Script script) {
   using namespace protocol::script::lang;
 
   // Return the sum of all sig-op counts for each instruction in the script.
@@ -45,7 +45,7 @@ int ScriptCount(protocol::Script script) {
   return sum;
 }
 
-int WitnessProgramCount(const WitnessProgram& witness, protocol::WitnessView input_stack) {
+inline int WitnessProgramCount(const WitnessProgram& witness, protocol::WitnessView input_stack) {
   // We only know about v0 witness programs.
   if (witness.version != 0) return 0;
 
@@ -61,7 +61,7 @@ int WitnessProgramCount(const WitnessProgram& witness, protocol::WitnessView inp
   return 0;
 }
 
-int SpendPathCost(const SpendScripts& spend, const SpendPath& path) {
+inline int SpendPathCost(const SpendScripts& spend, const SpendPath& path) {
   switch (path.type) {
     case SpendPath::P2SH:
       return ScriptCount<true>(*path.redeem) * 4;
