@@ -164,13 +164,13 @@ TEST_F(ChainTreeTest, GetAncestorAtHeight) {
     tree_.Add(fork_it, CreateContext(201, 2, 4));
 
     auto tip_it = tree_.Find(CreateHash(4));
-    EXPECT_EQ(tree_.GetAncestorAtHeight(tip_it, 2), 201);
-    EXPECT_EQ(tree_.GetAncestorAtHeight(tip_it, 1), 200);
-    EXPECT_EQ(tree_.GetAncestorAtHeight(tip_it, 0), 100);
+    EXPECT_EQ(*tree_.FindAncestorAtHeight(tip_it, 2), 201);
+    EXPECT_EQ(*tree_.FindAncestorAtHeight(tip_it, 1), 200);
+    EXPECT_EQ(*tree_.FindAncestorAtHeight(tip_it, 0), 100);
 
     auto chain_tip_it = tree_.ChainTip().first;
-    EXPECT_EQ(tree_.GetAncestorAtHeight(chain_tip_it, 1), 101);
-    EXPECT_EQ(tree_.GetAncestorAtHeight(chain_tip_it, 0), 100);
+    EXPECT_EQ(*tree_.FindAncestorAtHeight(chain_tip_it, 1), 101);
+    EXPECT_EQ(*tree_.FindAncestorAtHeight(chain_tip_it, 0), 100);
 }
 
 // Test case for PromoteBranch.

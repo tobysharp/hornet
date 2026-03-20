@@ -19,6 +19,12 @@ const protocol::Hash& HeaderTimechain::GetChainHash(int height) const {
   return ChainElement(height + 1).GetPreviousBlockHash();
 }
 
+const protocol::Hash& HeaderTimechain::GetHash(BaseConstIterator it) const {
+  Assert(it.IsValid());
+  if (const auto* node = it.Node()) return node->data.context.hash;
+  return GetChainHash(it.GetHeight());
+}
+
 HeaderTimechain::AddResult HeaderTimechain::Add(const HeaderContext& context) {
   if (Empty()) {
     // Genesis header
@@ -154,21 +160,21 @@ int HeaderTimechain::ValidationView::Length() const {
 }
 
 uint32_t HeaderTimechain::ValidationView::TimestampAt(int height) const {
-  return timechain_.GetAncestorAtHeight(tip_, height).GetTimestamp();
+  return timechain_.FindAncestorAtHeight(tip_, height)->GetTimestamp();
 }
 
 const protocol::Hash& HeaderTimechain::ValidationView::HashAt(int height) const {
-  if (height > tip_.GetHeight()) util::ThrowRuntimeError("Couldn't find an ancestor at height ", height);
-  return timechain_.GetChainHash(height);
+  return timechain_.GetHash(timechain_.FindAncestorAtHeight(tip_, height));
 }
 
-std::vector<uint32_t> HeaderTimechain::ValidationView::LastNTimestamps(int count) const {
+std::vector<uint32_t> HeaderTimechain::ValidationView::LastNTimestamps(int height, int count) const {
   std::vector<uint32_t> result;
   result.reserve(count);
 
-  auto it = tip_;
+  auto it = timechain_.FindAncestorAtHeight(tip_, height);
   for (int i = 0; i < count && it; ++i, ++it)
     result.push_back(it->GetTimestamp());
+  std::reverse(result.begin(), result.end());
   return result;
 }
 

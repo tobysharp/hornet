@@ -3,6 +3,8 @@
 #include <array>
 #include <tuple>
 
+#include "hornetlib/consensus/bips.h"
+#include "hornetlib/consensus/rule.h"
 #include "hornetlib/consensus/rules/context.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/consensus/utxo.h"
@@ -49,7 +51,10 @@ struct InputSpendContext {
 struct TransactionSpendContext {
   const protocol::TransactionConstView tx;
   std::span<const SpendRecord> spends;
+  const HeaderAncestryView& ancestry;
   const int height;
+  const int64_t inputs_sum = std::reduce(spends.begin(), spends.end(), 0ll, [](int64_t sum, const auto& spend) { return sum + spend.amount; });
+  const int64_t outputs_sum = std::reduce(tx.Outputs().begin(), tx.Outputs().end(), 0ll, [](int64_t sum, const auto& output) { return sum + output.value; });
 };
 
 [[nodiscard]] inline Result ValidateSpendingInputs(const TransactionSpendContext& context) {
@@ -59,13 +64,65 @@ struct TransactionSpendContext {
   return {};
 }
 
-[[nodiscard]] inline Result ValidateSpendingTransaction(const protocol::TransactionConstView& tx, std::span<const SpendRecord> spends, int height) {
+// The sum of output values in a transaction MUST NOT exceed the sum of all input values being spent.
+[[nodiscard]] inline Result ValidateOutputValuesAtMostInputValues(const TransactionSpendContext& context) {
+  if (context.outputs_sum > context.inputs_sum) return Error::Spending_OutputAmountsExceedInputAmounts;
+
+  return {};
+}
+
+// BIP68: Each input that signals a relative lock-time interval MUST have reached relative finality.
+[[nodiscard]] inline Result ValidateSequenceLocks(const TransactionSpendContext& context) {
+  if (context.tx.Version() < 2) return {};  // BIP68 applies only to transactions with version >= 2.
+
+  constexpr uint32_t kDisableMask = 1u << 31;
+  constexpr uint32_t kDeltaMask = 0xffff;
+  constexpr uint32_t kTimestampsMask = 1u << 22;
+  constexpr int      kTimestampsShift = 9;
+
+  int min_valid_height = 0;    // The minimum height at which finality is achieved for this transaction.
+  int64_t min_valid_mtp = 0;   // The minimum MTP time at which finality is achieved.
+
+  for (int input_index = 0; input_index < context.tx.InputCount(); ++input_index) {
+    const protocol::Input& input = context.tx.Input(input_index);
+    const SpendRecord& spend = context.spends[input_index];
+    
+    // Sequence numbers with the most significant bit set do not participate in this consensus rule.
+    if (input.sequence & kDisableMask) continue;
+
+    // The low 16 bits of nSequence store the number of temporal units until validity.
+    const int delta = input.sequence & kDeltaMask;
+  
+    // If bit 22 is set, the sequence variable is interpreted as time-based, otherwise it is height-based.
+    if (input.sequence & kTimestampsMask) {
+      // The time origin is defined as the Median Time Past of the block prior to the funding transaction.
+      const uint32_t origin_time = context.ancestry.MedianTimePast(spend.funding_height - 1);
+      // The time delta until finality is 512 seconds for each encoded unit.
+      min_valid_mtp = std::max(min_valid_mtp, int64_t{origin_time} + (delta << kTimestampsShift));
+    } else {
+      // nSequence is simply the number of blocks until finality.
+      min_valid_height = std::max(min_valid_height, spend.funding_height + delta);
+    }
+  }
+
+  // The current time is taken to be the MTP of the parent block.
+  const int64_t parent_mtp = context.ancestry.MedianTimePast();
+
+  // Return error if finality was not achieved.
+  if (context.height < min_valid_height || parent_mtp < min_valid_mtp) return Error::Spending_NonFinalTransaction;
+
+  return {};
+}
+
+[[nodiscard]] inline Result ValidateSpendingTransaction(const protocol::TransactionConstView& tx, std::span<const SpendRecord> spends, const HeaderAncestryView& ancestry, int height) {
   // clang-format off
   static const auto ruleset = std::make_tuple(
-    Rule{ValidateSpendingInputs}
+    Rule{ValidateSpendingInputs},
+    Rule{ValidateOutputValuesAtMostInputValues},
+    Rule{ValidateSequenceLocks, BIP::SequenceLocks}
   );
   //clang-format on
-  const TransactionSpendContext context{tx, spends, height};
+  const TransactionSpendContext context{tx, spends, ancestry, height};
   return ValidateRules(ruleset, height, context);
 }
 
@@ -119,15 +176,16 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
 [[nodiscard]] inline Result ValidateSpendingTransactions(const BlockSpendContext& context) {
   return context.unspent.ForEachTransaction(context.block,
     [&](const protocol::TransactionConstView& tx, std::span<const SpendRecord> spends) { 
-      return ValidateSpendingTransaction(tx, spends, context.height);
+      Assert(tx.InputCount() == std::ssize(spends));
+      return ValidateSpendingTransaction(tx, spends, context.ancestry, context.height);
     });
 }
 
 [[nodiscard]] inline Result ValidateSpending(const BlockSpendContext& context) {
   // clang-format off
   static const auto ruleset = std::make_tuple(
-    Rule{ValidateInputPrevoutsUnspent},
     Rule{ValidateOutPointsUnique},
+    Rule{ValidateInputPrevoutsUnspent},
     Rule{ValidateSpendingTransactions}
   );
   // clang-format on

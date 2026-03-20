@@ -26,7 +26,7 @@ inline bool IsVersionValidAtHeight(int32_t version, int height) {
   };
   if (version >= std::ssize(kVersionExpiryToBIP)) return true;
   const int index = std::max(0, version);
-  return !IsBIPEnabledAtHeight(kVersionExpiryToBIP[index], height);
+  return !IsBIPActiveAtHeight(kVersionExpiryToBIP[index], height);
 }
 }  // namespace detail
 

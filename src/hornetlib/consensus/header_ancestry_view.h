@@ -34,17 +34,20 @@ class HeaderAncestryView {
   // Returns the timestamp of an ancestor at the given height.
   virtual uint32_t TimestampAt(int height) const = 0;
 
-  // Returns the last `count` ancestor timestamps ending at the current tip,
-  // ordered from oldest to newest. Does not include the candidate for validation.
-  // May return fewer than `count` items if not all exist.
-  virtual std::vector<uint32_t> LastNTimestamps(int count) const = 0;
+  // Returns the last `count` ancestor timestamps ending at the given height,
+  // ordered from oldest to newest. May return fewer than `count` items if not all exist.
+  virtual std::vector<uint32_t> LastNTimestamps(int height, int count) const = 0;
 
-  uint32_t MedianTimePast() const {
-    auto timestamps = LastNTimestamps(constants::kBlocksForMedianTime);
+  // Returns the MTP (Median Time Past) of the tip ancestor at the given height.
+  uint32_t MedianTimePast(int height) const {
+    auto timestamps = LastNTimestamps(height, constants::kBlocksForMedianTime);
     Assert(!timestamps.empty());  // Impossible: would imply trying to validate the genesis.
     std::sort(timestamps.begin(), timestamps.end());
     return timestamps[timestamps.size() / 2];
   }
+
+  // Returns the MTP (Median Time Past) of the tip.
+  uint32_t MedianTimePast() const { return MedianTimePast(Length() - 1); }
 };
 
 }  // namespace hornet::consensus
