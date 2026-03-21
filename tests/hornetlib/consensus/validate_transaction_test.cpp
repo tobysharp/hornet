@@ -4,7 +4,6 @@
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #include "hornetlib/consensus/validate_api.h"
-#include "hornetlib/consensus/rules/validate_spending.h"
 
 #include "hornetlib/protocol/transaction.h"
 #include "testutil/round_trip.h"
@@ -13,9 +12,9 @@
 
 namespace hornet::consensus {
 namespace {
-  
-using test::RoundTrip;
+
 using rules::ValidateTransaction;
+using test::RoundTrip;
 
 TEST(ValidatorTest, AcceptsValidTransaction) {
   protocol::Transaction tx;
@@ -171,19 +170,6 @@ TEST(ValidatorTest, RejectsOversizedOutputValue) {
 
   auto result = ValidateTransaction(RoundTrip(tx));
   EXPECT_EQ(result, Error::Transaction_OversizedOutputValue);
-}
-
-TEST(ValidatorTest, EnforcesCoinbaseMaturityBoundary) {
-  protocol::Transaction funding_tx;
-  SpendRecord spend{.funding_height = 1000,
-                    .funding_flags = 1,
-                    .amount = 50'000'000,
-                    .pubkey_script = {},
-                    .spend_input_index = 0};
-
-  EXPECT_EQ(rules::ValidateCoinbaseMaturity(rules::InputSpendContext{.tx = funding_tx, .spend = spend, .height = 1099}),
-            Error::Spending_PrematureSpend);
-  EXPECT_TRUE(rules::ValidateCoinbaseMaturity(rules::InputSpendContext{.tx = funding_tx, .spend = spend, .height = 1100}));
 }
 
 }  // namespace

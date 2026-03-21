@@ -2,10 +2,13 @@
 add_executable(hornetlib_tests
    consensus/difficulty_adjustment_test.cpp
    consensus/merkle_test.cpp
+   consensus/spending_test_harness.cpp
    consensus/validate_sigop_costs_test.cpp
    consensus/validate_block_test.cpp
    consensus/validate_chain_harness.cpp
-   consensus/validate_spending_test.cpp
+   consensus/validate_spending_block_test.cpp
+   consensus/validate_spending_input_test.cpp
+   consensus/validate_spending_transaction_test.cpp
    consensus/validate_transaction_test.cpp
    crypto/hash_test.cpp
    data/block_io_test.cpp

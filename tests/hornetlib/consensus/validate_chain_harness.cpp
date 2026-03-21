@@ -17,7 +17,7 @@
 
 namespace hornet::test {
 
-// Loads a blockchain from a file, validating each block in turn. 
+// Loads a blockchain from a file, validating each block in turn.
 // This performs serial, single-threaded validation, intended for smallish test vectors and consensus debugging.
 consensus::Result ValidateChain(const std::filesystem::path& path) {
   data::HeaderTimechain headers;
@@ -30,13 +30,14 @@ consensus::Result ValidateChain(const std::filesystem::path& path) {
     const auto block = reader[height];
     if (height > 0) {
       const auto ancestry = headers.GetValidationView(tip);
-      const auto current_time = std::chrono::duration_cast<std::chrono::milliseconds>(
-               std::chrono::system_clock::now().time_since_epoch())
-        .count();
+      const auto current_time =
+          std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+              .count();
       const auto joiner = std::make_shared<data::utxo::SpendJoiner>(db, block, height);
       while (joiner->IsAdvanceReady()) joiner->Advance();
       const data::utxo::DatabaseView utxo{joiner};
-      const auto result = consensus::ValidateBlock(*block, headers.ChainElement(height - 1), *ancestry, current_time, utxo);
+      const auto result =
+          consensus::ValidateBlock(*block, headers.ChainElement(height - 1), *ancestry, current_time, utxo);
       if (!result) {
         // For completeness, rewind the database to the last good block.
         db.EraseSince(height);
@@ -49,7 +50,7 @@ consensus::Result ValidateChain(const std::filesystem::path& path) {
 }
 
 void EnsureTestVectorExists(const std::filesystem::path& path, auto&& generate) {
-  if (!std::filesystem::exists(path))  {
+  if (!std::filesystem::exists(path)) {
     test::Blockchain data = generate();
     data.Save(path.string() + ".nopow");
     FAIL() << "Test file \"" << path << "\" was missing. Run tools/minetests.sh then re-run test.";
@@ -62,7 +63,8 @@ consensus::Result TestValidateChain(auto&& generate) {
   return ValidateChain(path);
 }
 
-void ExpectValidationResult(std::function<test::Blockchain()> generate, consensus::Result expected /* = consensus::Result::Ok */) {
+void ExpectValidationResult(std::function<test::Blockchain()> generate,
+                            consensus::Result expected /* = consensus::Result::Ok */) {
   EXPECT_EQ(TestValidateChain(std::move(generate)), expected);
 }
 
