@@ -1,4 +1,5 @@
 add_library(hornetlib STATIC
+   consensus/rules/scripts/sigops.cpp
    data/header_timechain.cpp
    protocol/block.cpp
    protocol/message_factory.cpp

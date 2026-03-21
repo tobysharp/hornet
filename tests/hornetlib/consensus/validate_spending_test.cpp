@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "hornetlib/consensus/merkle.h"
+#include "hornetlib/consensus/rules/validate_spending.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/data/header_timechain.h"
 #include "hornetlib/data/utxo/database.h"
@@ -12,6 +13,7 @@
 #include "hornetlib/model/header_context.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/block_header.h"
+#include "hornetlib/protocol/script/lang/op.h"
 #include "hornetlib/protocol/transaction.h"
 
 #include "hornetlib/consensus/validate_chain_harness.h"
@@ -159,6 +161,46 @@ TEST(ValidateSpendingTest, ProcessOutputAmountsExceedInputAmounts) {
     FixMerkleRoot(*data.Back());
     return data;
   }, Error::Spending_OutputAmountsExceedInputAmounts);
+}
+
+TEST(ValidateSpendingTest, ProcessBlockJustOverSigOpCostLimit) {
+  test::ExpectValidationResult([] {
+    using protocol::script::Writer;
+    using protocol::script::lang::Op;
+
+    test::Blockchain data;
+    data.Load(test::GetDataPath("ValidationPipelineTest_ProcessBlocks.bin"));
+
+    // First, create a normal-looking funding block whose spend transaction pays to a P2SH output.
+    auto funding = data.Sample(2, true, 1, 1);
+    const uint32_t spent_unspent_index = funding.Transaction(1).Input(0).sequence;
+    const std::vector<uint8_t> p2sh_hash(20, 0x42);
+    funding.Transaction(1).SetPkScript(
+        0, Writer{}.Then(Op::Hash160).PushData(p2sh_hash).Then(Op::Equal).Release());
+    data.AppendFixed(std::move(funding));
+
+    const auto funding_tx = data.Back()->Transaction(1);
+    const protocol::OutPoint prevout{funding_tx.GetHash(), 0};
+    const int64_t amount = funding_tx.Output(0).value;
+
+    // Then spend that P2SH output with a pushed redeem script containing 20,001 CHECKSIG opcodes.
+    // That keeps the block under the legacy structural sigop limit, but exceeds the weighted
+    // spending-stage sigop budget once the redeem script is counted as P2SH.
+    protocol::Transaction overflow_tx;
+    overflow_tx.SetVersion(1);
+    overflow_tx.ResizeInputs(1);
+    overflow_tx.ResizeOutputs(1);
+    overflow_tx.Input(0).previous_output = prevout;
+    overflow_tx.Input(0).sequence = spent_unspent_index;
+    overflow_tx.SetSignatureScript(0, Writer{}.PushData(std::vector<uint8_t>(20'001, +Op::CheckSig)).Release());
+    overflow_tx.Output(0).value = amount;
+    overflow_tx.SetPkScript(0, Writer{}.PushInt(1).Release());
+
+    auto overflow = data.Sample(1, true);
+    overflow.AddTransaction(overflow_tx);
+    data.AppendFixed(std::move(overflow));
+    return data;
+  }, consensus::Error::Spending_BadSigOpsCost);
 }
 
 TEST(ValidateSpendingTest, SequenceLocksIgnoreVersion1Transactions) {

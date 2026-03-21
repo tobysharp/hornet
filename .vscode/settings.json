@@ -141,4 +141,7 @@
         "editor.tabSize": 2,
         "editor.fontLigatures": true
     },
+    "chat.tools.terminal.autoApprove": {
+        "./build/clang20-debug/hornetlib_tests": true
+    },
 }

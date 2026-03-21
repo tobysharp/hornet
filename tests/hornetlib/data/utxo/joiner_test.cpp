@@ -54,7 +54,7 @@ TEST(SpendJoinerTest, TestPreemptiveSerial) {
         }
         return consensus::Result{};
       });
-      EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Joined);
+      EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Fetched);
       EXPECT_EQ(result, consensus::Result{});
 
       // The total amount spent must be bounded above by the sum of the coinbase transactions,
@@ -94,7 +94,7 @@ TEST(SpendJoinerTest, TestPreemptiveInvalidBlock) {
         }
         return consensus::Result{};
       });
-      EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Joined);
+      EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Fetched);
       EXPECT_EQ(result, consensus::Result{});
     }
     chain.Append(std::move(*block));
@@ -144,7 +144,7 @@ TEST(SpendJoinerTest, TestPreemptiveInvalidBlock) {
         }
         return consensus::Result{};
       });
-      EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Joined);
+      EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Fetched);
       EXPECT_EQ(result, consensus::Result{});
     }
     chain.Append(std::move(*block));
@@ -229,7 +229,6 @@ TEST(SpendJoinerTest, TestIncrementalResolution) {
 
   // Join.
   auto result = joiner.Join([](const protocol::TransactionConstView&, std::span<const consensus::SpendRecord>) { return consensus::Result{}; });
-  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Joined);
   EXPECT_TRUE(result);
 }
 

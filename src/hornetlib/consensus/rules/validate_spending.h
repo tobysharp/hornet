@@ -6,9 +6,12 @@
 #include "hornetlib/consensus/bips.h"
 #include "hornetlib/consensus/rule.h"
 #include "hornetlib/consensus/rules/context.h"
+#include "hornetlib/consensus/rules/scripts/sigops.h"
+#include "hornetlib/consensus/rules/scripts/spend_patterns.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/consensus/utxo.h"
 #include "hornetlib/protocol/block.h"
+#include "hornetlib/protocol/hash.h"
 #include "hornetlib/protocol/transaction.h"
 
 namespace hornet::consensus::rules {
@@ -120,6 +123,8 @@ struct TransactionSpendContext {
     Rule{ValidateSpendingInputs},
     Rule{ValidateOutputValuesAtMostInputValues},
     Rule{ValidateSequenceLocks, BIP::SequenceLocks}
+    // TODO: Input scripts rule
+    // TODO: Coinbase amount <= block subsidy + fees
   );
   //clang-format on
   const TransactionSpendContext context{tx, spends, ancestry, height};
@@ -135,10 +140,17 @@ struct BlockSpendContext {
   const HeaderAncestryView& ancestry;
   const UnspentOutputsView& unspent;
   const int height;
+  const uint64_t script_flags;
 };
 
+inline uint64_t GetScriptVerifyFlags(const BlockValidationContext& rhs) {
+  using namespace scripts;
+  const auto exception_hash = "00000000000002dc756eebf4f49723ed8d30cc28a5f108eb94b1ba88ac4f9c22"_sha256;
+  return rhs.block.Header().ComputeHash() == exception_hash ? 0 : CombineFlags({VerifyFlag::P2SH, VerifyFlag::Witness});
+}
+
 inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs) {
-  return {rhs.block, rhs.view, rhs.unspent, rhs.view.Length()};
+  return {rhs.block, rhs.view, rhs.unspent, rhs.view.Length(), GetScriptVerifyFlags(rhs)};
 }
 
 // For every transaction input spending a previous transaction output, that output MUST exist and be unspent.
@@ -181,12 +193,25 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
     });
 }
 
+// The sum of sigop costs across all transactions MUST NOT exceed the maximum of 80,000.
+[[nodiscard]] inline Result ValidateSigOpCosts(const BlockSpendContext& context) {
+  constexpr int kMaxBlockSigOpCost = 80'000;
+  int sigops_cost = 0;
+  return context.unspent.ForEachTransaction(context.block,
+    [&](const protocol::TransactionConstView& tx, std::span<const SpendRecord> spends) { 
+      Assert(tx.InputCount() == std::ssize(spends));
+      sigops_cost += scripts::SigOpCost(tx, spends, context.script_flags);
+      return sigops_cost > kMaxBlockSigOpCost ? Error::Spending_BadSigOpsCost : Result::Ok;
+  });
+}
+
 [[nodiscard]] inline Result ValidateSpending(const BlockSpendContext& context) {
   // clang-format off
   static const auto ruleset = std::make_tuple(
     Rule{ValidateOutPointsUnique},
     Rule{ValidateInputPrevoutsUnspent},
-    Rule{ValidateSpendingTransactions}
+    Rule{ValidateSpendingTransactions},
+    Rule{ValidateSigOpCosts}
   );
   // clang-format on
   return ValidateRules(ruleset, context.height, context);

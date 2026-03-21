@@ -20,6 +20,7 @@ struct Instruction {
   Op opcode;       // The opcode to be executed.
   Bytes data;      // The associated data argument for push instructions.
   int offset = 0;  // The offset of the instruction within its script, if applicable.
+  int size = 0;    // The size of the instruction data in bytes.
 };
 
 // Reasons for Bitcoin Script failure.

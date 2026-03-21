@@ -12,52 +12,17 @@
 
 #include "hornetlib/consensus/merkle.h"
 #include "hornetlib/consensus/rule.h"
+#include "hornetlib/consensus/rules/scripts/sigops.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/hash.h"
-#include "hornetlib/protocol/script/lang/op.h"
-#include "hornetlib/protocol/script/view.h"
-#include "hornetlib/protocol/transaction.h"
 #include "hornetlib/util/iterator_range.h"
 #include "hornetlib/util/log.h"
 
 namespace hornet::consensus::rules {
 
 [[nodiscard]] Result ValidateTransaction(const protocol::TransactionConstView transaction);
-
-namespace detail {
-
-// Returns the total sig-op cost for the whole script.
-inline int GetSigOpCount(const std::span<const uint8_t> script) {
-  // Build the sig-op cost table statically at compile time
-  static constexpr auto kSigOpCosts = [] {
-    using namespace protocol::script::lang;
-    std::array<int, OpCount> table = {};
-    table[+Op::CheckSig]      = table[+Op::CheckSigVerify]      = 1;
-    table[+Op::CheckMultiSig] = table[+Op::CheckMultiSigVerify] = 20;
-    return table;
-  }();
-
-  // Return the sum of all sig-op costs for each instruction in the script.
-  /* mutable */ int sum = 0;
-  for (const auto& instruction : protocol::script::View{script}.Instructions())
-    sum += kSigOpCosts[+instruction.opcode];
-  return sum;
-}
-
-// The legacy definition of transaction sigops is the sum of sigop counts
-// across all input signature scripts and all output pkScripts.
-inline int GetLegacySigOpCount(const protocol::TransactionConstView& tx) {
-  /* mutable */ int sum = 0;
-  for (const auto& script : tx.SignatureScripts())
-    sum += GetSigOpCount(script);
-  for (const auto& script : tx.PkScripts())
-    sum += GetSigOpCount(script);
-  return sum;
-};
-
-}  // namespace detail
 
 // A block MUST contain at least one transaction.
 [[nodiscard]] inline Result ValidateNonEmpty(const protocol::Block& block) {
@@ -100,7 +65,7 @@ inline int GetLegacySigOpCount(const protocol::TransactionConstView& tx) {
 [[nodiscard]] inline Result ValidateSignatureOps(const protocol::Block& block) {
   /* mutable */ int sig_ops = 0;
   for (const auto& tx : block.Transactions())
-    sig_ops += detail::GetLegacySigOpCount(tx);
+    sig_ops += scripts::LegacySigOpCount(tx);
   if (sig_ops > 20'000) return Error::Structure_BadSigOpCount;
   return {};
 }
