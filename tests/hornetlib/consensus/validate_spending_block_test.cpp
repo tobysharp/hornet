@@ -2,6 +2,7 @@
 
 #include "hornetlib/consensus/spending_test_harness.h"
 #include "hornetlib/consensus/validate_chain_harness.h"
+#include "hornetlib/data/utxo/database_view.h"
 
 #include "testutil/blockchain.h"
 
@@ -9,6 +10,39 @@
 
 namespace hornet::consensus::rules {
 namespace {
+
+template <typename Callback>
+Result EvaluateCandidateSpendingBlock(const test::Blockchain& chain, const protocol::Block& block,
+                                      Callback&& callback) {
+  return test::WithCandidateSpendState(
+      chain, block,
+      [&](const HeaderAncestryView& ancestry, const std::shared_ptr<data::utxo::SpendJoiner>& joiner, int height) {
+        const data::utxo::DatabaseView utxo{joiner};
+        const BlockValidationContext validation{block, chain[height - 1]->Header(), ancestry, 0, utxo};
+        return callback(MakeBlockSpendContext(validation));
+      });
+}
+
+TEST(ValidateSpendingBlockTest, AcceptsCoinbaseAtBlockReward) {
+  const test::Blockchain chain = test::LoadValidationPipelineChain();
+  const protocol::Block candidate = chain.Sample(2, true);
+
+  EXPECT_EQ(EvaluateCandidateSpendingBlock(
+                chain, candidate, [](const BlockSpendContext& context) { return ValidateBlockSubsidy(context); }),
+            Result{});
+}
+
+TEST(ValidateSpendingBlockTest, RejectsCoinbaseAboveBlockReward) {
+  const test::Blockchain chain = test::LoadValidationPipelineChain();
+
+  protocol::Block candidate = chain.Sample(2, true);
+  candidate.Transaction(0).Output(0).value += 1;
+  test::FixMerkleRoot(candidate);
+
+  EXPECT_EQ(EvaluateCandidateSpendingBlock(
+                chain, candidate, [](const BlockSpendContext& context) { return ValidateBlockSubsidy(context); }),
+            Error::Spending_CoinbaseAmountExceedsBlockReward);
+}
 
 TEST(ValidateSpendingBlockTest, RejectsDuplicateOutPoint) {
   test::ExpectValidationResult(
@@ -32,27 +66,6 @@ TEST(ValidateSpendingBlockTest, AcceptsFullySpentDuplicateOutPoint) {
     test::FixMerkleRoot(*data.Back());
     return data;
   });
-}
-
-TEST(ValidateSpendingBlockTest, AcceptsCoinbaseAtBlockReward) {
-  const test::Blockchain chain = test::LoadValidationPipelineChain();
-  const protocol::Block candidate = chain.Sample(2, true);
-
-  EXPECT_EQ(test::EvaluateCandidateBlock(
-                chain, candidate, [](const BlockSpendContext& context) { return ValidateBlockSubsidy(context); }),
-            Result{});
-}
-
-TEST(ValidateSpendingBlockTest, RejectsCoinbaseAboveBlockReward) {
-  const test::Blockchain chain = test::LoadValidationPipelineChain();
-
-  protocol::Block candidate = chain.Sample(2, true);
-  candidate.Transaction(0).Output(0).value += 1;
-  test::FixMerkleRoot(candidate);
-
-  EXPECT_EQ(test::EvaluateCandidateBlock(
-                chain, candidate, [](const BlockSpendContext& context) { return ValidateBlockSubsidy(context); }),
-            Error::Spending_CoinbaseAmountExceedsBlockReward);
 }
 
 TEST(ValidateSpendingBlockTest, RejectsCoinbaseAmountExceedsBlockReward) {

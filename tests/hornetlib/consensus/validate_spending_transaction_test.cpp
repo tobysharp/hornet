@@ -17,6 +17,18 @@
 namespace hornet::consensus::rules {
 namespace {
 
+template <typename Callback>
+Result EvaluateCandidateSpendingTransactions(const test::Blockchain& chain, const protocol::Block& block,
+                                             Callback&& callback) {
+  return test::WithCandidateSpendState(
+      chain, block,
+      [&](const HeaderAncestryView& ancestry, const std::shared_ptr<data::utxo::SpendJoiner>& joiner, int height) {
+        return joiner->Join([&](const protocol::TransactionConstView& tx, std::span<const SpendRecord> spends) {
+          return callback(tx, spends, ancestry, height);
+        });
+      });
+}
+
 class SequenceLocksHarness {
  public:
   using SequenceInput = std::pair<int, uint32_t>;
@@ -38,7 +50,7 @@ class SequenceLocksHarness {
 
   template <typename Callback>
   Result ValidateCandidateTransactions(const protocol::Block& block, Callback&& callback) const {
-    return test::EvaluateCandidateTransactions(kChain, block, std::forward<Callback>(callback));
+    return EvaluateCandidateSpendingTransactions(kChain, block, std::forward<Callback>(callback));
   }
 
  private:
@@ -74,19 +86,6 @@ class SequenceLocksHarness {
 
   inline static const test::Blockchain kChain = test::Blockchain::Generate(140, 2, true);
 };
-
-TEST(ValidateSpendingTransactionTest, RejectsOutputAmountsExceedInputAmounts) {
-  test::ExpectValidationResult(
-      [] {
-        test::Blockchain data = test::LoadValidationPipelineChain();
-
-        data.Append(data.Sample(2, true));
-        data.Back()->Transaction(1).Output(0).value += 1;
-        test::FixMerkleRoot(*data.Back());
-        return data;
-      },
-      Error::Spending_OutputAmountsExceedInputAmounts);
-}
 
 TEST(ValidateSpendingTransactionTest, IgnoresVersion1Transactions) {
   const SequenceLocksHarness harness;
@@ -174,6 +173,19 @@ TEST(ValidateSpendingTransactionTest, SkipsSequenceLocksBeforeActivation) {
                           const HeaderAncestryView& ancestry,
                           int height) { return ValidateSpendingTransaction(tx, spends, ancestry, height); }),
             Result{});
+}
+
+TEST(ValidateSpendingTransactionTest, RejectsOutputAmountsExceedInputAmounts) {
+  test::ExpectValidationResult(
+      [] {
+        test::Blockchain data = test::LoadValidationPipelineChain();
+
+        data.Append(data.Sample(2, true));
+        data.Back()->Transaction(1).Output(0).value += 1;
+        test::FixMerkleRoot(*data.Back());
+        return data;
+      },
+      Error::Spending_OutputAmountsExceedInputAmounts);
 }
 
 }  // namespace
