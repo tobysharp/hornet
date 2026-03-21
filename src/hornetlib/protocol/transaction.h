@@ -396,6 +396,11 @@ class TransactionViewT {
   const protocol::Hash& GetWitnessHash() const {
     return detail_.GetWitnessHash(data_);
   }
+  int64_t TotalOutputValue() const {
+    int64_t sum = 0;
+    for (const auto& output : Outputs()) sum += output.value;
+    return sum;
+  }
 
   // The following const member methods are chosen by the compiler in the case where
   // the TransactionViewT object is const, e.g. the method is called on a const object that

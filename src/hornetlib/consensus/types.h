@@ -52,7 +52,8 @@ enum class Error {
   Spending_PrematureSpend,
   Spending_OutputAmountsExceedInputAmounts,
   Spending_NonFinalTransaction,
-  Spending_BadSigOpsCost
+  Spending_BadSigOpsCost,
+  Spending_CoinbaseAmountExceedsBlockReward
 };
 
 // SuccessOr represents state that is either "success" or it is a specific typed error.

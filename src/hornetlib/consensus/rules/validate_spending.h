@@ -13,6 +13,7 @@
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/hash.h"
 #include "hornetlib/protocol/transaction.h"
+#include "hornetlib/util/algorithm.h"
 
 namespace hornet::consensus::rules {
 
@@ -205,13 +206,51 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
   });
 }
 
+// The total amount in coinbase outputs MUST NOT exceed the block reward.
+[[nodiscard]] inline Result ValidateBlockSubsidy(const BlockSpendContext& context) {
+  constexpr int64_t kSatoshisPerCoin = 100'000'000;
+  constexpr int64_t kInitialBlockReward = 50 * kSatoshisPerCoin;
+  constexpr int kBlocksPerEpoch = 210'000;
+  using protocol::TransactionConstView;
+  using util::Sum;
+
+  // Computes the block subsidy.
+  const int epoch = context.height / kBlocksPerEpoch;
+  const int64_t block_subsidy = epoch < 64 ? (kInitialBlockReward >> epoch) : 0;
+
+  // Computes the total of all transaction inputs for the block.
+  const auto inputs_total = context.unspent.SumTransactions(context.block, [&](auto, const std::span<const SpendRecord> spends) {
+    return Sum(spends, [](const auto& spend) { return spend.amount; });
+  });
+  // Propagates failure if required prevout join data was unavailable for this block.
+  if (!inputs_total) return inputs_total.error();
+
+  // Computes the total of all non-coinbase transaction outputs for the block.
+  const int64_t outputs_total = Sum(context.block.Transactions(), [](const auto& tx) {
+    return tx.IsCoinBase() ? 0ll : tx.TotalOutputValue();
+  });
+
+  // Computes the maximum block reward available for the current block.
+  Assert(*inputs_total >= outputs_total);
+  const int64_t fees_amount = *inputs_total - outputs_total;
+  const int64_t block_reward = block_subsidy + fees_amount;
+  const int64_t coinbase_amount = context.block.Transaction(0).TotalOutputValue();
+
+  // Validates that the coinbase outputs don't exceed the available block reward.
+  if (coinbase_amount > block_reward) return Error::Spending_CoinbaseAmountExceedsBlockReward;
+
+  return {};
+}
+
 [[nodiscard]] inline Result ValidateSpending(const BlockSpendContext& context) {
   // clang-format off
   static const auto ruleset = std::make_tuple(
     Rule{ValidateOutPointsUnique},
     Rule{ValidateInputPrevoutsUnspent},
     Rule{ValidateSpendingTransactions},
-    Rule{ValidateSigOpCosts}
+    Rule{ValidateSigOpCosts},
+    // TODO: Script validation
+    Rule{ValidateBlockSubsidy}
   );
   // clang-format on
   return ValidateRules(ruleset, context.height, context);

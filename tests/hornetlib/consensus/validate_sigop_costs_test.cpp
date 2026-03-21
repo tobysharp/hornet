@@ -3,7 +3,9 @@
 #include "hornetlib/consensus/rules/scripts/sigops_detail.h"
 #include "hornetlib/consensus/rules/scripts/spend_patterns.h"
 #include "hornetlib/consensus/rules/validate_spending.h"
+#include "hornetlib/consensus/spending_test_harness.h"
 #include "hornetlib/consensus/utxo.h"
+#include "hornetlib/consensus/validate_chain_harness.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/script/lang/op.h"
 #include "hornetlib/protocol/script/writer.h"
@@ -64,8 +66,7 @@ Transaction MakeTransaction(int input_count, int output_count, bool witness = fa
   return tx;
 }
 
-SpendRecord MakeSpend(std::span<const uint8_t> pubkey_script, int input_index = 0,
-                      bool coinbase = false) {
+SpendRecord MakeSpend(std::span<const uint8_t> pubkey_script, int input_index = 0, bool coinbase = false) {
   return {.funding_height = 200,
           .funding_flags = coinbase ? 1u : 0u,
           .amount = 1'000,
@@ -79,6 +80,7 @@ class StubHeaderAncestryView : public HeaderAncestryView {
   const Hash& HashAt(int) const override { return hash_; }
   uint32_t TimestampAt(int) const override { return 0; }
   std::vector<uint32_t> LastNTimestamps(int, int) const override { return {0}; }
+
  private:
   Hash hash_{};
 };
@@ -90,9 +92,7 @@ class StubUnspentOutputsView : public UnspentOutputsView {
     std::vector<SpendRecord> spends;
   };
 
-  void Add(Transaction tx, std::vector<SpendRecord> spends) {
-    entries_.push_back({std::move(tx), std::move(spends)});
-  }
+  void Add(Transaction tx, std::vector<SpendRecord> spends) { entries_.push_back({std::move(tx), std::move(spends)}); }
   int EnumeratedCount() const { return enumerated_count_; }
   Result QueryPrevoutsUnspent(const Block&) const override { return {}; }
   Result QueryOutPointsUnique(const Block&) const override { return {}; }
@@ -118,17 +118,10 @@ TEST(ValidateSigOpCostsTest, WitnessProgramParseRejectsMalformedScripts) {
   const auto too_long = MakeWitnessProgram(0, std::vector<uint8_t>(41, 0x33));
   const auto bad_version = Writer{}.Then(Op::CheckSig).PushData(program20).Release();
   const auto negative_version = MakeWitnessProgram(-1, program20);
-  const std::vector<uint8_t> bad_push = {+Op::PushConst0, +Op::PushData1, 0x14,
-                                         0,              0,              0,    0,
-                                         0,              0,              0,    0,
-                                         0,              0,              0,    0,
-                                         0,              0,              0,    0,
-                                         0,              0,              0,    0,
-                                         0};
-  const std::vector<uint8_t> size_mismatch = {+Op::PushConst0, 0x14,
-                                              0,              0,    0, 0, 0, 0, 0,
-                                              0,              0,    0, 0, 0, 0, 0,
-                                              0,              0,    0, 0, 0};
+  const std::vector<uint8_t> bad_push = {
+      +Op::PushConst0, +Op::PushData1, 0x14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+  const std::vector<uint8_t> size_mismatch = {
+      +Op::PushConst0, 0x14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
   EXPECT_FALSE(WitnessProgram::Parse(too_short).has_value());
   EXPECT_FALSE(WitnessProgram::Parse(too_long).has_value());
@@ -145,8 +138,7 @@ TEST(ValidateSigOpCostsTest, WitnessProgramParseAcceptsValidPrograms) {
   const auto parsed = WitnessProgram::Parse(script);
   ASSERT_TRUE(parsed.has_value());
   EXPECT_EQ(parsed->version, 1);
-  EXPECT_TRUE(std::equal(parsed->program.begin(), parsed->program.end(), key_hash.begin(),
-                         key_hash.end()));
+  EXPECT_TRUE(std::equal(parsed->program.begin(), parsed->program.end(), key_hash.begin(), key_hash.end()));
 }
 
 TEST(ValidateSigOpCostsTest, PayToScriptHashRequiresExactTemplate) {
@@ -336,7 +328,7 @@ TEST(ValidateSigOpCostsTest, SigOpCostAccumulatesLegacyAndNonLegacyPaths) {
   tx.SetWitnessScript(3, 0, p2sh_witness_script);
 
   const std::array spends = {
-    MakeSpend(legacy_pubkey, 0),
+      MakeSpend(legacy_pubkey, 0),
       MakeSpend(p2sh_pubkey, 1),
       MakeSpend(witness_pubkey, 2),
       MakeSpend(p2sh_pubkey, 3),
@@ -357,8 +349,7 @@ TEST(ValidateSigOpCostsTest, ValidateSigOpCostsAcceptsBlockAtBudget) {
   StubUnspentOutputsView unspent;
   unspent.Add(std::move(tx), {MakeSpend(p2sh_pubkey)});
 
-  EXPECT_EQ(ValidateSigOpCosts({block, ancestry, unspent, 1, CombineFlags({VerifyFlag::P2SH})}),
-            Result{});
+  EXPECT_EQ(ValidateSigOpCosts({block, ancestry, unspent, 1, CombineFlags({VerifyFlag::P2SH})}), Result{});
   EXPECT_EQ(unspent.EnumeratedCount(), 1);
 }
 
@@ -386,6 +377,39 @@ TEST(ValidateSigOpCostsTest, ValidateSigOpCostsRejectsBlockAboveBudget) {
   EXPECT_EQ(ValidateSigOpCosts({block, ancestry, unspent, 1, CombineFlags({VerifyFlag::P2SH})}),
             Error::Spending_BadSigOpsCost);
   EXPECT_EQ(unspent.EnumeratedCount(), 2);
+}
+
+TEST(ValidateSigOpCostsTest, RejectsBlockJustOverSigOpCostLimit) {
+  test::ExpectValidationResult(
+      [] {
+        test::Blockchain data = test::LoadValidationPipelineChain();
+
+        auto funding = data.Sample(2, true, 1, 1);
+        const uint32_t spent_unspent_index = funding.Transaction(1).Input(0).sequence;
+        const std::vector<uint8_t> p2sh_hash(20, 0x42);
+        funding.Transaction(1).SetPkScript(0, MakeP2SHScript(p2sh_hash));
+        data.AppendFixed(std::move(funding));
+
+        const auto funding_tx = data.Back()->Transaction(1);
+        const protocol::OutPoint prevout{funding_tx.GetHash(), 0};
+        const int64_t amount = funding_tx.Output(0).value;
+
+        Transaction overflow_tx;
+        overflow_tx.SetVersion(1);
+        overflow_tx.ResizeInputs(1);
+        overflow_tx.ResizeOutputs(1);
+        overflow_tx.Input(0).previous_output = prevout;
+        overflow_tx.Input(0).sequence = spent_unspent_index;
+        overflow_tx.SetSignatureScript(0, Writer{}.PushData(RepeatOp(Op::CheckSig, 20'001)).Release());
+        overflow_tx.Output(0).value = amount;
+        overflow_tx.SetPkScript(0, Writer{}.PushInt(1).Release());
+
+        auto overflow = data.Sample(1, true);
+        overflow.AddTransaction(overflow_tx);
+        data.AppendFixed(std::move(overflow));
+        return data;
+      },
+      consensus::Error::Spending_BadSigOpsCost);
 }
 
 }  // namespace
