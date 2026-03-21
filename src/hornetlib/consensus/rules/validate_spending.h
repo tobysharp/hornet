@@ -123,7 +123,6 @@ struct TransactionSpendContext {
     Rule{ValidateSpendingInputs},
     Rule{ValidateOutputValuesAtMostInputValues},
     Rule{ValidateSequenceLocks, BIP::SequenceLocks}
-    // TODO: Transaction sig-op costs rule
     // TODO: Input scripts rule
     // TODO: Coinbase amount <= block subsidy + fees
   );
