@@ -35,8 +35,8 @@ class UnspentOutputsView {
   template <typename Fn>
   Result ForEachTransaction(const protocol::Block& block, Fn&& fn) const {
     struct Wrapper {
-      static Result Thunk(const protocol::TransactionConstView& tx,
-                          std::span<const SpendRecord> spends, const void* user) {
+      static Result Thunk(const protocol::TransactionConstView tx,
+                          const std::span<const SpendRecord> spends, const void* user) {
         const auto* f = static_cast<const Fn*>(user);
         return (*f)(tx, spends);
       }
@@ -44,9 +44,22 @@ class UnspentOutputsView {
     return EnumerateTransactions(block, &Wrapper::Thunk, &fn);
   }
 
+  template <typename Fn>
+  auto SumTransactions(const protocol::Block& block, Fn&& fn) const 
+    -> std::expected<std::remove_cvref_t<std::invoke_result_t<Fn&, const protocol::TransactionConstView&, const std::span<const SpendRecord>&>>, Error>{
+    using T = std::remove_cvref_t<std::invoke_result_t<Fn&, const protocol::TransactionConstView&, const std::span<const SpendRecord>&>>;
+    T sum{};
+    const Result result = ForEachTransaction(block, [&](const protocol::TransactionConstView tx, const std::span<const SpendRecord> spends) {
+      sum += std::invoke(fn, tx, spends);
+      return Result::Ok;
+    });
+    if (!result) return std::unexpected{result.Error()};
+    return sum;
+  }
+
  protected:
-  using Callback = Result (*)(const protocol::TransactionConstView& tx,
-                              std::span<const SpendRecord> spend, const void* user);
+  using Callback = Result (*)(const protocol::TransactionConstView tx,
+                              const std::span<const SpendRecord> spend, const void* user);
   virtual Result EnumerateTransactions(const protocol::Block& block, const Callback cb,
                                        const void* user) const = 0;
 };

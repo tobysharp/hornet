@@ -9,6 +9,7 @@
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/data/header_timechain.h"
 #include "hornetlib/data/utxo/database.h"
+#include "hornetlib/data/utxo/database_view.h"
 #include "hornetlib/data/utxo/joiner.h"
 #include "hornetlib/model/header_context.h"
 #include "hornetlib/protocol/block.h"
@@ -201,6 +202,64 @@ TEST(ValidateSpendingTest, ProcessBlockJustOverSigOpCostLimit) {
     data.AppendFixed(std::move(overflow));
     return data;
   }, consensus::Error::Spending_BadSigOpsCost);
+}
+
+Result ValidateCandidateBlockSubsidy(const test::Blockchain& chain,
+                                     const protocol::Block& block) {
+  data::HeaderTimechain headers;
+  test::TempFolder datadir;
+  data::utxo::Database db{datadir.Path()};
+  model::HeaderContext context;
+  data::HeaderTimechain::ConstIterator tip;
+
+  for (int height = 0; height < chain.Length(); ++height) {
+    tip = headers.Add(context = context.Extend(chain[height]->Header())).it;
+    if (height > 0) db.Append(*chain[height], height);
+  }
+
+  const int height = chain.Length();
+  const auto ancestry = headers.GetValidationView(tip);
+  auto joiner = std::make_shared<data::utxo::SpendJoiner>(
+      db, std::make_shared<const protocol::Block>(block), height);
+
+  while (joiner->IsAdvanceReady()) joiner->Advance();
+  if (!joiner->IsJoinReady()) return Error::Spending_PrevoutNotUnspent;
+
+  const data::utxo::DatabaseView utxo{joiner};
+  const BlockValidationContext validation{block, chain[height - 1]->Header(), *ancestry, 0, utxo};
+  return ValidateBlockSubsidy(MakeBlockSpendContext(validation));
+}
+
+TEST(ValidateSpendingTest, BlockSubsidyAcceptsCoinbaseAtBlockReward) {
+  test::Blockchain chain;
+  chain.Load(test::GetDataPath("ValidationPipelineTest_ProcessBlocks.bin"));
+
+  const protocol::Block candidate = chain.Sample(2, true);
+  EXPECT_EQ(ValidateCandidateBlockSubsidy(chain, candidate), Result{});
+}
+
+TEST(ValidateSpendingTest, BlockSubsidyRejectsCoinbaseAboveBlockReward) {
+  test::Blockchain chain;
+  chain.Load(test::GetDataPath("ValidationPipelineTest_ProcessBlocks.bin"));
+
+  protocol::Block candidate = chain.Sample(2, true);
+  candidate.Transaction(0).Output(0).value += 1;
+  FixMerkleRoot(candidate);
+
+  EXPECT_EQ(ValidateCandidateBlockSubsidy(chain, candidate),
+            Error::Spending_CoinbaseAmountExceedsBlockReward);
+}
+
+TEST(ValidateSpendingTest, ProcessCoinbaseAmountExceedsBlockReward) {
+  test::ExpectValidationResult([] {
+    test::Blockchain data;
+    data.Load(test::GetDataPath("ValidationPipelineTest_ProcessBlocks.bin"));
+
+    protocol::Block block = data.Sample(2, true);
+    block.Transaction(0).Output(0).value += 1;
+    data.AppendFixed(std::move(block));
+    return data;
+  }, Error::Spending_CoinbaseAmountExceedsBlockReward);
 }
 
 TEST(ValidateSpendingTest, SequenceLocksIgnoreVersion1Transactions) {
