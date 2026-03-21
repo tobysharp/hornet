@@ -3,12 +3,12 @@
 
 #include "hornetlib/consensus/rules/scripts/sigops.h"
 #include "hornetlib/consensus/rules/scripts/sigops_detail.h"
-#include "hornetlib/consensus/rules/scripts/verify_flags.h"
 #include "hornetlib/consensus/utxo.h"
 #include "hornetlib/protocol/transaction.h"
 
 namespace hornet::consensus::rules::scripts {
 
+// Returns the sum of sigop counts across all legacy input sig scripts and output pubkey scripts.
 int LegacySigOpCount(protocol::TransactionConstView tx) {
   /* mutable */ int sum = 0;
   for (const auto& script : tx.SignatureScripts()) sum += sigops::ScriptCount(script);
@@ -16,6 +16,7 @@ int LegacySigOpCount(protocol::TransactionConstView tx) {
   return sum;
 }
 
+// Returns the sum of sigop costs for a transaction, given spending information.
 int SigOpCost(protocol::TransactionConstView tx, std::span<const SpendRecord> spends, uint64_t flags) {
   using namespace scripts;
   constexpr int kWitnessScale = 4;

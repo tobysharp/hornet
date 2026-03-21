@@ -2,7 +2,6 @@
 #include "hornetlib/consensus/rules/scripts/sigops.h"
 #include "hornetlib/consensus/rules/scripts/sigops_detail.h"
 #include "hornetlib/consensus/rules/scripts/spend_patterns.h"
-#include "hornetlib/consensus/rules/scripts/verify_flags.h"
 #include "hornetlib/consensus/rules/validate_spending.h"
 #include "hornetlib/consensus/utxo.h"
 #include "hornetlib/protocol/block.h"
