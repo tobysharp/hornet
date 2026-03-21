@@ -4,10 +4,13 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #include "hornetlib/consensus/validate_api.h"
 
+#include "hornetlib/consensus/rules/context.h"
+#include "hornetlib/consensus/rules/validate_block_context.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/hash.h"
 #include "hornetlib/protocol/transaction.h"
+#include "hornetlib/consensus/stub_header_ancestry_view.h"
 #include "testutil/round_trip.h"
 
 #include <gtest/gtest.h>
@@ -20,6 +23,7 @@ using hornet::protocol::BlockHeader;
 using hornet::protocol::Hash;
 using hornet::protocol::OutPoint;
 using hornet::protocol::Transaction;
+using hornet::test::StubHeaderAncestryView;
 using test::RoundTrip;
 
 TEST(ValidatorTest, DetectsInvalidMerkleRoot) {
@@ -132,6 +136,41 @@ TEST(ValidatorTest, RejectsBlockWithInvalidTransaction) {
   block.SetHeader(header);
 
   EXPECT_EQ(ValidateStructural(RoundTrip(block)), Error::Transaction_NegativeOutputValue);
+}
+
+TEST(ValidatorTest, RejectsWitnessDataBeforeSegwitActivation) {
+  Block block;
+
+  Transaction coinbase;
+  coinbase.SetVersion(1);
+  coinbase.ResizeInputs(1);
+  coinbase.Input(0).previous_output = OutPoint::Null();
+  coinbase.Input(0).sequence = 0xffffffff;
+  coinbase.SetSignatureScript(0, std::vector<uint8_t>{0x01, 0x01});
+  coinbase.ResizeOutputs(1);
+  coinbase.Output(0).value = 50'000'000;
+  coinbase.SetPkScript(0, std::vector<uint8_t>{0x51});
+  coinbase.SetLockTime(0);
+  block.AddTransaction(coinbase);
+
+  Transaction tx;
+  tx.SetVersion(1);
+  tx.ResizeInputs(1);
+  tx.Input(0).previous_output = {Hash{0x01}, 0};
+  tx.Input(0).sequence = 0xffffffff;
+  tx.SetSignatureScript(0, std::vector<uint8_t>{0x51});
+  tx.ResizeOutputs(1);
+  tx.Output(0).value = 10'000;
+  tx.SetPkScript(0, std::vector<uint8_t>{0x51});
+  tx.ResizeWitnesses(1);
+  tx.ResizeComponents(0, 1);
+  tx.SetWitnessScript(0, 0, std::vector<uint8_t>{0x01});
+  tx.SetLockTime(0);
+  block.AddTransaction(tx);
+
+  const StubHeaderAncestryView ancestry;
+  const rules::BlockEnvironmentContext context{block, ancestry, 100};
+  EXPECT_EQ(rules::ValidateNoWitnessPreSegwit(context), Error::Structure_WitnessDataPreSegwit);
 }
 
 }  // namespace

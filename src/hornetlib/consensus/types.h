@@ -32,9 +32,10 @@ enum class Error {
   Structure_NonFinalTransaction,
   Structure_BadWitnessNonce,
   Structure_BadWitnessMerkle,
-  Structure_UnexpectedWitness,
+  Structure_WitnessDataWithoutCommitment,
+  Structure_WitnessDataPreSegwit,
   Structure_BadBlockWeight,
-
+  
   // Transactions
   Transaction_EmptyInputs,
   Transaction_EmptyOutputs,

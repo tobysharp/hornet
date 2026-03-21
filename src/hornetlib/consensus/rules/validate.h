@@ -67,6 +67,7 @@ namespace hornet::consensus::rules {
     Rule{ValidateTransactionFinality},                            // All transactions in the block MUST be final given the block height and locktime rules.
     Rule{ValidateCoinbaseHeight,        BIP::HeightInCoinbase },  // From BIP34, the coinbase transaction’s scriptSig MUST begin by pushing the block height.
     Rule{ValidateWitnessCommitment,     BIP::SegWit           },  // From BIP141, the coinbase transaction MUST include a valid witness commitment for blocks containing witness data.
+    Rule{ValidateNoWitnessPreSegwit},
     Rule{ValidateBlockWeight}                                     // A block’s total weight MUST NOT exceed 4,000,000 weight units.
   );
   //clang-format on

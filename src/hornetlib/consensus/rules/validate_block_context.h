@@ -1,3 +1,5 @@
+#pragma once
+
 #include <algorithm>
 #include <array>
 #include <expected>
@@ -30,8 +32,8 @@ inline bool IsLockTimeABlockHeight(const uint32_t locktime) {
 // Determines whether the transaction is final at the given height/timestamp.
 // A transaction is considered final if its locktime has expired.
 // This function is equivalent to Bitcoin Core's IsFinalTx function.
-inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transaction,
-                                 const int height, const int64_t timestamp) {
+inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transaction, const int height,
+                                 const int64_t timestamp) {
   constexpr uint32_t kSequenceFinal = 0xFFFF'FFFF;
 
   // A locktime of zero means the transaction is immediately final.
@@ -50,8 +52,7 @@ inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transacti
 }  // namespace detail
 
 // All transactions in the block MUST be final given the block height and locktime rules.
-[[nodiscard]] inline Result ValidateTransactionFinality(
-    const BlockEnvironmentContext& context) {
+[[nodiscard]] inline Result ValidateTransactionFinality(const BlockEnvironmentContext& context) {
   const int64_t current_locktime = IsBIPActiveAtHeight(BIP::LockTimeMedianPast, context.height)
                                        ? context.view.MedianTimePast()
                                        : context.block.Header().GetTimestamp();
@@ -72,16 +73,14 @@ inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transacti
 
 // From BIP141, the coinbase transaction MUST include a valid witness commitment for blocks
 // containing witness data.
-[[nodiscard]] /* [[BIP::SegWit]] */ inline Result ValidateWitnessCommitment(
-    const protocol::Block& block) {
+[[nodiscard]] /* [[BIP::SegWit]] */ inline Result ValidateWitnessCommitment(const protocol::Block& block) {
   // With BIP141 (Segwit v0), witness data is added to transactions. But that witness data can't be
   // included in the header's Merkle root for backwards compatibility. So instead, a commitment hash
   // that includes the Merkle root *with witness data* is stuffed into the pubkey script of one
   // of the coinbase transaction's outputs. Here we validate that the coinbase's commitment
   // correctly commits to the block's witness data.
   using protocol::script::lang::Op;
-  constexpr std::array<uint8_t, 6> kWitnessCommitmentBytes = {+Op::Return, 0x24, 0xaa,
-                                                              0x21,        0xa9, 0xed};
+  constexpr std::array<uint8_t, 6> kWitnessCommitmentBytes = {+Op::Return, 0x24, 0xaa, 0x21, 0xa9, 0xed};
   if (block.Empty()) return {};
 
   // Discover which of the block's coinbase transaction outputs contain a witness commitment.
@@ -101,8 +100,8 @@ inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transacti
 
     // The commitment value is the double-SHA256 of the concatenated witness-enabled Merkle root,
     // and the arbitrary 32-byte salt from the coinbase witness script.
-    const auto hash_witness = crypto::DoubleSha256<64>(ComputeWitnessMerkleRoot(block).hash,
-                                                       coinbase.WitnessScript(0, 0));
+    const auto hash_witness =
+        crypto::DoubleSha256<64>(ComputeWitnessMerkleRoot(block).hash, coinbase.WitnessScript(0, 0));
 
     // Finally, this is compared against the commitment in the appropriate coinbase pkscript.
     if (!std::ranges::starts_with(coinbase.PkScript(output_index).subspan(6), hash_witness))
@@ -110,17 +109,26 @@ inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transacti
   } else {
     // No valid witness commitment -- this block may not contain witness data.
     for (const auto& tx : block.Transactions())
-      if (tx.IsWitness()) return Error::Structure_UnexpectedWitness;
+      if (tx.IsWitness()) return Error::Structure_WitnessDataWithoutCommitment;
   }
 
   return {};
 }
 
 // A block’s total weight MUST NOT exceed 4,000,000 weight units.
-[[nodiscard]] inline Result ValidateBlockWeight(
-    const protocol::Block& block) {
+[[nodiscard]] inline Result ValidateBlockWeight(const protocol::Block& block) {
   constexpr int kMaximumWeightUnits = 4'000'000;
   if (block.GetWeightUnits() > kMaximumWeightUnits) return Error::Structure_BadBlockWeight;
+  return {};
+}
+
+// A block below the SegWit activation height MUST NOT contain any witness data.
+[[nodiscard]] inline Result ValidateNoWitnessPreSegwit(const BlockEnvironmentContext& context) {
+  if (!IsBIPActiveAtHeight(BIP::SegWit, context.height)) {
+    for (const auto& tx : context.block.Transactions()) {
+      if (tx.IsWitness()) return Error::Structure_WitnessDataPreSegwit;
+    }
+  }
   return {};
 }
 
