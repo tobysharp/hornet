@@ -31,7 +31,7 @@ consensus::Result ValidateChain(const std::filesystem::path& path) {
     if (height > 0) {
       const auto ancestry = headers.GetValidationView(tip);
       const auto current_time =
-          std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+          std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
               .count();
       const auto joiner = std::make_shared<data::utxo::SpendJoiner>(db, block, height);
       while (joiner->IsAdvanceReady()) joiner->Advance();

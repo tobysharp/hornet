@@ -4,6 +4,7 @@
 #include "hornetlib/consensus/rules/scripts/spend_patterns.h"
 #include "hornetlib/consensus/rules/validate_spending.h"
 #include "hornetlib/consensus/spending_test_harness.h"
+#include "hornetlib/consensus/stub_header_ancestry_view.h"
 #include "hornetlib/consensus/utxo.h"
 #include "hornetlib/consensus/validate_chain_harness.h"
 #include "hornetlib/protocol/block.h"
@@ -28,6 +29,7 @@ using protocol::Transaction;
 using protocol::script::Writer;
 using protocol::script::lang::ConstantToOp;
 using protocol::script::lang::Op;
+using hornet::test::StubHeaderAncestryView;
 
 std::vector<uint8_t> MakeScript(std::initializer_list<Op> opcodes) {
   Writer writer;
@@ -73,17 +75,6 @@ SpendRecord MakeSpend(std::span<const uint8_t> pubkey_script, int input_index = 
           .pubkey_script = pubkey_script,
           .spend_input_index = input_index};
 }
-
-class StubHeaderAncestryView : public HeaderAncestryView {
- public:
-  int Length() const override { return 1; }
-  const Hash& HashAt(int) const override { return hash_; }
-  uint32_t TimestampAt(int) const override { return 0; }
-  std::vector<uint32_t> LastNTimestamps(int, int) const override { return {0}; }
-
- private:
-  Hash hash_{};
-};
 
 class StubUnspentOutputsView : public UnspentOutputsView {
  public:
