@@ -4,14 +4,20 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #include "hornetlib/consensus/validate_api.h"
 
+#include "hornetlib/consensus/merkle.h"
 #include "hornetlib/consensus/rules/context.h"
 #include "hornetlib/consensus/rules/validate_block_context.h"
+#include "hornetlib/consensus/spending_test_harness.h"
 #include "hornetlib/consensus/types.h"
+#include "hornetlib/crypto/hash.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/hash.h"
 #include "hornetlib/protocol/transaction.h"
 #include "hornetlib/consensus/stub_header_ancestry_view.h"
 #include "testutil/round_trip.h"
+
+#include <array>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -25,6 +31,103 @@ using hornet::protocol::OutPoint;
 using hornet::protocol::Transaction;
 using hornet::test::StubHeaderAncestryView;
 using test::RoundTrip;
+
+constexpr int kSegWitHeight = GetSoftForkActivationHeight(BIP::SegWit);
+constexpr int kWitnessCommitmentOutputIndex = 1;
+
+Transaction MakeCoinbaseTransaction() {
+  Transaction coinbase;
+  coinbase.SetVersion(1);
+  coinbase.ResizeInputs(1);
+  coinbase.Input(0).previous_output = OutPoint::Null();
+  coinbase.Input(0).sequence = 0xffffffff;
+  coinbase.SetSignatureScript(0, std::vector<uint8_t>{0x01, 0x01});
+  coinbase.ResizeOutputs(2);
+  coinbase.Output(0).value = 50'000'000;
+  coinbase.SetPkScript(0, std::vector<uint8_t>{0x51});
+  coinbase.Output(kWitnessCommitmentOutputIndex).value = 0;
+  coinbase.SetPkScript(kWitnessCommitmentOutputIndex, std::vector<uint8_t>(38, 0));
+  coinbase.SetLockTime(0);
+  return coinbase;
+}
+
+Transaction MakeSpendTransaction(const bool witness = false) {
+  Transaction tx;
+  tx.SetVersion(1);
+  tx.ResizeInputs(1);
+  tx.Input(0).previous_output = {Hash{0x01}, 0};
+  tx.Input(0).sequence = 0xffffffff;
+  tx.SetSignatureScript(0, std::vector<uint8_t>{0x51});
+  tx.ResizeOutputs(1);
+  tx.Output(0).value = 10'000;
+  tx.SetPkScript(0, std::vector<uint8_t>{0x51});
+  if (witness) {
+    tx.ResizeWitnesses(1);
+    tx.ResizeComponents(0, 1);
+    tx.SetWitnessScript(0, 0, std::vector<uint8_t>{0x01});
+  }
+  tx.SetLockTime(0);
+  return tx;
+}
+
+std::vector<uint8_t> MakeBytes(const int size, const uint8_t seed = 1) {
+  std::vector<uint8_t> bytes(size);
+  for (int i = 0; i < size; ++i) bytes[i] = static_cast<uint8_t>(seed + i);
+  return bytes;
+}
+
+std::array<uint8_t, 32> MakeWitnessNonce(const uint8_t seed = 1) {
+  std::array<uint8_t, 32> nonce{};
+  for (int i = 0; i < std::ssize(nonce); ++i) nonce[i] = static_cast<uint8_t>(seed + i);
+  return nonce;
+}
+
+void SetCoinbaseWitnessNonce(Transaction& coinbase, std::span<const uint8_t> nonce) {
+  coinbase.ResizeWitnesses(1);
+  coinbase.ResizeComponents(0, 1);
+  coinbase.SetWitnessScript(0, 0, nonce);
+}
+
+void SetCoinbaseWitnessEmptyStack(Transaction& coinbase) {
+  coinbase.ResizeWitnesses(1);
+  coinbase.ResizeComponents(0, 0);
+}
+
+Block MakeBlock(const Transaction& coinbase, const bool witness_tx = false) {
+  Block block;
+  block.AddTransaction(coinbase);
+  block.AddTransaction(MakeSpendTransaction(witness_tx));
+  test::FixMerkleRoot(block);
+  return block;
+}
+
+std::vector<uint8_t> MakeWitnessCommitmentScript(std::span<const uint8_t> commitment) {
+  static constexpr std::array<uint8_t, 6> kCommitmentPrefix = {0x6a, 0x24, 0xaa, 0x21, 0xa9, 0xed};
+
+  std::vector<uint8_t> script(kCommitmentPrefix.begin(), kCommitmentPrefix.end());
+  script.insert(script.end(), commitment.begin(), commitment.end());
+  return script;
+}
+
+std::array<uint8_t, 32> ComputeWitnessCommitmentValue(const Block& block) {
+  return crypto::DoubleSha256<64>(ComputeWitnessMerkleRoot(block).hash, block.Transaction(0).WitnessScript(0, 0));
+}
+
+void SetWitnessCommitmentOutput(Block& block, std::span<const uint8_t> commitment) {
+  auto coinbase = block.Transaction(0);
+  coinbase.Output(kWitnessCommitmentOutputIndex).value = 0;
+  coinbase.SetPkScript(kWitnessCommitmentOutputIndex, MakeWitnessCommitmentScript(commitment));
+  test::FixMerkleRoot(block);
+}
+
+rules::BlockEnvironmentContext MakeSegWitContext(const Block& block) {
+  static const StubHeaderAncestryView ancestry;
+  return {block, ancestry, kSegWitHeight};
+}
+
+rules::WitnessContext MakeSegWitWitnessContext(const Block& block) {
+  return rules::MakeWitnessContext(MakeSegWitContext(block));
+}
 
 TEST(ValidatorTest, DetectsInvalidMerkleRoot) {
   Block block;
@@ -171,6 +274,155 @@ TEST(ValidatorTest, RejectsWitnessDataBeforeSegwitActivation) {
   const StubHeaderAncestryView ancestry;
   const rules::BlockEnvironmentContext context{block, ancestry, 100};
   EXPECT_EQ(rules::ValidateNoWitnessPreSegwit(context), Error::Structure_WitnessDataPreSegwit);
+}
+
+TEST(ValidatorTest, WitnessDataHasCommitmentAcceptsBlocksWithoutWitnessData) {
+  const Block block = MakeBlock(MakeCoinbaseTransaction());
+
+  EXPECT_EQ(rules::ValidateWitnessDataHasCommitment(MakeSegWitWitnessContext(block)), Result{});
+}
+
+TEST(ValidatorTest, WitnessDataHasCommitmentRejectsWitnessBlocksWithoutCommitment) {
+  const Block block = MakeBlock(MakeCoinbaseTransaction(), true);
+
+  EXPECT_EQ(rules::ValidateWitnessDataHasCommitment(MakeSegWitWitnessContext(block)),
+            Error::Structure_WitnessDataWithoutCommitment);
+}
+
+TEST(ValidatorTest, WitnessDataHasCommitmentAcceptsBlocksWithCommitment) {
+  Transaction coinbase = MakeCoinbaseTransaction();
+  const auto nonce = MakeWitnessNonce();
+  SetCoinbaseWitnessNonce(coinbase, nonce);
+
+  Block block = MakeBlock(coinbase, true);
+  SetWitnessCommitmentOutput(block, ComputeWitnessCommitmentValue(block));
+
+  EXPECT_EQ(rules::ValidateWitnessDataHasCommitment(MakeSegWitWitnessContext(block)), Result{});
+}
+
+TEST(ValidatorTest, WitnessNonceAcceptsBlocksWithoutCommitment) {
+  Transaction coinbase = MakeCoinbaseTransaction();
+  SetCoinbaseWitnessNonce(coinbase, MakeWitnessNonce());
+  const Block block = MakeBlock(coinbase, true);
+
+  EXPECT_EQ(rules::ValidateWitnessNonce(MakeSegWitWitnessContext(block)), Result{});
+}
+
+TEST(ValidatorTest, WitnessNonceRejectsCoinbaseWitnessWithEmptyStack) {
+  Transaction coinbase = MakeCoinbaseTransaction();
+  SetCoinbaseWitnessEmptyStack(coinbase);
+
+  Block block = MakeBlock(coinbase, true);
+  SetWitnessCommitmentOutput(block, MakeBytes(32, 0x11));
+
+  EXPECT_EQ(rules::ValidateWitnessNonce(MakeSegWitWitnessContext(block)), Error::Structure_BadWitnessNonce);
+}
+
+TEST(ValidatorTest, WitnessNonceRejectsCoinbaseWitnessWithShortNonce) {
+  Transaction coinbase = MakeCoinbaseTransaction();
+  SetCoinbaseWitnessNonce(coinbase, MakeBytes(31, 0x21));
+
+  Block block = MakeBlock(coinbase, true);
+  SetWitnessCommitmentOutput(block, MakeBytes(32, 0x31));
+
+  EXPECT_EQ(rules::ValidateWitnessNonce(MakeSegWitWitnessContext(block)), Error::Structure_BadWitnessNonce);
+}
+
+TEST(ValidatorTest, WitnessNonceAcceptsSingle32ByteNonce) {
+  Transaction coinbase = MakeCoinbaseTransaction();
+  SetCoinbaseWitnessNonce(coinbase, MakeWitnessNonce());
+
+  Block block = MakeBlock(coinbase, true);
+  SetWitnessCommitmentOutput(block, MakeBytes(32, 0x41));
+
+  EXPECT_EQ(rules::ValidateWitnessNonce(MakeSegWitWitnessContext(block)), Result{});
+}
+
+TEST(ValidatorTest, WitnessMerkleAcceptsBlocksWithoutCommitment) {
+  Transaction coinbase = MakeCoinbaseTransaction();
+  SetCoinbaseWitnessNonce(coinbase, MakeWitnessNonce());
+  const Block block = MakeBlock(coinbase, true);
+
+  EXPECT_EQ(rules::ValidateWitnessMerkle(MakeSegWitWitnessContext(block)), Result{});
+}
+
+TEST(ValidatorTest, WitnessMerkleAcceptsBlocksWithCommitmentAndNoCoinbaseWitness) {
+  Block block = MakeBlock(MakeCoinbaseTransaction(), true);
+  SetWitnessCommitmentOutput(block, MakeBytes(32, 0x51));
+
+  EXPECT_EQ(rules::ValidateWitnessMerkle(MakeSegWitWitnessContext(block)), Result{});
+}
+
+TEST(ValidatorTest, WitnessMerkleAcceptsBlocksWithCommitmentAndEmptyCoinbaseWitnessStack) {
+  Transaction coinbase = MakeCoinbaseTransaction();
+  SetCoinbaseWitnessEmptyStack(coinbase);
+
+  Block block = MakeBlock(coinbase, true);
+  SetWitnessCommitmentOutput(block, MakeBytes(32, 0x61));
+
+  EXPECT_EQ(rules::ValidateWitnessMerkle(MakeSegWitWitnessContext(block)), Result{});
+}
+
+TEST(ValidatorTest, WitnessMerkleRejectsMismatchedCommitment) {
+  Transaction coinbase = MakeCoinbaseTransaction();
+  SetCoinbaseWitnessNonce(coinbase, MakeWitnessNonce());
+
+  Block block = MakeBlock(coinbase, true);
+  auto commitment = ComputeWitnessCommitmentValue(block);
+  commitment[0] ^= 0xff;
+  SetWitnessCommitmentOutput(block, commitment);
+
+  EXPECT_EQ(rules::ValidateWitnessMerkle(MakeSegWitWitnessContext(block)), Error::Structure_BadWitnessMerkle);
+}
+
+TEST(ValidatorTest, WitnessMerkleAcceptsMatchingCommitment) {
+  Transaction coinbase = MakeCoinbaseTransaction();
+  SetCoinbaseWitnessNonce(coinbase, MakeWitnessNonce());
+
+  Block block = MakeBlock(coinbase, true);
+  SetWitnessCommitmentOutput(block, ComputeWitnessCommitmentValue(block));
+
+  EXPECT_EQ(rules::ValidateWitnessMerkle(MakeSegWitWitnessContext(block)), Result{});
+}
+
+TEST(ValidatorTest, WitnessCommitmentRejectsWitnessBlocksWithoutCommitment) {
+  Transaction coinbase = MakeCoinbaseTransaction();
+  SetCoinbaseWitnessNonce(coinbase, MakeWitnessNonce());
+  const Block block = MakeBlock(coinbase, true);
+
+  EXPECT_EQ(rules::ValidateWitnessCommitment(MakeSegWitContext(block)), Error::Structure_WitnessDataWithoutCommitment);
+}
+
+TEST(ValidatorTest, WitnessCommitmentRejectsBadWitnessNonce) {
+  Transaction coinbase = MakeCoinbaseTransaction();
+  SetCoinbaseWitnessEmptyStack(coinbase);
+
+  Block block = MakeBlock(coinbase, true);
+  SetWitnessCommitmentOutput(block, MakeBytes(32, 0x71));
+
+  EXPECT_EQ(rules::ValidateWitnessCommitment(MakeSegWitContext(block)), Error::Structure_BadWitnessNonce);
+}
+
+TEST(ValidatorTest, WitnessCommitmentRejectsBadWitnessMerkle) {
+  Transaction coinbase = MakeCoinbaseTransaction();
+  SetCoinbaseWitnessNonce(coinbase, MakeWitnessNonce());
+
+  Block block = MakeBlock(coinbase, true);
+  auto commitment = ComputeWitnessCommitmentValue(block);
+  commitment[1] ^= 0xff;
+  SetWitnessCommitmentOutput(block, commitment);
+
+  EXPECT_EQ(rules::ValidateWitnessCommitment(MakeSegWitContext(block)), Error::Structure_BadWitnessMerkle);
+}
+
+TEST(ValidatorTest, WitnessCommitmentAcceptsValidWitnessCommitment) {
+  Transaction coinbase = MakeCoinbaseTransaction();
+  SetCoinbaseWitnessNonce(coinbase, MakeWitnessNonce());
+
+  Block block = MakeBlock(coinbase, true);
+  SetWitnessCommitmentOutput(block, ComputeWitnessCommitmentValue(block));
+
+  EXPECT_EQ(rules::ValidateWitnessCommitment(MakeSegWitContext(block)), Result{});
 }
 
 }  // namespace
