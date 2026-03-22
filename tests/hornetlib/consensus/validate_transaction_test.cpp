@@ -5,6 +5,8 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #include "hornetlib/consensus/validate_api.h"
 
+#include "hornetlib/encoding/reader.h"
+#include "hornetlib/encoding/writer.h"
 #include "hornetlib/protocol/transaction.h"
 #include "testutil/round_trip.h"
 
@@ -170,6 +172,29 @@ TEST(ValidatorTest, RejectsOversizedOutputValue) {
 
   auto result = ValidateTransaction(RoundTrip(tx));
   EXPECT_EQ(result, Error::Transaction_OversizedOutputValue);
+}
+
+TEST(ValidatorTest, RejectsEmptyWitnessSerialization) {
+  protocol::Transaction tx;
+  tx.SetVersion(2);
+  tx.ResizeInputs(1);
+  tx.Input(0).previous_output.hash = protocol::Hash{0x01};
+  tx.Input(0).previous_output.index = 0;
+  tx.Input(0).sequence = 0xffffffff;
+  tx.SetSignatureScript(0, std::vector<uint8_t>{0x51});
+  tx.ResizeOutputs(1);
+  tx.Output(0).value = 1;
+  tx.SetPkScript(0, std::vector<uint8_t>{0x51});
+  tx.ResizeWitnesses(1);
+  tx.ResizeComponents(0, 0);
+  tx.SetLockTime(0);
+
+  encoding::Writer writer;
+  tx.Serialize(writer);
+
+  encoding::Reader reader(writer.Buffer());
+  protocol::Transaction decoded;
+  EXPECT_ANY_THROW(decoded.Deserialize(reader));
 }
 
 }  // namespace

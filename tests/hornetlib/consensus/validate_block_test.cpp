@@ -4,6 +4,8 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #include "hornetlib/consensus/validate_api.h"
 
+#include "hornetlib/encoding/reader.h"
+#include "hornetlib/encoding/writer.h"
 #include "hornetlib/consensus/merkle.h"
 #include "hornetlib/consensus/rules/context.h"
 #include "hornetlib/consensus/rules/validate_block_context.h"
@@ -12,6 +14,7 @@
 #include "hornetlib/crypto/hash.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/hash.h"
+#include "hornetlib/protocol/script/writer.h"
 #include "hornetlib/protocol/transaction.h"
 #include "hornetlib/consensus/stub_header_ancestry_view.h"
 #include "testutil/round_trip.h"
@@ -91,6 +94,11 @@ void SetCoinbaseWitnessNonce(Transaction& coinbase, std::span<const uint8_t> non
 void SetCoinbaseWitnessEmptyStack(Transaction& coinbase) {
   coinbase.ResizeWitnesses(1);
   coinbase.ResizeComponents(0, 0);
+}
+
+void SetWitnessEmptyStack(Transaction& tx) {
+  tx.ResizeWitnesses(1);
+  tx.ResizeComponents(0, 0);
 }
 
 Block MakeBlock(const Transaction& coinbase, const bool witness_tx = false) {
@@ -423,6 +431,27 @@ TEST(ValidatorTest, WitnessCommitmentAcceptsValidWitnessCommitment) {
   SetWitnessCommitmentOutput(block, ComputeWitnessCommitmentValue(block));
 
   EXPECT_EQ(rules::ValidateWitnessCommitment(MakeSegWitContext(block)), Result{});
+}
+
+TEST(ValidatorTest, RejectsBlockWithEmptyWitnessSerialization) {
+  Transaction coinbase = MakeCoinbaseTransaction();
+  coinbase.SetSignatureScript(0, protocol::script::Writer{}.PushInt(kSegWitHeight).PushInt(0).Release());
+  SetCoinbaseWitnessNonce(coinbase, MakeWitnessNonce());
+
+  Transaction tx = MakeSpendTransaction();
+  SetWitnessEmptyStack(tx);
+
+  Block block;
+  block.AddTransaction(coinbase);
+  block.AddTransaction(tx);
+  SetWitnessCommitmentOutput(block, ComputeWitnessCommitmentValue(block));
+
+  encoding::Writer writer;
+  block.Serialize(writer);
+
+  encoding::Reader reader(writer.Buffer());
+  Block decoded;
+  EXPECT_ANY_THROW(decoded.Deserialize(reader));
 }
 
 }  // namespace
