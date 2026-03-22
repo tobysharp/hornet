@@ -1,9 +1,11 @@
 #include "hornetlib/consensus/rules/validate_spending.h"
 
+#include <limits>
 #include <cstdint>
 #include <utility>
 
 #include "hornetlib/consensus/spending_test_harness.h"
+#include "hornetlib/consensus/stub_header_ancestry_view.h"
 #include "hornetlib/consensus/validate_chain_harness.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/block_header.h"
@@ -16,6 +18,58 @@
 
 namespace hornet::consensus::rules {
 namespace {
+
+class SubsidyOverflowUnspentView : public UnspentOutputsView {
+ public:
+  struct Entry {
+    protocol::Transaction tx;
+    std::vector<SpendRecord> spends;
+  };
+
+  void Add(protocol::Transaction tx, std::vector<SpendRecord> spends) {
+    entries_.push_back({std::move(tx), std::move(spends)});
+  }
+
+  Result QueryPrevoutsUnspent(const protocol::Block&) const override { return {}; }
+  Result QueryOutPointsUnique(const protocol::Block&) const override { return {}; }
+
+ protected:
+  Result EnumerateTransactions(const protocol::Block&, const Callback cb, const void* user) const override {
+    for (const auto& entry : entries_) {
+      if (const Result result = cb(entry.tx, entry.spends, user); !result) return result;
+    }
+    return {};
+  }
+
+ private:
+  std::vector<Entry> entries_;
+};
+
+protocol::Transaction MakeCoinbaseTx(int64_t value) {
+  protocol::Transaction tx;
+  tx.SetVersion(1);
+  tx.ResizeInputs(1);
+  tx.ResizeOutputs(1);
+  tx.Input(0).previous_output = protocol::OutPoint::Null();
+  tx.Input(0).sequence = 0xffffffff;
+  tx.Output(0).value = value;
+  tx.SetSignatureScript(0, protocol::script::Writer{}.PushInt(1).PushInt(0).Release());
+  tx.SetPkScript(0, std::vector<uint8_t>{0x51});
+  return tx;
+}
+
+protocol::Transaction MakeMaxMoneySpendTx(int index, int64_t output_value = 21'000'000ll * 100'000'000ll) {
+  protocol::Transaction tx;
+  tx.SetVersion(2);
+  tx.ResizeInputs(1);
+  tx.ResizeOutputs(1);
+  tx.Input(0).previous_output = {protocol::Hash{static_cast<uint8_t>(index + 1)}, 0};
+  tx.Input(0).sequence = 0xffffffff;
+  tx.Output(0).value = output_value;
+  tx.SetSignatureScript(0, std::vector<uint8_t>{0x51});
+  tx.SetPkScript(0, std::vector<uint8_t>{0x51});
+  return tx;
+}
 
 template <typename Callback>
 Result EvaluateCandidateSpendingTransactions(const test::Blockchain& chain, const protocol::Block& block,
@@ -186,6 +240,98 @@ TEST(ValidateSpendingTransactionTest, RejectsOutputAmountsExceedInputAmounts) {
         return data;
       },
       Error::Spending_OutputAmountsExceedInputAmounts);
+}
+
+TEST(ValidateSpendingTransactionTest, AcceptsCoreValidBlockDespiteAccumulatorOverflowRisk) {
+  constexpr int64_t kMaxMoney = 21'000'000ll * 100'000'000ll;
+  constexpr int64_t kSubsidy = 50ll * 100'000'000ll;
+  constexpr int kHeight = 1;
+  constexpr int kSpendCount = 4'500;
+
+  protocol::Block block;
+  block.AddTransaction(MakeCoinbaseTx(kSubsidy));
+
+  SubsidyOverflowUnspentView unspent;
+  for (int i = 0; i < kSpendCount; ++i) {
+    auto tx = MakeMaxMoneySpendTx(i);
+    block.AddTransaction(tx);
+    unspent.Add(std::move(tx), {{.funding_height = 0,
+                                 .funding_flags = 0u,
+                                 .amount = kMaxMoney,
+                                 .pubkey_script = {},
+                                 .spend_input_index = 0}});
+  }
+
+  const __int128 safe_inputs_total = static_cast<__int128>(kSpendCount) * kMaxMoney;
+  const __int128 safe_outputs_total = static_cast<__int128>(kSpendCount) * kMaxMoney;
+  ASSERT_GT(safe_inputs_total, static_cast<__int128>(std::numeric_limits<int64_t>::max()));
+  ASSERT_EQ(safe_inputs_total, safe_outputs_total);
+
+  const test::StubHeaderAncestryView ancestry;
+  EXPECT_EQ(ValidateBlockSubsidy({block, ancestry, unspent, kHeight, 0}), Result{});
+}
+
+TEST(ValidateSpendingTransactionTest, AcceptsExactReferenceRewardDespiteAccumulatorOverflowRisk) {
+  constexpr int64_t kMaxMoney = 21'000'000ll * 100'000'000ll;
+  constexpr int64_t kSubsidy = 50ll * 100'000'000ll;
+  constexpr int kHeight = 1;
+  constexpr int kSpendCount = 4'393;
+
+  protocol::Block block;
+  block.AddTransaction(MakeCoinbaseTx(kSubsidy + 1));
+
+  SubsidyOverflowUnspentView unspent;
+  for (int i = 0; i < kSpendCount; ++i) {
+    const int64_t output_value = (i + 1 == kSpendCount) ? (kMaxMoney - 1) : kMaxMoney;
+    auto tx = MakeMaxMoneySpendTx(i, output_value);
+    block.AddTransaction(tx);
+    unspent.Add(std::move(tx), {{.funding_height = 0,
+                                 .funding_flags = 0u,
+                                 .amount = kMaxMoney,
+                                 .pubkey_script = {},
+                                 .spend_input_index = 0}});
+  }
+
+  const __int128 safe_inputs_total = static_cast<__int128>(kSpendCount) * kMaxMoney;
+  const __int128 safe_outputs_total = static_cast<__int128>(kSpendCount) * kMaxMoney - 1;
+  ASSERT_GT(safe_inputs_total, static_cast<__int128>(std::numeric_limits<int64_t>::max()));
+  ASSERT_GT(safe_outputs_total, static_cast<__int128>(std::numeric_limits<int64_t>::max()));
+  ASSERT_EQ(safe_inputs_total - safe_outputs_total, static_cast<__int128>(1));
+
+  const test::StubHeaderAncestryView ancestry;
+  EXPECT_EQ(ValidateBlockSubsidy({block, ancestry, unspent, kHeight, 0}), Result{});
+}
+
+TEST(ValidateSpendingTransactionTest, RejectsCoinbaseAboveReferenceRewardDespiteAccumulatorOverflowRisk) {
+  constexpr int64_t kMaxMoney = 21'000'000ll * 100'000'000ll;
+  constexpr int64_t kSubsidy = 50ll * 100'000'000ll;
+  constexpr int kHeight = 1;
+  constexpr int kSpendCount = 4'393;
+
+  protocol::Block block;
+  block.AddTransaction(MakeCoinbaseTx(kSubsidy + 2));
+
+  SubsidyOverflowUnspentView unspent;
+  for (int i = 0; i < kSpendCount; ++i) {
+    const int64_t output_value = (i + 1 == kSpendCount) ? (kMaxMoney - 1) : kMaxMoney;
+    auto tx = MakeMaxMoneySpendTx(i, output_value);
+    block.AddTransaction(tx);
+    unspent.Add(std::move(tx), {{.funding_height = 0,
+                                 .funding_flags = 0u,
+                                 .amount = kMaxMoney,
+                                 .pubkey_script = {},
+                                 .spend_input_index = 0}});
+  }
+
+  const __int128 safe_inputs_total = static_cast<__int128>(kSpendCount) * kMaxMoney;
+  const __int128 safe_outputs_total = static_cast<__int128>(kSpendCount) * kMaxMoney - 1;
+  ASSERT_GT(safe_inputs_total, static_cast<__int128>(std::numeric_limits<int64_t>::max()));
+  ASSERT_GT(safe_outputs_total, static_cast<__int128>(std::numeric_limits<int64_t>::max()));
+  ASSERT_EQ(safe_inputs_total - safe_outputs_total, static_cast<__int128>(1));
+
+  const test::StubHeaderAncestryView ancestry;
+  EXPECT_EQ(ValidateBlockSubsidy({block, ancestry, unspent, kHeight, 0}),
+            Error::Spending_CoinbaseAmountExceedsBlockReward);
 }
 
 }  // namespace

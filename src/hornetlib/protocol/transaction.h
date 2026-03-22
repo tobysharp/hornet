@@ -15,11 +15,11 @@
 #include "hornetlib/encoding/reader.h"
 #include "hornetlib/encoding/writer.h"
 #include "hornetlib/protocol/hash.h"
-#include "hornetlib/util/log.h"
-#include "hornetlib/util/subarray.h"
 #include "hornetlib/util/big_uint.h"
 #include "hornetlib/util/io.h"
+#include "hornetlib/util/log.h"
 #include "hornetlib/util/optional.h"
+#include "hornetlib/util/subarray.h"
 
 namespace hornet::protocol {
 
@@ -30,13 +30,11 @@ struct OutPoint {
   uint32_t index = 0;
   static constexpr uint32_t kNullIndex = std::numeric_limits<uint32_t>::max();
 
-  std::strong_ordering operator <=>(const OutPoint& rhs) const = default;
+  std::strong_ordering operator<=>(const OutPoint& rhs) const = default;
 
   static OutPoint Null() { return {{}, kNullIndex}; }
 
-  bool IsNull() const {
-    return !hash && index == kNullIndex;
-  }
+  bool IsNull() const { return !hash && index == kNullIndex; }
 
   void Serialize(encoding::Writer& writer) const {
     writer.WriteBytes(hash);
@@ -67,42 +65,30 @@ struct TransactionData {
   std::vector<Component> components;
   std::vector<uint8_t> scripts;
 
-  void ResizeInputs(util::SubArray<Input>& subarray, int size) {
-    subarray = ResizeVector(inputs, subarray, size);
-  }
-  void ResizeOutputs(util::SubArray<Output>& subarray, int size) {
-    subarray = ResizeVector(outputs, subarray, size);
-  }
+  void ResizeInputs(util::SubArray<Input>& subarray, int size) { subarray = ResizeVector(inputs, subarray, size); }
+  void ResizeOutputs(util::SubArray<Output>& subarray, int size) { subarray = ResizeVector(outputs, subarray, size); }
   void ResizeWitnesses(util::SubArray<Witness>& subarray, int size) {
     subarray = ResizeVector(witnesses, subarray, size);
   }
   void ResizeComponents(util::SubArray<Component>& subarray, int size) {
     subarray = ResizeVector(components, subarray, size);
   }
-  void ResizeScriptBytes(ScriptArray& subarray, int size) {
-    subarray = ResizeVector(scripts, subarray, size);
-  }
+  void ResizeScriptBytes(ScriptArray& subarray, int size) { subarray = ResizeVector(scripts, subarray, size); }
   int SizeBytes() const;
 
   // Returns the size in bytes of the serialized witness data.
-  int GetWitnessBytes() const {
-    return witness_bytes_;
-  }
-  void AddWitnessBytes(int bytes) {
-    witness_bytes_ += bytes;
-  }
+  int GetWitnessBytes() const { return witness_bytes_; }
+  void AddWitnessBytes(int bytes) { witness_bytes_ += bytes; }
 
   void Write(std::ostream& os) const {
-    std::apply([&](const auto&... arrs) {
-      (util::Write(os, arrs), ...);
-    }, std::tie(inputs, outputs, witnesses, components, scripts));
+    std::apply([&](const auto&... arrs) { (util::Write(os, arrs), ...); },
+               std::tie(inputs, outputs, witnesses, components, scripts));
     util::Write(os, witness_bytes_);
   }
 
   void Read(std::istream& is) {
-    std::apply([&](auto&... arrs) {
-      (util::Read(is, arrs), ...);
-    }, std::tie(inputs, outputs, witnesses, components, scripts));
+    std::apply([&](auto&... arrs) { (util::Read(is, arrs), ...); },
+               std::tie(inputs, outputs, witnesses, components, scripts));
     witness_bytes_ = util::Read<int>(is);
   }
 
@@ -110,8 +96,7 @@ struct TransactionData {
   int witness_bytes_ = 0;
 
   template <typename T, std::integral Count>
-  static util::SubArray<T, Count> ResizeVector(std::vector<T>& vec,
-                                               const util::SubArray<T, Count>& subarray,
+  static util::SubArray<T, Count> ResizeVector(std::vector<T>& vec, const util::SubArray<T, Count>& subarray,
                                                Count size) {
     const int length = std::ssize(vec);
     const int start = subarray.StartIndex();
@@ -191,9 +176,7 @@ protocol::Hash ComputeTxid(const TransactionDetail& detail, const TransactionDat
 // arrays is held in TransactionData.
 class TransactionDetail {
  public:
-  bool IsWitness() const {
-    return !witnesses.IsEmpty();
-  }
+  bool IsWitness() const { return !witnesses.IsEmpty(); }
 
   const protocol::Hash& GetHash(const TransactionData& data) const {
     if (!txid) {
@@ -214,8 +197,7 @@ class TransactionDetail {
   }
 
   void Serialize(encoding::Writer& writer, const TransactionData& data, bool include_witness = true) const {
-    if (inputs.Size() == 0)
-      util::ThrowOutOfRange("Transaction has zero inputs and can't be serialized.");
+    if (inputs.Size() == 0) util::ThrowOutOfRange("Transaction has zero inputs and can't be serialized.");
 
     // Version
     writer.WriteLE4(version);
@@ -252,9 +234,6 @@ class TransactionDetail {
     // Version
     reader.ReadLE4(version);
 
-    // Optional witness flag
-    // TODO: Must pass a flag to TransactionDetail::Deserialize to say whether witness is allowed.
-    // https://linear.app/hornet-node/issue/HOR-56/must-pass-a-flag-to-transactiondetaildeserialize-to-say-whether
     bool witness = false;
     uint8_t byte = reader.ReadByte();
     if (byte == 0) {
@@ -278,22 +257,26 @@ class TransactionDetail {
 
     // Witnesses
     if (witness) {
+      bool has_witness_data = false;
       const auto witness_start = reader.GetPos();
       data.ResizeWitnesses(witnesses, inputs.Size());
       for (Witness& witness : witnesses.Span(data.witnesses)) {
         data.ResizeComponents(witness, reader.ReadVarInt<int>());
         for (Component& component : witness.Span(data.components)) {
-          data.ResizeScriptBytes(component, reader.ReadVarInt<int>());
+          int script_size = reader.ReadVarInt<int>();
+          has_witness_data |= script_size > 0;
+          data.ResizeScriptBytes(component, script_size);
           reader.ReadBytes(component.Span(data.scripts));
         }
       }
+      if (!has_witness_data) util::ThrowRuntimeError("Invalid transaction format");
       const int witness_bytes = reader.GetPos() - witness_start;
       witness_size_bytes += witness_bytes;
     }
 
     // Lock time
     reader.ReadLE4(lock_time);
-    
+
     // Set number of serialized bytes, used during transaction validation.
     const int total_bytes = reader.GetPos() - start;
     no_witness_size_bytes = total_bytes - witness_size_bytes;
@@ -307,19 +290,44 @@ class TransactionDetail {
   uint32_t Version() const { return version; }
   int BytesNoWitness() const { return no_witness_size_bytes; }
 
-  util::SubArray<Input>& Inputs() { Invalidate(); return inputs; }
-  util::SubArray<Output>& Outputs() { Invalidate(); return outputs; }
-  util::SubArray<Witness>& Witnesses() { Invalidate(); return witnesses; }
-  void SetVersion(uint32_t v) { version = v; Invalidate(); }
-  void SetLockTime(uint32_t v) { lock_time = v; Invalidate(); }
-  void SetInputs(const util::SubArray<Input>& v) { inputs = v; Invalidate(); }
-  void SetOutputs(const util::SubArray<Output>& v) { outputs = v; Invalidate(); }
-  void SetWitnesses(const util::SubArray<Witness>& v) { witnesses = v; Invalidate(); }
+  util::SubArray<Input>& Inputs() {
+    Invalidate();
+    return inputs;
+  }
+  util::SubArray<Output>& Outputs() {
+    Invalidate();
+    return outputs;
+  }
+  util::SubArray<Witness>& Witnesses() {
+    Invalidate();
+    return witnesses;
+  }
+  void SetVersion(uint32_t v) {
+    version = v;
+    Invalidate();
+  }
+  void SetLockTime(uint32_t v) {
+    lock_time = v;
+    Invalidate();
+  }
+  void SetInputs(const util::SubArray<Input>& v) {
+    inputs = v;
+    Invalidate();
+  }
+  void SetOutputs(const util::SubArray<Output>& v) {
+    outputs = v;
+    Invalidate();
+  }
+  void SetWitnesses(const util::SubArray<Witness>& v) {
+    witnesses = v;
+    Invalidate();
+  }
 
   void Sanitize() { Invalidate(); }
 
  private:
-  template <typename Data, typename Detail> friend class TransactionViewT;
+  template <typename Data, typename Detail>
+  friend class TransactionViewT;
 
   void Invalidate() {
     txid.Reset();
@@ -333,7 +341,7 @@ class TransactionDetail {
   uint32_t lock_time = 0;
   int no_witness_size_bytes = 0;
   mutable util::Optional<protocol::Hash> txid;
-  mutable util::Optional<protocol::Hash> wtxid; 
+  mutable util::Optional<protocol::Hash> wtxid;
 };
 
 class WitnessView {
@@ -341,23 +349,19 @@ class WitnessView {
   using Element = std::span<const uint8_t>;
 
   WitnessView() {}
-  WitnessView(std::span<const Component> components, std::span<const uint8_t> data) :
-    components_(components), data_(data) {}
+  WitnessView(std::span<const Component> components, std::span<const uint8_t> data)
+      : components_(components), data_(data) {}
 
   int Size() const { return std::ssize(components_); }
   bool Empty() const { return Size() == 0; }
 
-  Element operator[](int index) const {
-    return components_[index].Span(data_);
-  }
+  Element operator[](int index) const { return components_[index].Span(data_); }
 
-  Element Back() const {
-    return operator[](Size() - 1);
-  }
+  Element Back() const { return operator[](Size() - 1); }
 
  private:
   const std::span<const Component> components_;
-  const std::span<const uint8_t> data_; 
+  const std::span<const uint8_t> data_;
 };
 
 // The TransactionViewT class represents the join of data and metadata stored in
@@ -369,33 +373,15 @@ class TransactionViewT {
  public:
   TransactionViewT(Data& data, Detail& detail) : data_(data), detail_(detail) {}
 
-  int InputCount() const {
-    return detail_.Inputs().Size();
-  }
-  int OutputCount() const {
-    return detail_.Outputs().Size();
-  }
-  int WitnessCount() const {
-    return detail_.Witnesses().Size();
-  }
-  int ComponentCount(int input) const {
-    return Witness(input).Size();
-  }
-  bool IsWitness() const {
-    return detail_.IsWitness();
-  }
-  bool IsCoinBase() const {
-    return InputCount() == 1 && Input(0).previous_output.IsNull();
-  }
-  int SerializedBytesNoWitness() const {
-    return detail_.BytesNoWitness();
-  }
-  const protocol::Hash& GetHash() const {
-    return detail_.GetHash(data_);
-  }
-  const protocol::Hash& GetWitnessHash() const {
-    return detail_.GetWitnessHash(data_);
-  }
+  int InputCount() const { return detail_.Inputs().Size(); }
+  int OutputCount() const { return detail_.Outputs().Size(); }
+  int WitnessCount() const { return detail_.Witnesses().Size(); }
+  int ComponentCount(int input) const { return Witness(input).Size(); }
+  bool IsWitness() const { return detail_.IsWitness(); }
+  bool IsCoinBase() const { return InputCount() == 1 && Input(0).previous_output.IsNull(); }
+  int SerializedBytesNoWitness() const { return detail_.BytesNoWitness(); }
+  const protocol::Hash& GetHash() const { return detail_.GetHash(data_); }
+  const protocol::Hash& GetWitnessHash() const { return detail_.GetWitnessHash(data_); }
   int64_t TotalOutputValue() const {
     int64_t sum = 0;
     for (const auto& output : Outputs()) sum += output.value;
@@ -405,125 +391,69 @@ class TransactionViewT {
   // The following const member methods are chosen by the compiler in the case where
   // the TransactionViewT object is const, e.g. the method is called on a const object that
   // derives from TransactionViewT.
-  uint32_t Version() const {
-    return detail_.Version();
-  }
-  const Input& Input(int index) const {
-    return detail_.Inputs().Span(data_.inputs)[index];
-  }
-  const Output& Output(int index) const {
-    return detail_.Outputs().Span(data_.outputs)[index];
-  }
-  const Witness& Witness(int input) const {
-    return detail_.Witnesses().Span(data_.witnesses)[input];
-  }
+  uint32_t Version() const { return detail_.Version(); }
+  const Input& Input(int index) const { return detail_.Inputs().Span(data_.inputs)[index]; }
+  const Output& Output(int index) const { return detail_.Outputs().Span(data_.outputs)[index]; }
+  const Witness& Witness(int input) const { return detail_.Witnesses().Span(data_.witnesses)[input]; }
   const Component& Component(int input, int component) const {
     return Witness(input).Span(data_.components)[component];
   }
   std::span<const uint8_t> SignatureScript(int input) const {
     return Input(input).signature_script.Span(data_.scripts);
   }
-  std::span<const uint8_t> PkScript(int output) const {
-    return Output(output).pk_script.Span(data_.scripts);
-  }
+  std::span<const uint8_t> PkScript(int output) const { return Output(output).pk_script.Span(data_.scripts); }
   std::span<const uint8_t> WitnessScript(int input, int component) const {
     return Component(input, component).Span(data_.scripts);
   }
-  uint32_t LockTime() const {
-    return detail_.LockTime();
-  }
-  std::span<const struct Input> Inputs() const {
-    return detail_.Inputs().Span(data_.inputs);
-  }
-  std::span<const struct Output> Outputs() const {
-    return detail_.Outputs().Span(data_.outputs);
-  }
+  uint32_t LockTime() const { return detail_.LockTime(); }
+  std::span<const struct Input> Inputs() const { return detail_.Inputs().Span(data_.inputs); }
+  std::span<const struct Output> Outputs() const { return detail_.Outputs().Span(data_.outputs); }
   WitnessView InputWitness(int input) const {
     return IsWitness() ? WitnessView{Witness(input).Span(data_.components), data_.scripts} : WitnessView{};
   }
   auto SignatureScripts() const {
-    return std::views::iota(0, InputCount()) | 
-           std::views::transform([&] (const int i) { return SignatureScript(i); });
+    return std::views::iota(0, InputCount()) | std::views::transform([&](const int i) { return SignatureScript(i); });
   }
   auto PkScripts() const {
-    return std::views::iota(0, OutputCount()) | 
-           std::views::transform([&] (const int i) { return PkScript(i); });
+    return std::views::iota(0, OutputCount()) | std::views::transform([&](const int i) { return PkScript(i); });
   }
 
   // The following non-const member methods are chosen by the compiler in the case where
   // the TransactionViewT object is non-const. In this case, the constness of the return value
   // depends on the constness of the templated types (Data, Detail).
-  auto& Version() {
-    return detail_.Version();
-  }
-  auto& Input(int index) {
-    return detail_.Inputs().Span(data_.inputs)[index];
-  }
-  auto& Output(int index) {
-    return detail_.Outputs().Span(data_.outputs)[index];
-  }
-  auto& Witness(int input) {
-    return detail_.Witnesses().Span(data_.witnesses)[input];
-  }
-  auto& Component(int input, int component) {
-    return Witness(input).Span(data_.components)[component];
-  }
-  auto SignatureScript(int input) {
-    return Input(input).signature_script.Span(data_.scripts);
-  }
-  auto PkScript(int output) {
-    return Output(output).pk_script.Span(data_.scripts);
-  }
-  auto WitnessScript(int input, int component) {
-    return Component(input, component).Span(data_.scripts);
-  }
-  auto& LockTime() {
-    return detail_.LockTime();
-  }
-  auto Inputs() {
-    return detail_.Inputs().Span(data_.inputs);
-  }
-  auto Outputs() {
-    return detail_.Outputs().Span(data_.outputs);
-  }
+  auto& Version() { return detail_.Version(); }
+  auto& Input(int index) { return detail_.Inputs().Span(data_.inputs)[index]; }
+  auto& Output(int index) { return detail_.Outputs().Span(data_.outputs)[index]; }
+  auto& Witness(int input) { return detail_.Witnesses().Span(data_.witnesses)[input]; }
+  auto& Component(int input, int component) { return Witness(input).Span(data_.components)[component]; }
+  auto SignatureScript(int input) { return Input(input).signature_script.Span(data_.scripts); }
+  auto PkScript(int output) { return Output(output).pk_script.Span(data_.scripts); }
+  auto WitnessScript(int input, int component) { return Component(input, component).Span(data_.scripts); }
+  auto& LockTime() { return detail_.LockTime(); }
+  auto Inputs() { return detail_.Inputs().Span(data_.inputs); }
+  auto Outputs() { return detail_.Outputs().Span(data_.outputs); }
   auto SignatureScripts() {
-    return std::views::iota(0, InputCount()) | 
-           std::views::transform([&] (const int i) { return SignatureScript(i); });
+    return std::views::iota(0, InputCount()) | std::views::transform([&](const int i) { return SignatureScript(i); });
   }
   auto PkScripts() {
-    return std::views::iota(0, OutputCount()) | 
-           std::views::transform([&] (const int i) { return PkScript(i); });
+    return std::views::iota(0, OutputCount()) | std::views::transform([&](const int i) { return PkScript(i); });
   }
 
   // The following methods are only valid on mutable views, and will cause compile errors if
   // called on immutable views, i.e. where detail_ and data_ are const.
-  void SetVersion(int version) {
-    detail_.SetVersion(version);
-  }
-  void ResizeInputs(int inputs) {
-    data_.ResizeInputs(detail_.Inputs(), inputs);
-  }
-  void ResizeOutputs(int outputs) {
-    data_.ResizeOutputs(detail_.Outputs(), outputs);
-  }
-  void ResizeWitnesses(int witnesses) {
-    data_.ResizeWitnesses(detail_.Witnesses(), witnesses);
-  }
-  void ResizeComponents(int input, int components) {
-    data_.ResizeComponents(Witness(input), components);
-  }
+  void SetVersion(int version) { detail_.SetVersion(version); }
+  void ResizeInputs(int inputs) { data_.ResizeInputs(detail_.Inputs(), inputs); }
+  void ResizeOutputs(int outputs) { data_.ResizeOutputs(detail_.Outputs(), outputs); }
+  void ResizeWitnesses(int witnesses) { data_.ResizeWitnesses(detail_.Witnesses(), witnesses); }
+  void ResizeComponents(int input, int components) { data_.ResizeComponents(Witness(input), components); }
   void SetSignatureScript(int input, std::span<const uint8_t> script) {
     SetScript(Input(input).signature_script, script);
   }
-  void SetPkScript(int output, std::span<const uint8_t> script) {
-    SetScript(Output(output).pk_script, script);
-  }
+  void SetPkScript(int output, std::span<const uint8_t> script) { SetScript(Output(output).pk_script, script); }
   void SetWitnessScript(int input, int component, std::span<const uint8_t> script) {
     SetScript(Component(input, component), script);
   }
-  void SetLockTime(uint32_t lock_time) {
-    detail_.SetLockTime(lock_time);
-  }
+  void SetLockTime(uint32_t lock_time) { detail_.SetLockTime(lock_time); }
 
   template <typename Data2, typename Detail2>
   void CopyFrom(const TransactionViewT<Data2, Detail2>& rhs) {
@@ -584,17 +514,11 @@ class Transaction : public TransactionView {
  public:
   Transaction() : TransactionView(data_, detail_) {}
 
-  operator TransactionConstView() const {
-    return {data_, detail_};
-  }
+  operator TransactionConstView() const { return {data_, detail_}; }
 
-  void Serialize(encoding::Writer& writer) const {
-    detail_.Serialize(writer, data_);
-  }
+  void Serialize(encoding::Writer& writer) const { detail_.Serialize(writer, data_); }
 
-  void Deserialize(encoding::Reader& reader) {
-    detail_.Deserialize(reader, data_);
-  }
+  void Deserialize(encoding::Reader& reader) { detail_.Deserialize(reader, data_); }
 
  private:
   TransactionData data_;
@@ -607,7 +531,8 @@ class TransactionIteratorT {
   static constexpr bool kIsConst = std::is_const_v<TransactionDataT>;
   using DetailCollection = std::vector<TransactionDetail>;
   using DetailIterator = std::conditional_t<kIsConst, DetailCollection::const_iterator, DetailCollection::iterator>;
-  using DetailT = std::conditional_t<kIsConst, std::add_const_t<typename DetailIterator::value_type>, typename DetailIterator::value_type>;
+  using DetailT = std::conditional_t<kIsConst, std::add_const_t<typename DetailIterator::value_type>,
+                                     typename DetailIterator::value_type>;
   using View = TransactionViewT<TransactionDataT, DetailT>;
 
   using value_type = View;
@@ -619,19 +544,12 @@ class TransactionIteratorT {
   TransactionIteratorT(TransactionDataT& data, DetailIterator begin) : data_(data), it_(begin) {}
   TransactionIteratorT(const TransactionIteratorT&) = default;
   TransactionIteratorT(TransactionIteratorT&&) = default;
-  
-  bool operator !=(const TransactionIteratorT& rhs) const {
-    return it_ != rhs.it_;
-  }
-  bool operator ==(const TransactionIteratorT& rhs) const {
-    return it_ == rhs.it_;
-  }
-  View* operator ->() const {
-    return &(operator *());
-  }
-  View& operator *() const {
-    if (!view_.has_value())
-      view_.emplace(data_, *it_);
+
+  bool operator!=(const TransactionIteratorT& rhs) const { return it_ != rhs.it_; }
+  bool operator==(const TransactionIteratorT& rhs) const { return it_ == rhs.it_; }
+  View* operator->() const { return &(operator*()); }
+  View& operator*() const {
+    if (!view_.has_value()) view_.emplace(data_, *it_);
     return *view_;
   }
   TransactionIteratorT& operator++() {
@@ -644,7 +562,7 @@ class TransactionIteratorT {
     ++(*this);
     return tmp;
   }
-  
+
  private:
   TransactionDataT& data_;
   DetailIterator it_;
