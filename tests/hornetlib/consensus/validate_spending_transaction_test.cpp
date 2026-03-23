@@ -211,7 +211,7 @@ TEST(ValidateSpendingTransactionTest, UsesMostRestrictiveInput) {
   constexpr uint32_t kTimeMask = 1u << 22;
 
   const SequenceLocksHarness harness;
-  const protocol::Block block = harness.MakeCandidateBlock({{120, 1u}, {120, kTimeMask | 24u}});
+  const protocol::Block block = harness.MakeCandidateBlock({{120, 1u}, {121, kTimeMask | 24u}});
   EXPECT_EQ(harness.ValidateCandidateTransactions(
                 block, [](const protocol::TransactionConstView& tx, std::span<const SpendRecord> spends,
                           const HeaderAncestryView& ancestry,
