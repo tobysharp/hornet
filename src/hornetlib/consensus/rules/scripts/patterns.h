@@ -2,6 +2,7 @@
 
 #include <optional>
 
+#include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/script/lang/op.h"
 #include "hornetlib/protocol/script/view.h"
 #include "hornetlib/protocol/transaction.h"
@@ -13,7 +14,7 @@ enum class VerifyFlag { P2SH, Witness };
 [[nodiscard]] inline constexpr uint64_t CombineFlags(std::initializer_list<VerifyFlag> flags) {
   uint64_t result = 0;
   for (VerifyFlag flag : flags) result |= 1ull << static_cast<int>(flag);
-  return result;  
+  return result;
 }
 
 [[nodiscard]] inline constexpr bool IsFlag(uint64_t flags, VerifyFlag flag) {
@@ -103,5 +104,37 @@ struct SpendPath {
     return {Legacy};
   }
 };
+
+// A witness commitment is the 32-byte payload following the 6-byte witness-commitment prefix in the pubkey script
+// of the last matching coinbase output.
+inline std::optional<std::span<const uint8_t>> ExtractWitnessCommitment(const protocol::Block& block) {
+  using protocol::script::lang::Op;
+  constexpr std::array<uint8_t, 6> kCommitmentPrefix = {+Op::Return, 0x24, 0xaa, 0x21, 0xa9, 0xed};
+  constexpr int kPrefixSize = sizeof(kCommitmentPrefix);
+  constexpr int kCommitmentSize = 32;
+  constexpr int kMinimumPubkeySize = kPrefixSize + kCommitmentSize;
+
+  if (block.Empty()) return std::nullopt;
+
+  for (int i = block.Transaction(0).OutputCount() - 1; i >= 0; --i) {
+    const auto pubkey = block.Transaction(0).PkScript(i);
+    if (std::ssize(pubkey) >= kMinimumPubkeySize && std::ranges::starts_with(pubkey, kCommitmentPrefix)) {
+      return pubkey.subspan(kPrefixSize, kCommitmentSize);
+    }
+  }
+  return std::nullopt;
+}
+
+// A witness nonce is a 32-byte value encoded in the first component of the coinbase transaction's witness.
+inline std::optional<std::span<const uint8_t>> ExtractWitnessNonce(const protocol::Block& block) {
+  constexpr int kNonceSize = 32;
+  if (block.Empty()) return std::nullopt;
+  const protocol::TransactionConstView coinbase = block.Transaction(0);
+
+  if (!coinbase.IsWitness() || coinbase.Witness(0).Size() != 1) return std::nullopt;
+  const auto script = coinbase.WitnessScript(0, 0);
+  if (std::ssize(script) != kNonceSize) return std::nullopt;
+  return script;
+}
 
 }  // namespace hornet::consensus::rules::scripts
