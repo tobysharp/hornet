@@ -108,6 +108,11 @@ inline void SpendJoiner::Parse() {
 
   // Sort by keys, ready for query.
   SortTogether(keys_.begin(), keys_.end(), inputs_.begin(), rids_.begin(), outputs_.begin());
+
+  // If any keys are duplicates, that implies that the block is trying to spend the same prevout twice.
+  if (std::adjacent_find(keys_.begin(), keys_.end()) != keys_.end())
+    return GotoError();
+
   state_ = State::Parsed;
 }
 
@@ -326,7 +331,6 @@ inline void SpendJoiner::Cancel() {
 inline bool SpendJoiner::AllOutPointsUnique() const {
   // Ensure that dependencies are in place before calling this method, e.g. by calling WaitForDependencies.
   Assert(db_.GetContiguousLength() >= height_);
-  Assert(pin_.has_value());
   const auto timer = metrics_.AddScoped(Time_Query);
 
   // Count all the outputs.

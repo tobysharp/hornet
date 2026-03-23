@@ -81,5 +81,36 @@ TEST(ValidateSpendingBlockTest, RejectsCoinbaseAmountExceedsBlockReward) {
       Error::Spending_CoinbaseAmountExceedsBlockReward);
 }
 
+TEST(ValidateSpendingBlockTest, RejectsBlockInternalDoubleSpendOfExistingUtxo) {
+  test::ExpectValidationResult(
+      [] {
+        test::Blockchain data = test::LoadValidationPipelineChain();
+
+        protocol::Block block = data.Sample(2, true, 1, 1);
+        data.AppendFixed(block);
+
+        auto final_block = data.Back();
+        const auto spent_prevout = final_block->Transaction(1).Input(0).previous_output;
+        const auto spent_index = final_block->Transaction(1).Input(0).sequence;
+        const auto spent_amount = data.Unspent(final_block->Transaction(1).Input(0).sequence).amount;
+
+        protocol::Transaction duplicate;
+        duplicate.SetVersion(1);
+        duplicate.ResizeInputs(1);
+        duplicate.Input(0).previous_output = spent_prevout;
+        duplicate.Input(0).sequence = spent_index;
+        duplicate.SetSignatureScript(0, std::vector<uint8_t>{0x51});
+        duplicate.ResizeOutputs(1);
+        duplicate.Output(0).value = spent_amount;
+        duplicate.SetPkScript(0, std::vector<uint8_t>{0x51});
+        duplicate.SetLockTime(0);
+
+        final_block->AddTransaction(duplicate);
+        test::FixMerkleRoot(*final_block);
+        return data;
+      },
+      Error::Spending_PrevoutNotUnspent);
+}
+
 }  // namespace
 }  // namespace hornet::consensus::rules
