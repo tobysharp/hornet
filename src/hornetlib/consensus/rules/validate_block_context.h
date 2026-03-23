@@ -71,62 +71,57 @@ inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transacti
   return {};
 }
 
-// BIP141: A post-Segwit block containing witness data MUST contain a witness commitment.
+// BIP141: A block containing witness data MUST contain a witness commitment.
 [[nodiscard]] inline Result ValidateWitnessDataHasCommitment(const WitnessContext& context) {
-  if (context.commit_index >= 0) return {};
-
-  for (const auto& tx : context.block.Transactions()) {
-    if (tx.IsWitness()) return Error::Structure_WitnessDataWithoutCommitment;
+  // Contrapositive: A block without a witness commitment MUST NOT contain witness data.
+  if (!context.commitment) {
+    for (const auto& tx : context.block.Transactions()) {
+      if (tx.IsWitness()) return Error::Structure_WitnessDataWithoutCommitment;
+    }
   }
   return {};
 }
 
-// BIP141: A post-Segwit block MUST have a coinbase output matching a specific pattern and containing a 32-byte nonce.
+// BIP141: A post-Segwit block containing a witness commitment MUST contain a witness nonce.
 [[nodiscard]] inline Result ValidateWitnessNonce(const WitnessContext& context) {
-  if (context.commit_index < 0) return {};
-
-  // BIP141 requires the coinbase transaction to have a 32-byte witness field that acts as a
-  // forward-compatible salt for future extensions to chain into this commitment value.
-  const protocol::TransactionConstView coinbase = context.block.Transaction(0);
-  if (coinbase.Witness(0).Size() != 1 || std::ssize(coinbase.WitnessScript(0, 0)) != 32)
-    return Error::Structure_BadWitnessNonce;
+  if (context.commitment && !scripts::ExtractWitnessNonce(context.block)) return Error::Structure_BadWitnessNonce;
 
   return {};
 }
 
-// BIP141: A post-Segwit block MUST contain a cryptographic commitment to the block's witness data.
+// BIP141: A post-SegWit block containing a witness commitment MUST commit to its witness Merkle root and nonce.
 [[nodiscard]] inline Result ValidateWitnessMerkle(const WitnessContext& context) {
-  const protocol::TransactionConstView coinbase = context.block.Transaction(0);
-  if (context.commit_index < 0 || !coinbase.IsWitness() || coinbase.Witness(0).Size() < 1) return {};
+  if (context.commitment) {
+    const auto nonce = scripts::ExtractWitnessNonce(context.block);
+    if (!nonce) return {};
 
-  // The commitment value is the double-SHA256 of the concatenated witness-enabled Merkle root,
-  // and the arbitrary 32-byte salt from the coinbase witness script.
-  const auto hash_witness =
-      crypto::DoubleSha256<64>(ComputeWitnessMerkleRoot(context.block).hash, coinbase.WitnessScript(0, 0));
+    // The commitment value is the double-SHA256 of the concatenated witness-enabled Merkle root,
+    // and the arbitrary 32-byte salt from the witness nonce.
+    const auto hash_witness = crypto::DoubleSha256<64>(ComputeWitnessMerkleRoot(context.block).hash, *nonce);
 
-  // Finally, this is compared against the commitment in the appropriate coinbase pubkey script.
-  const auto commitment = coinbase.PkScript(context.commit_index).subspan(6);
-  if (!std::ranges::starts_with(commitment, hash_witness)) return Error::Structure_BadWitnessMerkle;
+    // Finally, this is compared against the commitment in the appropriate coinbase pubkey script.
+    if (!std::ranges::equal(*context.commitment, hash_witness)) return Error::Structure_BadWitnessMerkle;
+  }
 
   return {};
 }
 
-// BIP141: the coinbase transaction MUST include a valid witness commitment for blocks containing witness data.
+// BIP141: A post-Segwit block MUST satisfy witness malleation rules.
 [[nodiscard]] /* [[BIP::SegWit]] */ inline Result ValidateWitnessCommitment(const BlockEnvironmentContext& context) {
   // clang-format off
   static const auto ruleset = std::make_tuple(
-    // BIP141: A post-Segwit block containing witness data MUST contain a witness commitment.
+    // BIP141: A block containing witness data MUST contain a witness commitment.
     Rule{ValidateWitnessDataHasCommitment}, 
-    // BIP141: A post-Segwit block MUST have a coinbase output matching a specific pattern and containing a 32-byte nonce.
+    // BIP141: A post-Segwit block containing a witness commitment MUST contain a witness nonce.
     Rule{ValidateWitnessNonce}, 
-    // BIP141: A post-Segwit block MUST contain a cryptographic commitment to the block's witness data.
+    // BIP141: A post-SegWit block containing a witness commitment MUST commit to its witness Merkle root and nonce.
     Rule{ValidateWitnessMerkle}
   );
   // clang-format on
   return ValidateRules(ruleset, context.height, MakeWitnessContext(context));
 }
 
-// A block below the SegWit activation height MUST NOT contain any witness data.
+// A pre-SegWit block MUST NOT contain any witness data.
 [[nodiscard]] inline Result ValidateNoWitnessPreSegwit(const BlockEnvironmentContext& context) {
   if (!IsBIPActiveAtHeight(BIP::SegWit, context.height)) {
     for (const auto& tx : context.block.Transactions()) {

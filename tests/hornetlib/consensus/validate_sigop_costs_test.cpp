@@ -1,7 +1,7 @@
 #include "hornetlib/consensus/header_ancestry_view.h"
 #include "hornetlib/consensus/rules/scripts/sigops.h"
 #include "hornetlib/consensus/rules/scripts/sigops_detail.h"
-#include "hornetlib/consensus/rules/scripts/spend_patterns.h"
+#include "hornetlib/consensus/rules/scripts/patterns.h"
 #include "hornetlib/consensus/rules/validate_spending.h"
 #include "hornetlib/consensus/spending_test_harness.h"
 #include "hornetlib/consensus/stub_header_ancestry_view.h"

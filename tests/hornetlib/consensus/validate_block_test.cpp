@@ -423,6 +423,21 @@ TEST(ValidatorTest, WitnessCommitmentRejectsBadWitnessMerkle) {
   EXPECT_EQ(rules::ValidateWitnessCommitment(MakeSegWitContext(block)), Error::Structure_BadWitnessMerkle);
 }
 
+TEST(ValidatorTest, ContextualValidationAcceptsCommitmentPrefixWithoutWitnessData) {
+  Transaction coinbase = MakeCoinbaseTransaction();
+  coinbase.SetSignatureScript(0, protocol::script::Writer{}.PushInt(kSegWitHeight).PushInt(0).Release());
+
+  Block block = MakeBlock(coinbase, false);
+
+  auto block_coinbase = block.Transaction(0);
+  block_coinbase.Output(kWitnessCommitmentOutputIndex).value = 0;
+  block_coinbase.SetPkScript(kWitnessCommitmentOutputIndex,
+                             std::vector<uint8_t>{0x6a, 0x24, 0xaa, 0x21, 0xa9, 0xed, 0x01});
+  test::FixMerkleRoot(block);
+
+  EXPECT_EQ(rules::ValidateContextual(MakeSegWitContext(block)), Result{});
+}
+
 TEST(ValidatorTest, WitnessCommitmentAcceptsValidWitnessCommitment) {
   Transaction coinbase = MakeCoinbaseTransaction();
   SetCoinbaseWitnessNonce(coinbase, MakeWitnessNonce());

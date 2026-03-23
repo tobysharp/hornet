@@ -3,7 +3,7 @@
 #include <optional>
 #include <span>
 
-#include "hornetlib/consensus/rules/scripts/spend_patterns.h"
+#include "hornetlib/consensus/rules/scripts/patterns.h"
 #include "hornetlib/consensus/utxo.h"
 #include "hornetlib/protocol/script/lang/op.h"
 #include "hornetlib/protocol/script/view.h"
