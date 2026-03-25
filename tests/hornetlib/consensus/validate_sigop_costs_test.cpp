@@ -29,6 +29,7 @@ using protocol::Transaction;
 using protocol::script::Writer;
 using protocol::script::lang::ConstantToOp;
 using protocol::script::lang::Op;
+using hornet::test::NullSpendsUnspentOutputsView;
 using hornet::test::StaticUnspentOutputsView;
 using hornet::test::StubHeaderAncestryView;
 
@@ -340,6 +341,14 @@ TEST(ValidateSigOpCostsTest, ValidateSigOpCostsRejectsBlockAboveBudget) {
 
   EXPECT_EQ(ValidateSigOpCosts({block, ancestry, unspent, 1, CombineFlags({VerifyFlag::P2SH})}),
             Error::Spending_BadSigOpsCost);
+}
+
+TEST(ValidateSigOpCostsTest, ValidateSigOpCostsSucceedsWhenJoinedSpendsUnavailable) {
+  Block block;
+  StubHeaderAncestryView ancestry;
+  NullSpendsUnspentOutputsView unspent;
+
+  EXPECT_EQ(ValidateSigOpCosts({block, ancestry, unspent, 1, CombineFlags({VerifyFlag::P2SH})}), Result{});
 }
 
 TEST(ValidateSigOpCostsTest, RejectsBlockJustOverSigOpCostLimit) {

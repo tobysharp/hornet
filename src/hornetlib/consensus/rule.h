@@ -45,8 +45,7 @@ struct Each {
   template <typename... Args>
   Result operator()(const int, Args&&... args) const {
     const auto range = iter(std::forward<Args>(args)...);
-    if (!range) return range.error();
-    for (auto&& value : *range) {
+    for (auto&& value : range) {
       if constexpr (std::is_same_v<std::remove_cvref_t<Proj>, std::identity>) {
         if (Result result = fn(value); !result) return result;
       } else {

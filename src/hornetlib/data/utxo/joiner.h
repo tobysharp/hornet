@@ -51,7 +51,7 @@ class SpendJoiner {
 
   bool WaitForQuery() const;
   bool WaitForJoin() const;
-  bool WaitForDependencies() const;
+  void WaitForDependencies() const;
 
   void Cancel();
 
@@ -314,12 +314,8 @@ inline bool SpendJoiner::WaitForQuery() const {
 }
 
 // Blocks until all previous blocks have been appended to the database, ready to call AllOutPointsUnique.
-inline bool SpendJoiner::WaitForDependencies() const {
-  // NOTE: In practice, we're not specifically waiting for the dependencies, but rather for the Query
-  // action to complete, which in turn implies the dependencies are present. This is a practical simplification.
-  release_query_.wait(false);
-  if (state_ == State::Cancelled) throw CancelledException{};
-  return db_.GetContiguousLength() >= height_;
+inline void SpendJoiner::WaitForDependencies() const {
+  db_.WaitForContiguousLength(height_);
 }
 
 inline bool SpendJoiner::WaitForJoin() const {

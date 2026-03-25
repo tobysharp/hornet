@@ -12,8 +12,7 @@
 namespace hornet::consensus::rules {
 
 struct TransactionsInBlock {
-  auto operator()(const protocol::Block& block) const 
-    -> std::expected<decltype(block.Transactions()), Error> {
+  auto operator()(const protocol::Block& block) const { 
     return block.Transactions();
   }
 };
@@ -70,7 +69,8 @@ struct BlockSpendContext {
 
 struct SpendsInBlock {
   auto operator()(const BlockSpendContext& context) const {
-    return context.unspent.Spends(context.block);  
+    const auto spends = context.unspent.Spends(context.block);  
+    return spends ? *spends : JoinedSpendRange{};
   }
 };
 

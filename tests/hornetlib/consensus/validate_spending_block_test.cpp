@@ -1,6 +1,7 @@
 #include "hornetlib/consensus/rules/validate_spending.h"
 
 #include "hornetlib/consensus/spending_test_harness.h"
+#include "hornetlib/consensus/stub_header_ancestry_view.h"
 #include "hornetlib/consensus/validate_chain_harness.h"
 #include "hornetlib/data/utxo/database_view.h"
 
@@ -10,6 +11,9 @@
 
 namespace hornet::consensus::rules {
 namespace {
+
+using hornet::test::NullSpendsUnspentOutputsView;
+using hornet::test::StubHeaderAncestryView;
 
 template <typename Callback>
 Result EvaluateCandidateSpendingBlock(const test::Blockchain& chain, const protocol::Block& block,
@@ -42,6 +46,19 @@ TEST(ValidateSpendingBlockTest, RejectsCoinbaseAboveBlockReward) {
   EXPECT_EQ(EvaluateCandidateSpendingBlock(
                 chain, candidate, [](const BlockSpendContext& context) { return ValidateBlockSubsidy(context); }),
             Error::Spending_CoinbaseAmountExceedsBlockReward);
+}
+
+TEST(ValidateSpendingBlockTest, ValidateBlockSubsidySucceedsWhenJoinedSpendsUnavailable) {
+  const test::Blockchain chain = test::LoadValidationPipelineChain();
+
+  protocol::Block candidate = chain.Sample(2, true);
+  candidate.Transaction(0).Output(0).value += 1;
+  test::FixMerkleRoot(candidate);
+
+  StubHeaderAncestryView ancestry;
+  NullSpendsUnspentOutputsView unspent;
+
+  EXPECT_EQ(ValidateBlockSubsidy({candidate, ancestry, unspent, 1, 0}), Result{});
 }
 
 TEST(ValidateSpendingBlockTest, RejectsDuplicateOutPoint) {

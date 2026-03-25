@@ -57,8 +57,8 @@ class StaticUnspentOutputsView : public consensus::UnspentOutputsView {
   consensus::Result QueryPrevoutsUnspent(const protocol::Block&) const override { return {}; }
   consensus::Result QueryOutPointsUnique(const protocol::Block&) const override { return {}; }
 
-  std::expected<consensus::JoinedSpendRange, consensus::Error> Spends(const protocol::Block&) const override {
-    return consensus::JoinedSpendRange{*this};
+  std::optional<consensus::JoinedSpendRange> Spends(const protocol::Block&) const override {
+    return *this;
   }
 
   int SpendSize() const { return std::ssize(entries_); }
@@ -70,6 +70,16 @@ class StaticUnspentOutputsView : public consensus::UnspentOutputsView {
 
  private:
   std::vector<Entry> entries_;
+};
+
+class NullSpendsUnspentOutputsView : public consensus::UnspentOutputsView {
+ public:
+  consensus::Result QueryPrevoutsUnspent(const protocol::Block&) const override { return {}; }
+  consensus::Result QueryOutPointsUnique(const protocol::Block&) const override { return {}; }
+
+  std::optional<consensus::JoinedSpendRange> Spends(const protocol::Block&) const override {
+    return std::nullopt;
+  }
 };
 
 }  // namespace hornet::test

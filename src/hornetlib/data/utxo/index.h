@@ -37,6 +37,7 @@ class Index {
   Pin Append(TiledVector<OutputKV>&& entries, int height);
   void EraseSince(int height);
   int GetContiguousLength() const;
+  void WaitForContiguousLength(int height) const;
   bool ContainsHeight(int height) const;
 
   static constexpr int GetMutableWindow();
@@ -44,6 +45,8 @@ class Index {
   static void SortEntries(TiledVector<OutputKV>* entries);
 
  private:
+  int ComputeContiguousLength() const;
+  void UpdateContiguousLength();
   void EnqueueMerge(int index) { compacter_.Enqueue(index); }
   void DoMerge(int index);
 
@@ -53,6 +56,7 @@ class Index {
   static constexpr int kMergeFanIn = 8;
   
   std::vector<std::unique_ptr<MemoryAge>> ages_;
+  std::atomic<int> contiguous_length_ = 0;
   mutable Compacter compacter_;  // Constructed last, destroyed first.
 };
 
@@ -63,6 +67,7 @@ inline Index::Index() : compacter_(kCompacterThreads, [this](int index) { DoMerg
     );
   // Add an empty entry for the genesis block, which has no spendable outputs.
   ages_[0]->Append({}, std::make_pair(0, 1));
+  UpdateContiguousLength();
 }
 
 inline void Index::DoMerge(int index) {
@@ -84,6 +89,7 @@ inline Index::Pin Index::Append(TiledVector<OutputKV>&& entries, int height) {
   Assert(std::is_sorted(entries.begin(), entries.end()));
   Pin pin{*this, height};
   ages_[0]->Append(std::move(entries), {height, height + 1});
+  UpdateContiguousLength();
   return pin;
 }
 
@@ -91,10 +97,20 @@ inline void Index::EraseSince(int height) {
   const auto lock = compacter_.Lock();  // Serializes EraseSince with Merge calls.
   for (const auto& ptr : ages_)
     if (ptr->IsMutable()) ptr->EraseSince(height);
+  UpdateContiguousLength();
+}
+
+inline int Index::GetContiguousLength() const {
+  return contiguous_length_;
+}
+
+inline void Index::WaitForContiguousLength(int height) const {
+  int current;
+  while ((current = contiguous_length_) < height) contiguous_length_.wait(current);
 }
 
 // Returns the number of contiguously added blocks since genesis, before any holes.
-inline int Index::GetContiguousLength() const {
+inline int Index::ComputeContiguousLength() const {
   // This lock-free implementation requires to search the ages in increasing maturity.
 
   std::optional<int> age0_min, age0_min_pre_hole;
@@ -129,6 +145,12 @@ inline int Index::GetContiguousLength() const {
       return *older_max + 1;
   else
     return 0;
+}
+
+inline void Index::UpdateContiguousLength() {
+  const int current = ComputeContiguousLength();
+  const int prev = contiguous_length_.exchange(current);
+  if (current != prev) contiguous_length_.notify_all();
 }
 
 inline bool Index::ContainsHeight(int height) const {

@@ -3,8 +3,12 @@
 #include "hornetlib/consensus/bips.h"
 #include "hornetlib/consensus/types.h"
 
+// Validation algebra for composing Hornet consensus rules as a static tree.
+// Nodes either validate the current context, project it, iterate it, or gate a subtree.
+
 namespace hornet::consensus::algebra {
 
+// Applies a leaf validator to the current context.
 template <typename Fn>
 struct Rule {
   Fn fn;
@@ -15,6 +19,7 @@ template <typename Fn, typename Context>
   return node.fn(context);
 }
 
+// Runs each child against the same context in sequence, stopping at the first failure.
 template <typename... Nodes>
 struct All {
   std::tuple<Nodes...> child;
@@ -32,6 +37,7 @@ template<typename... Nodes, typename Context>
   return rv;
 }
 
+// Projects the current context into a child context before validating the child node.
 template <typename Proj, typename Child>
 struct With {
   Proj projector;
@@ -43,6 +49,7 @@ template <typename Proj, typename Child, typename Context>
   return Validate(node.child, node.projector(context));
 }
 
+// Validates each element in the current range context with the same child node.
 template <typename Child> 
 struct Each {
   Child child;
@@ -56,6 +63,7 @@ template <typename Child, typename Context>
   return {};
 }
 
+// Validates the child only when the predicate holds for the current context.
 template <typename Pred, typename Child> 
 struct When {
   Pred predicate;

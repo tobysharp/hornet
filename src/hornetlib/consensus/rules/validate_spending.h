@@ -172,12 +172,14 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
 [[nodiscard]] inline Result ValidateSigOpCosts(const BlockSpendContext& context) {
   constexpr int kMaxBlockSigOpCost = 80'000;
   int sigops_cost = 0;
-  return context.unspent.ForEachTransaction(context.block,
-    [&](const protocol::TransactionConstView& tx, std::span<const SpendRecord> spends) { 
-      Assert(tx.InputCount() == std::ssize(spends));
-      sigops_cost += scripts::SigOpCost(tx, spends, context.script_flags);
-      return sigops_cost > kMaxBlockSigOpCost ? Error::Spending_BadSigOpsCost : Result::Ok;
-  });
+  const auto spends = context.unspent.Spends(context.block);
+  if (!spends) return {};  // Failed precondition.
+  for (const JoinedSpend spending : *spends) {
+    Assert(spending.tx.InputCount() == std::ssize(spending.spends));
+    sigops_cost += scripts::SigOpCost(spending.tx, spending.spends, context.script_flags);
+    if (sigops_cost > kMaxBlockSigOpCost) return Error::Spending_BadSigOpsCost;
+  }
+  return {};
 }
 
 // The total amount in coinbase outputs MUST NOT exceed the block reward.
@@ -193,11 +195,11 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
   const int64_t block_subsidy = epoch < 64 ? (kInitialBlockReward >> epoch) : 0;
 
   // Computes the total of all transaction inputs for the block.
-  const auto inputs_total = context.unspent.SumTransactions(context.block, [&](auto, const std::span<const SpendRecord> spends) {
-    return Sum(spends, [](const auto& spend) { return spend.amount; });
+  const auto spends = context.unspent.Spends(context.block);
+  if (!spends) return {};  // Failed precondition.
+  const int64_t inputs_total = Sum(*spends, [&](const JoinedSpend spending) {
+    return Sum(spending.spends, [](const SpendRecord& spend) { return spend.amount; });
   });
-  // Propagates failure if required prevout join data was unavailable for this block.
-  if (!inputs_total) return inputs_total.error();
 
   // Computes the total of all non-coinbase transaction outputs for the block.
   const int64_t outputs_total = Sum(context.block.Transactions(), [](const auto& tx) {
@@ -206,7 +208,7 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
 
   // Computes the maximum block reward available for the current block.
   //Assert(*inputs_total >= outputs_total);
-  const int64_t fees_amount = *inputs_total - outputs_total;
+  const int64_t fees_amount = inputs_total - outputs_total;
   const int64_t block_reward = block_subsidy + fees_amount;
   const int64_t coinbase_amount = context.block.Transaction(0).TotalOutputValue();
 

@@ -28,11 +28,12 @@ struct JoinedSpend {
 
 class JoinedSpendRange {
  public:
+  JoinedSpendRange() {}
   // Create a range object that forwards Size/At calls to the object `self`.
   template <typename T> JoinedSpendRange(const T& self) : self_(&self), vtable_(&kVTable<T>) {}
 
-  int Size() const { return vtable_->Size(self_); }
-  JoinedSpend operator[](int index) const { return vtable_->At(self_, index); }
+  int Size() const { return self_ != nullptr ? vtable_->Size(self_) : 0; }
+  JoinedSpend operator[](int index) const { Assert(self_ != nullptr); return vtable_->At(self_, index); }
 
   struct Sentinel{};
   struct Iterator {
@@ -76,28 +77,7 @@ class UnspentOutputsView {
   // Returns success if none of this block's transaction outputs already exist as unspent outputs (BIP30).
   virtual Result QueryOutPointsUnique(const protocol::Block& block) const = 0;
 
-  virtual std::expected<JoinedSpendRange, Error> Spends(const protocol::Block& block) const = 0;
-
-  template <typename Fn>
-  Result ForEachTransaction(const protocol::Block& block, Fn&& fn) const {
-    const auto spends = Spends(block); 
-    if (!spends) return spends.error();
-    for (JoinedSpend spend : *spends) {
-      if (const consensus::Result result = std::invoke(fn, spend.tx, spend.spends); !result) return result;
-    }
-    return {};
-  }
-
-  template <typename Fn>
-  auto SumTransactions(const protocol::Block& block, Fn&& fn) const 
-    -> std::expected<std::remove_cvref_t<std::invoke_result_t<Fn&, const protocol::TransactionConstView&, const std::span<const SpendRecord>&>>, Error>{
-    using T = std::remove_cvref_t<std::invoke_result_t<Fn&, const protocol::TransactionConstView&, const std::span<const SpendRecord>&>>;
-    T sum{};
-    const auto spends = Spends(block); 
-    if (!spends) return std::unexpected{spends.error()};
-    for (JoinedSpend spend : *spends) sum += std::invoke(fn, spend.tx, spend.spends);
-    return sum;
-  }
+  virtual std::optional<JoinedSpendRange> Spends(const protocol::Block& block) const = 0;
 };
 
 }  // namespace hornet::consensus
