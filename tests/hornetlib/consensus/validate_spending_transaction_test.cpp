@@ -1,4 +1,4 @@
-#include "hornetlib/consensus/rules/validate_spending.h"
+#include "hornetlib/consensus/rules/validate.h"
 
 #include <limits>
 #include <cstdint>

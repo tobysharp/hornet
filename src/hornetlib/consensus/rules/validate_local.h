@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "hornetlib/consensus/merkle.h"
-#include "hornetlib/consensus/rule.h"
 #include "hornetlib/consensus/rules/context.h"
 #include "hornetlib/consensus/rules/scripts/sigops.h"
 #include "hornetlib/consensus/rules/validate_transaction.h"

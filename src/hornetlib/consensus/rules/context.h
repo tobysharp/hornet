@@ -76,14 +76,31 @@ struct SpendsInBlock {
 
 struct TransactionSpendContext {
   const protocol::TransactionConstView tx;
-  std::span<const SpendRecord> spends;
+  const std::span<const SpendRecord> spends;
   const HeaderAncestryView& ancestry;
-  int height;
+  const int height;
+};
+
+struct InputsInSpend {
+  auto operator()(const TransactionSpendContext& context) const {
+    return context.spends;
+  }
 };
 
 struct MakeTransactionSpendContext {
   TransactionSpendContext operator()(const JoinedSpend& tx_spends, const BlockSpendContext& context) const {
     return {tx_spends.tx, tx_spends.spends, context.ancestry, context.height};
+  }
+};
+
+struct InputSpendContext {
+  const SpendRecord spend;
+  const int height;
+};
+
+struct MakeInputSpendContext {
+  InputSpendContext operator()(const SpendRecord& spend, const TransactionSpendContext& context) const {
+    return {spend, context.height};
   }
 };
 

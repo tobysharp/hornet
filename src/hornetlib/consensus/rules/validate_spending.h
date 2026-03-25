@@ -4,7 +4,6 @@
 #include <tuple>
 
 #include "hornetlib/consensus/bips.h"
-#include "hornetlib/consensus/rule.h"
 #include "hornetlib/consensus/rules/context.h"
 #include "hornetlib/consensus/rules/scripts/patterns.h"
 #include "hornetlib/consensus/rules/scripts/sigops.h"
@@ -21,12 +20,6 @@ namespace hornet::consensus::rules {
 // Spending validation rules per input
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-struct InputSpendContext {
-  const protocol::TransactionConstView tx;
-  const SpendRecord& spend;
-  const int height;
-};
-
 // Coinbase outputs MUST NOT be spent until 100 blocks after their creation.
 [[nodiscard]] inline Result ValidateCoinbaseMaturity(const InputSpendContext& context) {
   constexpr int kCoinbaseMaturity = 100;  // Number of blocks until coinbase maturity.
@@ -37,27 +30,9 @@ struct InputSpendContext {
   return {};
 }
 
-[[nodiscard]] inline Result ValidateSpendingInput(const protocol::TransactionConstView& tx, const SpendRecord& spend,
-                                                  int height) {
-  // clang-format off
-  static const auto ruleset = std::make_tuple(
-    Rule{ValidateCoinbaseMaturity}         // Coinbase outputs MUST NOT be spent until 100 blocks after their creation.
-  );
-  //clang-format on
-  const InputSpendContext context{tx, spend, height};
-  return ValidateRules(ruleset, height, context);
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Spending validation rules per transaction
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-[[nodiscard]] inline Result ValidateSpendingInputs(const TransactionSpendContext& context) {
-  for (const auto& spend : context.spends) {
-    if (Result result = ValidateSpendingInput(context.tx, spend, context.height); !result) return result;
-  }
-  return {};
-}
 
 // The sum of output values in a transaction MUST NOT exceed the sum of all input values being spent.
 [[nodiscard]] inline Result ValidateOutputValuesAtMostInputValues(const TransactionSpendContext& context) {
@@ -108,18 +83,6 @@ struct InputSpendContext {
   if (context.height < min_valid_height || parent_mtp < min_valid_mtp) return Error::Spending_NonFinalTransaction;
 
   return {};
-}
-
-[[nodiscard]] inline Result ValidateSpendingTransaction(const TransactionSpendContext& context) {
-  // clang-format off
-  static const auto ruleset = std::make_tuple(
-    Rule{ValidateSpendingInputs},
-    Rule{ValidateOutputValuesAtMostInputValues},
-    Rule{ValidateSequenceLocks, BIP::SequenceLocks}
-    // TODO: Input scripts rule
-  );
-  //clang-format on
-  return ValidateRules(ruleset, context.height, context);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

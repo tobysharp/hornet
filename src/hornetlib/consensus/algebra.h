@@ -6,7 +6,7 @@
 // Validation algebra for composing Hornet consensus rules as a static tree.
 // Nodes either validate the current context, project it, iterate it, or gate a subtree.
 
-namespace hornet::consensus::algebra {
+namespace hornet::consensus {
 
 // Applies a leaf validator to the current context.
 template <typename Fn>
@@ -49,16 +49,27 @@ template <typename Proj, typename Child, typename Context>
   return Validate(node.child, node.projector(context));
 }
 
-// Validates each element in the current range context with the same child node.
-template <typename Child> 
-struct Each {
-  Child child;
+struct First {
+  template <typename T, typename U>
+  decltype(auto) operator()(T&& value, U&&) const { return std::forward<T>(value); }
 };
 
-template <typename Child, typename Context>
-[[nodiscard]] Result Validate(const Each<Child>& node, const Context& context) {
-  for (auto&& obj : context) {
-    if (Result r = Validate(node.child, obj); !r) return r;
+// Validates each element in the current range context with the same child node.
+template <typename Child, typename Enum = std::identity, typename Proj = First> 
+struct Each {
+  Enum enumerate{};
+  Proj project{};
+  Child child;
+
+  constexpr Each(Child c) : child(std::move(c)) {}
+  constexpr Each(Enum e, Child c) : enumerate(std::move(e)), child(std::move(c)) {}
+  constexpr Each(Enum e, Proj p, Child c) : enumerate(std::move(e)), project(std::move(p)), child(std::move(c)) {}
+};
+
+template <typename Child, typename Enum, typename Proj, typename Context>
+[[nodiscard]] Result Validate(const Each<Child, Enum, Proj>& node, const Context& context) {
+  for (auto&& obj : node.enumerate(context)) {
+    if (Result r = Validate(node.child, node.project(std::forward<decltype(obj)>(obj), context)); !r) return r;
   }
   return {};
 }
@@ -76,4 +87,4 @@ template <typename Pred, typename Child, typename Context>
   return {};
 }
 
-}  // namespace hornet::consensus::algebra
+}  // namespace hornet::consensus

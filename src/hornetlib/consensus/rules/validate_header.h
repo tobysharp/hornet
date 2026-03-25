@@ -9,7 +9,6 @@
 #include "hornetlib/consensus/bips.h"
 #include "hornetlib/consensus/difficulty_adjustment.h"
 #include "hornetlib/consensus/header_ancestry_view.h"
-#include "hornetlib/consensus/rule.h"
 #include "hornetlib/consensus/rules/context.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/protocol/block_header.h"

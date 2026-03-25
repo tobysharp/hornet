@@ -9,7 +9,6 @@
 #include "hornetlib/consensus/bips.h"
 #include "hornetlib/consensus/header_ancestry_view.h"
 #include "hornetlib/consensus/merkle.h"
-#include "hornetlib/consensus/rule.h"
 #include "hornetlib/consensus/rules/context.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/protocol/block.h"
@@ -104,21 +103,6 @@ inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transacti
   }
 
   return {};
-}
-
-// BIP141: A post-Segwit block MUST satisfy witness malleation rules.
-[[nodiscard]] /* [[BIP::SegWit]] */ inline Result ValidateWitnessCommitment(const BlockEnvironmentContext& context) {
-  // clang-format off
-  static const auto ruleset = std::make_tuple(
-    // BIP141: A block containing witness data MUST contain a witness commitment.
-    Rule{ValidateWitnessDataHasCommitment}, 
-    // BIP141: A post-Segwit block containing a witness commitment MUST contain a witness nonce.
-    Rule{ValidateWitnessNonce}, 
-    // BIP141: A post-SegWit block containing a witness commitment MUST commit to its witness Merkle root and nonce.
-    Rule{ValidateWitnessMerkle}
-  );
-  // clang-format on
-  return ValidateRules(ruleset, context.height, MakeWitnessContext(context));
 }
 
 // A pre-SegWit block MUST NOT contain any witness data.

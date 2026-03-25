@@ -4,7 +4,6 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
-#include "hornetlib/consensus/rule.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/protocol/transaction.h"
 
