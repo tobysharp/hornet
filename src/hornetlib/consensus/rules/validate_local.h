@@ -9,20 +9,23 @@
 #include <numeric>
 #include <ranges>
 #include <span>
+#include <tuple>
+#include <vector>
 
 #include "hornetlib/consensus/merkle.h"
 #include "hornetlib/consensus/rule.h"
+#include "hornetlib/consensus/rules/context.h"
 #include "hornetlib/consensus/rules/scripts/sigops.h"
+#include "hornetlib/consensus/rules/validate_transaction.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/block_header.h"
 #include "hornetlib/protocol/hash.h"
+#include "hornetlib/protocol/transaction.h"
 #include "hornetlib/util/iterator_range.h"
 #include "hornetlib/util/log.h"
 
 namespace hornet::consensus::rules {
-
-[[nodiscard]] Result ValidateTransaction(const protocol::TransactionConstView transaction);
 
 // A block MUST contain at least one transaction.
 [[nodiscard]] inline Result ValidateNonEmpty(const protocol::Block& block) {
@@ -49,15 +52,6 @@ namespace hornet::consensus::rules {
 [[nodiscard]] inline Result ValidateCoinbase(const protocol::Block& block) {
   for (/* mutable */ int i = 0; i < block.GetTransactionCount(); ++i)
     if (block.Transaction(i).IsCoinBase() != (i == 0)) return Error::Structure_BadCoinBase;
-  return {};
-}
-
-// All transactions in a block MUST be valid according to transaction-level consensus rules.
-[[nodiscard]] inline Result ValidateTransactions(const protocol::Block& block) {
-  for (const auto& tx : block.Transactions()) {
-    if (const auto result = ValidateTransaction(tx); !result)
-      return result;
-  }
   return {};
 }
 

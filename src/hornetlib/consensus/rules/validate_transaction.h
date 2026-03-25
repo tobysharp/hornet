@@ -32,18 +32,26 @@ namespace hornet::consensus::rules {
   return {};
 }
 
-// All output values MUST be non-negative, and their sum MUST NOT exceed 21,000,000 coins.
-[[nodiscard]] inline Result ValidateOutputValues(
+// A transaction output amount MUST be non-negative.
+[[nodiscard]] inline Result ValidateOutputsNonNegative(
+    const protocol::TransactionConstView transaction) {
+  for (const auto& output : transaction.Outputs()) {
+    if (output.value < 0) return Error::Transaction_NegativeOutputValue;
+  }
+  return {};
+}
+
+// The sum of a transaction's output amounts MUST NOT exceed 21,000,000 coins.
+[[nodiscard]] inline Result ValidateOutputsSum(
     const protocol::TransactionConstView transaction) {
   constexpr int64_t kSatoshisPerBitcoin = 100'000'000;
   constexpr int64_t kMoneySupplyLimit = 21'000'000 * kSatoshisPerBitcoin;
 
   /* mutable */ int64_t total_output_value = 0;
   for (const auto& output : transaction.Outputs()) {
-    if (output.value < 0) return Error::Transaction_NegativeOutputValue;
-    if (output.value > kMoneySupplyLimit) return Error::Transaction_OversizedOutputValue;
+    if (output.value > kMoneySupplyLimit) return Error::Transaction_OversizedOutputValues;
     total_output_value += output.value;
-    if (total_output_value > kMoneySupplyLimit) return Error::Transaction_OversizedTotalOutputValues;
+    if (total_output_value > kMoneySupplyLimit) return Error::Transaction_OversizedOutputValues;
   }
   return {};
 }

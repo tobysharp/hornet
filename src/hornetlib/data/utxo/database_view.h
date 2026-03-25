@@ -29,13 +29,10 @@ class DatabaseView : public consensus::UnspentOutputsView {
     return {};
   }
 
- protected:
-  consensus::Result EnumerateTransactions(const protocol::Block&, const Callback cb, const void* user) const override {
-    if (!joiner_->WaitForFetch()) return consensus::Error::Spending_PrevoutNotUnspent;
-
-    return joiner_->Join([&](protocol::TransactionConstView tx, std::span<const consensus::SpendRecord> spends) {
-      return cb(tx, spends, user);
-    });
+  std::expected<consensus::JoinedSpendRange, consensus::Error> Spends(const protocol::Block& block) const override {
+    Assert(&block == joiner_->GetBlock().get());
+    if (!joiner_->WaitForJoin()) return std::unexpected{consensus::Error::Spending_PrevoutNotUnspent};
+    return consensus::JoinedSpendRange{*joiner_};
   }
 
  private:

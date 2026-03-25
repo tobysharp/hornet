@@ -2,10 +2,12 @@
 
 #include <iterator>
 #include <optional>
+#include <type_traits>
 
 #include "hornetlib/consensus/bips.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/util/assert.h"
+#include "hornetlib/util/throw.h"
 
 namespace hornet::consensus {
 
@@ -22,8 +24,36 @@ struct Rule {
 
   template <typename... Args>
   Result operator()(const int height, Args&&... args) const {
+    if (bip && height < 0) util::ThrowRuntimeError("Invalid height on height-gated rule.");
     if (bip && !IsBIPActiveAtHeight(*bip, height)) return {};
     return fn(proj(std::forward<Args>(args)...));
+  }
+};
+
+template <typename Fn, typename Proj = std::identity>
+using Group = Rule<Fn, Proj>;
+
+template <typename Fn, typename Enum, typename Proj = std::identity>
+struct Each {
+  Fn fn;
+  Enum iter;
+  Proj proj{};
+
+  Each(Fn f, Enum e) : fn(std::move(f)), iter(std::move(e)) {}
+  Each(Fn f, Enum e, Proj p) : fn(std::move(f)), iter(std::move(e)), proj(std::move(p)) {}
+
+  template <typename... Args>
+  Result operator()(const int, Args&&... args) const {
+    const auto range = iter(std::forward<Args>(args)...);
+    if (!range) return range.error();
+    for (auto&& value : *range) {
+      if constexpr (std::is_same_v<std::remove_cvref_t<Proj>, std::identity>) {
+        if (Result result = fn(value); !result) return result;
+      } else {
+        if (Result result = fn(proj(value, std::forward<Args>(args)...)); !result) return result;
+      }
+    }
+    return {};
   }
 };
 

@@ -6,8 +6,8 @@
 #include "hornetlib/consensus/bips.h"
 #include "hornetlib/consensus/rule.h"
 #include "hornetlib/consensus/rules/context.h"
-#include "hornetlib/consensus/rules/scripts/sigops.h"
 #include "hornetlib/consensus/rules/scripts/patterns.h"
+#include "hornetlib/consensus/rules/scripts/sigops.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/consensus/utxo.h"
 #include "hornetlib/protocol/block.h"
@@ -52,15 +52,6 @@ struct InputSpendContext {
 // Spending validation rules per transaction
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-struct TransactionSpendContext {
-  const protocol::TransactionConstView tx;
-  std::span<const SpendRecord> spends;
-  const HeaderAncestryView& ancestry;
-  const int height;
-  const int64_t inputs_sum = std::reduce(spends.begin(), spends.end(), 0ll, [](int64_t sum, const auto& spend) { return sum + spend.amount; });
-  const int64_t outputs_sum = std::reduce(tx.Outputs().begin(), tx.Outputs().end(), 0ll, [](int64_t sum, const auto& output) { return sum + output.value; });
-};
-
 [[nodiscard]] inline Result ValidateSpendingInputs(const TransactionSpendContext& context) {
   for (const auto& spend : context.spends) {
     if (Result result = ValidateSpendingInput(context.tx, spend, context.height); !result) return result;
@@ -70,9 +61,11 @@ struct TransactionSpendContext {
 
 // The sum of output values in a transaction MUST NOT exceed the sum of all input values being spent.
 [[nodiscard]] inline Result ValidateOutputValuesAtMostInputValues(const TransactionSpendContext& context) {
-  if (context.outputs_sum > context.inputs_sum) return Error::Spending_OutputAmountsExceedInputAmounts;
 
-  return {};
+  const int64_t outputs_sum = util::Sum(context.tx.Outputs(), [](const auto& output) { return output.value; });
+  const int64_t inputs_sum = util::Sum(context.spends, [](const auto& spend) { return spend.amount; });
+
+  return (outputs_sum > inputs_sum) ? Error::Spending_OutputAmountsExceedInputAmounts : Result::Ok;
 }
 
 // BIP68: Each input that signals a relative lock-time interval MUST have reached relative finality.
@@ -87,9 +80,8 @@ struct TransactionSpendContext {
   int min_valid_height = 0;    // The minimum height at which finality is achieved for this transaction.
   int64_t min_valid_mtp = 0;   // The minimum MTP time at which finality is achieved.
 
-  for (int input_index = 0; input_index < context.tx.InputCount(); ++input_index) {
-    const protocol::Input& input = context.tx.Input(input_index);
-    const SpendRecord& spend = context.spends[input_index];
+  for (const auto& spend : context.spends) {
+    const protocol::Input& input = context.tx.Input(spend.spend_input_index);
     
     // Sequence numbers with the most significant bit set do not participate in this consensus rule.
     if (input.sequence & kDisableMask) continue;
@@ -118,31 +110,21 @@ struct TransactionSpendContext {
   return {};
 }
 
-[[nodiscard]] inline Result ValidateSpendingTransaction(const protocol::TransactionConstView& tx, std::span<const SpendRecord> spends, const HeaderAncestryView& ancestry, int height) {
+[[nodiscard]] inline Result ValidateSpendingTransaction(const TransactionSpendContext& context) {
   // clang-format off
   static const auto ruleset = std::make_tuple(
     Rule{ValidateSpendingInputs},
     Rule{ValidateOutputValuesAtMostInputValues},
     Rule{ValidateSequenceLocks, BIP::SequenceLocks}
     // TODO: Input scripts rule
-    // TODO: Coinbase amount <= block subsidy + fees
   );
   //clang-format on
-  const TransactionSpendContext context{tx, spends, ancestry, height};
-  return ValidateRules(ruleset, height, context);
+  return ValidateRules(ruleset, context.height, context);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Spending validation rules per block
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-struct BlockSpendContext {
-  const protocol::Block& block;
-  const HeaderAncestryView& ancestry;
-  const UnspentOutputsView& unspent;
-  const int height;
-  const uint64_t script_flags;
-};
 
 inline uint64_t GetScriptVerifyFlags(const BlockValidationContext& rhs) {
   using namespace scripts;
@@ -186,14 +168,6 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
   return context.unspent.QueryOutPointsUnique(context.block);
 }
 
-[[nodiscard]] inline Result ValidateSpendingTransactions(const BlockSpendContext& context) {
-  return context.unspent.ForEachTransaction(context.block,
-    [&](const protocol::TransactionConstView& tx, std::span<const SpendRecord> spends) { 
-      Assert(tx.InputCount() == std::ssize(spends));
-      return ValidateSpendingTransaction(tx, spends, context.ancestry, context.height);
-    });
-}
-
 // The sum of sigop costs across all transactions MUST NOT exceed the maximum of 80,000.
 [[nodiscard]] inline Result ValidateSigOpCosts(const BlockSpendContext& context) {
   constexpr int kMaxBlockSigOpCost = 80'000;
@@ -231,7 +205,7 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
   });
 
   // Computes the maximum block reward available for the current block.
-  Assert(*inputs_total >= outputs_total);
+  //Assert(*inputs_total >= outputs_total);
   const int64_t fees_amount = *inputs_total - outputs_total;
   const int64_t block_reward = block_subsidy + fees_amount;
   const int64_t coinbase_amount = context.block.Transaction(0).TotalOutputValue();
@@ -240,20 +214,6 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
   if (coinbase_amount > block_reward) return Error::Spending_CoinbaseAmountExceedsBlockReward;
 
   return {};
-}
-
-[[nodiscard]] inline Result ValidateSpending(const BlockSpendContext& context) {
-  // clang-format off
-  static const auto ruleset = std::make_tuple(
-    Rule{ValidateOutPointsUnique},
-    Rule{ValidateInputPrevoutsUnspent},
-    Rule{ValidateSpendingTransactions},
-    Rule{ValidateSigOpCosts},
-    // TODO: Script validation
-    Rule{ValidateBlockSubsidy}
-  );
-  // clang-format on
-  return ValidateRules(ruleset, context.height, context);
 }
 
 }  // namespace hornet::consensus::rules

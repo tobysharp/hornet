@@ -11,6 +11,13 @@
 
 namespace hornet::consensus::rules {
 
+struct TransactionsInBlock {
+  auto operator()(const protocol::Block& block) const 
+    -> std::expected<decltype(block.Transactions()), Error> {
+    return block.Transactions();
+  }
+};
+
 struct BlockValidationContext {
   const protocol::Block& block;
   const protocol::BlockHeader& parent;
@@ -52,5 +59,32 @@ struct WitnessContext {
   Assert(IsBIPActiveAtHeight(BIP::SegWit, context.height));
   return {context.block, scripts::ExtractWitnessCommitment(context.block)};  
 }
+
+struct BlockSpendContext {
+  const protocol::Block& block;
+  const HeaderAncestryView& ancestry;
+  const UnspentOutputsView& unspent;
+  const int height;
+  const uint64_t script_flags;
+};
+
+struct SpendsInBlock {
+  auto operator()(const BlockSpendContext& context) const {
+    return context.unspent.Spends(context.block);  
+  }
+};
+
+struct TransactionSpendContext {
+  const protocol::TransactionConstView tx;
+  std::span<const SpendRecord> spends;
+  const HeaderAncestryView& ancestry;
+  int height;
+};
+
+struct MakeTransactionSpendContext {
+  TransactionSpendContext operator()(const JoinedSpend& tx_spends, const BlockSpendContext& context) const {
+    return {tx_spends.tx, tx_spends.spends, context.ancestry, context.height};
+  }
+};
 
 }  // namespace hornet::consensus::rules

@@ -8,7 +8,7 @@
 #include "hornetlib/encoding/writer.h"
 #include "hornetlib/consensus/merkle.h"
 #include "hornetlib/consensus/rules/context.h"
-#include "hornetlib/consensus/rules/validate_block_context.h"
+#include "hornetlib/consensus/rules/validate_contextual.h"
 #include "hornetlib/consensus/spending_test_harness.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/crypto/hash.h"
@@ -157,7 +157,7 @@ TEST(ValidatorTest, DetectsInvalidMerkleRoot) {
   header.SetMerkleRoot(Hash{0x99});
   block.SetHeader(header);
 
-   EXPECT_EQ(ValidateStructural(RoundTrip(block)), Error::Structure_BadMerkleRoot);
+   EXPECT_EQ(ValidateLocal(RoundTrip(block)), Error::Structure_BadMerkleRoot);
 }
 
 TEST(ValidatorTest, DetectsNonFirstCoinbase) {
@@ -194,7 +194,7 @@ TEST(ValidatorTest, DetectsNonFirstCoinbase) {
   header.SetMerkleRoot(ComputeMerkleRoot(block).hash);
   block.SetHeader(header);
 
-  EXPECT_EQ(ValidateStructural(RoundTrip(block)), Error::Structure_BadCoinBase);
+  EXPECT_EQ(ValidateLocal(RoundTrip(block)), Error::Structure_BadCoinBase);
 }
 
 TEST(ValidatorTest, RejectsBlockWithExcessiveWeight) {
@@ -216,7 +216,7 @@ TEST(ValidatorTest, RejectsBlockWithExcessiveWeight) {
 
   const auto block2 = RoundTrip(block);
   EXPECT_GT(block2.GetWeightUnits(), 4'000'000);
-  EXPECT_EQ(ValidateStructural(block2), Error::Structure_BadSize);
+  EXPECT_EQ(ValidateLocal(block2), Error::Structure_BadSize);
 }
 
 TEST(ValidatorTest, RejectsBlockWithNoTransactions) {
@@ -227,7 +227,7 @@ TEST(ValidatorTest, RejectsBlockWithNoTransactions) {
   header.SetMerkleRoot(Hash{});
   block.SetHeader(header);
 
-  EXPECT_EQ(ValidateStructural(block), Error::Structure_BadTransactionCount);
+  EXPECT_EQ(ValidateLocal(block), Error::Structure_BadTransactionCount);
 }
 
 TEST(ValidatorTest, RejectsBlockWithInvalidTransaction) {
@@ -246,7 +246,7 @@ TEST(ValidatorTest, RejectsBlockWithInvalidTransaction) {
   header.SetMerkleRoot(ComputeMerkleRoot(block).hash);
   block.SetHeader(header);
 
-  EXPECT_EQ(ValidateStructural(RoundTrip(block)), Error::Transaction_NegativeOutputValue);
+  EXPECT_EQ(ValidateLocal(RoundTrip(block)), Error::Transaction_NegativeOutputValue);
 }
 
 TEST(ValidatorTest, RejectsWitnessDataBeforeSegwitActivation) {

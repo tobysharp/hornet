@@ -1,7 +1,9 @@
 #pragma once
 
 #include <memory>
+#include <span>
 #include <utility>
+#include <vector>
 
 #include "hornetlib/consensus/rules/validate_spending.h"
 #include "hornetlib/data/header_timechain.h"
@@ -40,5 +42,34 @@ consensus::Result WithCandidateSpendState(const Blockchain& chain, const protoco
 
   return std::forward<Callback>(callback)(*ancestry, joiner, height);
 }
+
+class StaticUnspentOutputsView : public consensus::UnspentOutputsView {
+ public:
+  struct Entry {
+    protocol::Transaction tx;
+    std::vector<consensus::SpendRecord> spends;
+  };
+
+  void Add(protocol::Transaction tx, std::vector<consensus::SpendRecord> spends) {
+    entries_.push_back({std::move(tx), std::move(spends)});
+  }
+
+  consensus::Result QueryPrevoutsUnspent(const protocol::Block&) const override { return {}; }
+  consensus::Result QueryOutPointsUnique(const protocol::Block&) const override { return {}; }
+
+  std::expected<consensus::JoinedSpendRange, consensus::Error> Spends(const protocol::Block&) const override {
+    return consensus::JoinedSpendRange{*this};
+  }
+
+  int SpendSize() const { return std::ssize(entries_); }
+
+  consensus::JoinedSpend SpendAt(int index) const {
+    const auto& entry = entries_[index];
+    return {entry.tx, std::span<const consensus::SpendRecord>{entry.spends}};
+  }
+
+ private:
+  std::vector<Entry> entries_;
+};
 
 }  // namespace hornet::test

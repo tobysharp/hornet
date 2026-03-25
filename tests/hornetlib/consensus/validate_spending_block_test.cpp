@@ -18,7 +18,7 @@ Result EvaluateCandidateSpendingBlock(const test::Blockchain& chain, const proto
       chain, block,
       [&](const HeaderAncestryView& ancestry, const std::shared_ptr<data::utxo::SpendJoiner>& joiner, int height) {
         const data::utxo::DatabaseView utxo{joiner};
-        const BlockValidationContext validation{block, chain[height - 1]->Header(), ancestry, 0, utxo};
+        const BlockValidationContext validation{*joiner->GetBlock(), chain[height - 1]->Header(), ancestry, 0, utxo};
         return callback(MakeBlockSpendContext(validation));
       });
 }

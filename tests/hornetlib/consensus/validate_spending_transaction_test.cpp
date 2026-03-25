@@ -19,32 +19,6 @@
 namespace hornet::consensus::rules {
 namespace {
 
-class SubsidyOverflowUnspentView : public UnspentOutputsView {
- public:
-  struct Entry {
-    protocol::Transaction tx;
-    std::vector<SpendRecord> spends;
-  };
-
-  void Add(protocol::Transaction tx, std::vector<SpendRecord> spends) {
-    entries_.push_back({std::move(tx), std::move(spends)});
-  }
-
-  Result QueryPrevoutsUnspent(const protocol::Block&) const override { return {}; }
-  Result QueryOutPointsUnique(const protocol::Block&) const override { return {}; }
-
- protected:
-  Result EnumerateTransactions(const protocol::Block&, const Callback cb, const void* user) const override {
-    for (const auto& entry : entries_) {
-      if (const Result result = cb(entry.tx, entry.spends, user); !result) return result;
-    }
-    return {};
-  }
-
- private:
-  std::vector<Entry> entries_;
-};
-
 protocol::Transaction MakeCoinbaseTx(int64_t value) {
   protocol::Transaction tx;
   tx.SetVersion(1);
@@ -225,7 +199,7 @@ TEST(ValidateSpendingTransactionTest, SkipsSequenceLocksBeforeActivation) {
   EXPECT_EQ(harness.ValidateCandidateTransactions(
                 block, [](const protocol::TransactionConstView& tx, std::span<const SpendRecord> spends,
                           const HeaderAncestryView& ancestry,
-                          int height) { return ValidateSpendingTransaction(tx, spends, ancestry, height); }),
+                          int height) { return ValidateSpendingTransaction({tx, spends, ancestry, height}); }),
             Result{});
 }
 
@@ -251,7 +225,7 @@ TEST(ValidateSpendingTransactionTest, AcceptsCoreValidBlockDespiteAccumulatorOve
   protocol::Block block;
   block.AddTransaction(MakeCoinbaseTx(kSubsidy));
 
-  SubsidyOverflowUnspentView unspent;
+  test::StaticUnspentOutputsView unspent;
   for (int i = 0; i < kSpendCount; ++i) {
     auto tx = MakeMaxMoneySpendTx(i);
     block.AddTransaction(tx);
@@ -280,7 +254,7 @@ TEST(ValidateSpendingTransactionTest, AcceptsExactReferenceRewardDespiteAccumula
   protocol::Block block;
   block.AddTransaction(MakeCoinbaseTx(kSubsidy + 1));
 
-  SubsidyOverflowUnspentView unspent;
+  test::StaticUnspentOutputsView unspent;
   for (int i = 0; i < kSpendCount; ++i) {
     const int64_t output_value = (i + 1 == kSpendCount) ? (kMaxMoney - 1) : kMaxMoney;
     auto tx = MakeMaxMoneySpendTx(i, output_value);
@@ -311,7 +285,7 @@ TEST(ValidateSpendingTransactionTest, RejectsCoinbaseAboveReferenceRewardDespite
   protocol::Block block;
   block.AddTransaction(MakeCoinbaseTx(kSubsidy + 2));
 
-  SubsidyOverflowUnspentView unspent;
+  test::StaticUnspentOutputsView unspent;
   for (int i = 0; i < kSpendCount; ++i) {
     const int64_t output_value = (i + 1 == kSpendCount) ? (kMaxMoney - 1) : kMaxMoney;
     auto tx = MakeMaxMoneySpendTx(i, output_value);

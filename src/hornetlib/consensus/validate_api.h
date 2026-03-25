@@ -3,7 +3,6 @@
 #include "hornetlib/consensus/header_ancestry_view.h"
 #include "hornetlib/consensus/rules/context.h"
 #include "hornetlib/consensus/rules/validate.h"
-#include "hornetlib/consensus/rules/validate_compositions.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/block_header.h"
@@ -12,8 +11,7 @@ namespace hornet::consensus {
 
 // Export the top-level validation functions to the hornet::consensus namespace.
 using rules::ValidateContextual;
-using rules::ValidateStructural;
-using rules::ValidateTransaction;
+using rules::ValidateLocal;
 
 [[nodiscard]] inline Result ValidateHeader(const protocol::BlockHeader& header,
                                            const protocol::BlockHeader& parent,
@@ -34,14 +32,6 @@ using rules::ValidateTransaction;
                                           const int64_t current_time,
                                           const UnspentOutputsView& unspent) {
   return rules::ValidateBlock(block, parent, view, current_time, unspent);
-}
-
-[[nodiscard]] inline Result ValidateBlockNoScripts(const protocol::Block& block,
-                                          const protocol::BlockHeader& parent,
-                                          const HeaderAncestryView& view,
-                                          const int64_t current_time,
-                                          const UnspentOutputsView& unspent) {
-  return rules::ValidateBlockNoScripts(block, parent, view, current_time, unspent);
 }
 
 }  // namespace hornet::consensus

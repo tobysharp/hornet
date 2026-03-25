@@ -14,12 +14,13 @@
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/transaction.h"
 #include "hornetlib/util/metrics.h"
+#include "hornetlib/util/subarray.h"
 
 namespace hornet::data::utxo {
 
 class SpendJoiner {
  public:
-  enum class State { Init, Parsed, Appended, QueriedPart, Queried, FetchedPart, Fetched, Error, Cancelled };
+  enum class State { Init, Parsed, Appended, QueriedPart, Queried, FetchedPart, Fetched, Joined, Error, Cancelled };
 
   using Callback = std::function<consensus::Result(const consensus::SpendRecord&)>;
 
@@ -36,40 +37,51 @@ class SpendJoiner {
 
   bool IsAdvanceReady() const;
 
-  enum class Action { Advance, Wait, Join, Retire };
+  enum class Action { Advance, Wait, Consume, Retire };
   struct StepResult {
     State state;
     Action action;
   };
   StepResult Advance();
 
-  bool IsJoinReady() const { return state_ == State::Fetched; }
+  bool IsJoinReady() const { return state_ == State::Joined; }
   bool IsAssumeValid() const { return disable_fetch_; }
-  consensus::Result Join(auto&& callback) const;
+  consensus::Result Join(auto&& callback);
   bool AllOutPointsUnique() const;
 
   bool WaitForQuery() const;
-  bool WaitForFetch() const;
+  bool WaitForJoin() const;
   bool WaitForDependencies() const;
 
   void Cancel();
+
+  int SpendSize() const { return std::ssize(joined_); }
+  consensus::JoinedSpend SpendAt(int index) const {
+    return {block_->Transaction(joined_[index].tx_index), joined_[index].spending.Span(spends_)};
+  }
 
   enum Timer { Time_Parse, Time_Append, Time_Query, Time_Fetch, Time_Join, Time_Count };
   using Metrics = util::Metrics<Time_Count>;
   const Metrics& GetMetrics() const { return metrics_; }
 
  private:
+  struct JoinedSpendStorage {
+    int tx_index;
+    util::SubArray<consensus::SpendRecord> spending;
+  };
+
   void Parse();
   void Append();
   void Query();
   void Fetch();
+  void Join();
   void GotoError();
   void ReleaseQuery();
-  void ReleaseFetch();
+  void ReleaseJoin();
 
   std::atomic<State> state_;
   std::atomic<bool> release_query_ = false;
-  std::atomic<bool> release_fetch_ = false;
+  std::atomic<bool> release_join_ = false;
 
   Database& db_;
   std::shared_ptr<const protocol::Block> block_;
@@ -84,6 +96,8 @@ class SpendJoiner {
   std::vector<OutputId> rids_;
   std::vector<OutputDetail> outputs_;
   std::vector<uint8_t> scripts_;
+  std::vector<consensus::SpendRecord> spends_;
+  std::vector<JoinedSpendStorage> joined_;
   mutable Metrics metrics_;
 };
 
@@ -110,8 +124,7 @@ inline void SpendJoiner::Parse() {
   SortTogether(keys_.begin(), keys_.end(), inputs_.begin(), rids_.begin(), outputs_.begin());
 
   // If any keys are duplicates, that implies that the block is trying to spend the same prevout twice.
-  if (std::adjacent_find(keys_.begin(), keys_.end()) != keys_.end())
-    return GotoError();
+  if (std::adjacent_find(keys_.begin(), keys_.end()) != keys_.end()) return GotoError();
 
   state_ = State::Parsed;
 }
@@ -180,58 +193,49 @@ inline void SpendJoiner::Fetch() {
     SortTogether(inputs_.begin(), inputs_.end(), outputs_.begin());
     rids_.clear();
     state_ = State::Fetched;
-    ReleaseFetch();
   }
 }
 
-// Join a range of inputs with its found output and call back with the merged view.
-inline consensus::Result SpendJoiner::Join(auto&& callback) const {
+inline void SpendJoiner::Join() {
   Assert(state_ == State::Fetched);
   Assert(inputs_.size() == outputs_.size());
-  Assert(!disable_fetch_);
 
   const auto timer = metrics_.AddScoped(Time_Join);
-
   const int tx_count = block_->GetTransactionCount();
 
-  // For each transaction, store the offset of its first spend record in inputs_/outputs_.
-  // Computed as a running sum of non-null-prevout input counts.
-  int offset = 0;
-  std::vector<int> tx_offsets(tx_count + 1);
+  spends_.resize(inputs_.size());
+  joined_.clear();
+
+  int tx_spend_index = 0;
   for (int i = 0; i < tx_count; ++i) {
-    tx_offsets[i] = offset;
-    for (const auto& input : block_->Transaction(i).Inputs())
-      if (!input.previous_output.IsNull()) ++offset;
+    int spend_index = tx_spend_index;
+    for (const auto& input : block_->Transaction(i).Inputs()) {
+      if (input.previous_output.IsNull()) continue;
+      const OutputDetail& output = outputs_[spend_index];
+      spends_[spend_index] = {.funding_height = output.header.height,
+                .funding_flags = output.header.flags,
+                .amount = output.header.amount,
+                .pubkey_script = output.script.Span(scripts_),
+                .spend_input_index = inputs_[spend_index].input_index};
+      spend_index++;
+    }
+    if (spend_index > tx_spend_index) joined_.push_back({i, {tx_spend_index, spend_index - tx_spend_index}});
+    tx_spend_index = spend_index;
   }
-  tx_offsets[tx_count] = offset;
 
-  consensus::Result rv = {};
-  std::atomic<bool> failed = false;
-  std::vector<consensus::SpendRecord> records(inputs_.size());
+  state_ = State::Joined;
+  ReleaseJoin();
+}
 
-  ParallelFor<int>(0, tx_count, [&](int tx_index) {
-    if (failed) return;
-    const int inputs_begin = tx_offsets[tx_index];
-    const int count = tx_offsets[tx_index + 1] - inputs_begin;
-    if (count == 0) return;
-    const protocol::TransactionConstView tx = block_->Transaction(tx_index);
-    for (int txi = 0; txi < count; ++txi) {
-      const int io_index = inputs_begin + txi;
-      const OutputDetail& detail = outputs_[io_index];
-      const OutputHeader& header = detail.header;
-      records[io_index] = {.funding_height = header.height,
-                           .funding_flags = header.flags,
-                           .amount = header.amount,
-                           .pubkey_script = detail.script.Span(scripts_),
-                           .spend_input_index = inputs_[io_index].input_index};
-    }
-    std::span<const consensus::SpendRecord> spends{&records[inputs_begin], static_cast<size_t>(count)};
-    if (const consensus::Result result = callback(tx, spends); !result) {
-      bool expected = false;
-      if (failed.compare_exchange_strong(expected, true)) rv = result;
-    }
-  });
-  return rv;
+// Join a range of inputs with its found output and call back with the merged view.
+inline consensus::Result SpendJoiner::Join(auto&& callback) {
+  Assert(state_ == State::Joined);
+
+  for (int i = 0; i < SpendSize(); ++i) {
+    const auto spend = SpendAt(i);
+    if (const consensus::Result result = callback(spend.tx, spend.spends); !result) return result;
+  }
+  return {};
 }
 
 inline bool SpendJoiner::IsAdvanceReady() const {
@@ -239,6 +243,7 @@ inline bool SpendJoiner::IsAdvanceReady() const {
     case State::Init:
     case State::Parsed:
     case State::Appended:
+    case State::Fetched:
       return true;
     case State::QueriedPart:
       return !disable_fetch_ || height_ <= db_.GetContiguousLength();
@@ -272,14 +277,16 @@ inline SpendJoiner::StepResult SpendJoiner::Advance() {
       if (db_.GetContiguousLength() >= height_) Query();
       else if (!disable_fetch_) Fetch();
       break;
+    case State::Fetched:
+      Join();
+      break;
     default:
       break;
   }
 
   if (IsAdvanceReady()) return {state_, Action::Advance};
-  if (state_ == State::FetchedPart) return {state_, Action::Wait};
-  if (state_ == State::QueriedPart && disable_fetch_) return {state_, Action::Wait};
-  if (state_ == State::Fetched) return {state_, Action::Join};
+  if (state_ == State::FetchedPart || (state_ == State::QueriedPart && disable_fetch_)) return {state_, Action::Wait};
+  if (state_ == State::Joined) return {state_, Action::Consume};
 
   return {state_, Action::Retire};
 }
@@ -289,15 +296,15 @@ inline void SpendJoiner::ReleaseQuery() {
   release_query_.notify_all();
 }
 
-inline void SpendJoiner::ReleaseFetch() {
-  release_fetch_ = true;
-  release_fetch_.notify_all();
+inline void SpendJoiner::ReleaseJoin() {
+  release_join_ = true;
+  release_join_.notify_all();
 }
 
 inline void SpendJoiner::GotoError() {
   state_ = State::Error;
   ReleaseQuery();
-  ReleaseFetch();
+  ReleaseJoin();
 }
 
 inline bool SpendJoiner::WaitForQuery() const {
@@ -315,9 +322,9 @@ inline bool SpendJoiner::WaitForDependencies() const {
   return db_.GetContiguousLength() >= height_;
 }
 
-inline bool SpendJoiner::WaitForFetch() const {
+inline bool SpendJoiner::WaitForJoin() const {
   Assert(!disable_fetch_);
-  release_fetch_.wait(false);
+  release_join_.wait(false);
   if (state_ == State::Cancelled) throw CancelledException{};
   return state_ != State::Error;
 }
@@ -325,7 +332,7 @@ inline bool SpendJoiner::WaitForFetch() const {
 inline void SpendJoiner::Cancel() {
   state_ = State::Cancelled;
   ReleaseQuery();
-  ReleaseFetch();
+  ReleaseJoin();
 }
 
 inline bool SpendJoiner::AllOutPointsUnique() const {
@@ -335,16 +342,14 @@ inline bool SpendJoiner::AllOutPointsUnique() const {
 
   // Count all the outputs.
   int outputs = 0;
-  for (const auto& tx : block_->Transactions())
-    outputs += tx.OutputCount();
+  for (const auto& tx : block_->Transactions()) outputs += tx.OutputCount();
 
   // Create the output id keys and sort them.
   std::vector<protocol::OutPoint> keys(outputs);
   auto it = keys.begin();
   for (const auto& tx : block_->Transactions()) {
     const auto& txid = tx.GetHash();
-    for (int i = 0; i < tx.OutputCount(); ++i)
-      *it++ = {txid, static_cast<uint32_t>(i)};
+    for (int i = 0; i < tx.OutputCount(); ++i) *it++ = {txid, static_cast<uint32_t>(i)};
   }
   std::ranges::sort(keys);
 

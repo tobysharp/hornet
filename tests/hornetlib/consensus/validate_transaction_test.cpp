@@ -3,7 +3,7 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include "hornetlib/consensus/validate_api.h"
+#include "hornetlib/consensus/rules/validate.h"
 
 #include "hornetlib/encoding/reader.h"
 #include "hornetlib/encoding/writer.h"
@@ -12,10 +12,9 @@
 
 #include <gtest/gtest.h>
 
-namespace hornet::consensus {
+namespace hornet::consensus::rules {
 namespace {
 
-using rules::ValidateTransaction;
 using test::RoundTrip;
 
 TEST(ValidatorTest, AcceptsValidTransaction) {
@@ -154,7 +153,7 @@ TEST(ValidatorTest, RejectsTotalOutputOverflow) {
   tx.SetLockTime(0);
 
   auto result = ValidateTransaction(RoundTrip(tx));
-  EXPECT_EQ(result, Error::Transaction_OversizedTotalOutputValues);
+  EXPECT_EQ(result, Error::Transaction_OversizedOutputValues);
 }
 
 TEST(ValidatorTest, RejectsOversizedOutputValue) {
@@ -171,7 +170,7 @@ TEST(ValidatorTest, RejectsOversizedOutputValue) {
   tx.SetLockTime(0);
 
   auto result = ValidateTransaction(RoundTrip(tx));
-  EXPECT_EQ(result, Error::Transaction_OversizedOutputValue);
+  EXPECT_EQ(result, Error::Transaction_OversizedOutputValues);
 }
 
 TEST(ValidatorTest, RejectsEmptyWitnessSerialization) {
@@ -198,4 +197,4 @@ TEST(ValidatorTest, RejectsEmptyWitnessSerialization) {
 }
 
 }  // namespace
-}  // namespace hornet::consensus
+}  // namespace hornet::consensus::rules
