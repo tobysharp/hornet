@@ -28,11 +28,7 @@ v0.1. Height 941,828 \
 Copyright © 2026 Toby Sharp \
 *toby@hornetnode.org*
 
-## Definitions
-
-| Term | Definition |
-|-|-|
-Header|A *header* is a structured set of fields over the first 80 bytes in a block.
+Below is a complete list of all the semantic invariants that must be satisfied for a block to be consensus-valid. This table has been auto-generated from the Hornet executable declarative [specification](../src/hornetlib/consensus/rules/spec.h) source code.
 
 ## Block Validation Rules
 
@@ -40,4 +36,11 @@ Header|A *header* is a structured set of fields over the first 80 bytes in a blo
 |-|-|-|
 @graph(kBlockRules)
 
-## Script Execution
+## Definitions
+
+| Term | Definition |
+|-|-|
+Block|A *block* comprises a header and an ordered sequence of transactions.
+Genesis|The *genesis* block is the root node of the Bitcoin timechain.
+Header|A *header* is a structured set of fields over the first 80 bytes in a block.
+Timechain|A *timechain* is a tree of validated blocks.

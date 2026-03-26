@@ -62,7 +62,7 @@ inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transacti
   return {};
 }
 
-// BIP34: The coinbase transaction’s scriptSig MUST begin by pushing the block height.
+// From BIP34: The coinbase transaction’s sig script MUST begin by pushing the block height.
 [[nodiscard]] /* [[BIP::HeightInCoinbase]] */ inline Result ValidateCoinbaseHeight(
     const BlockEnvironmentContext& context) {
   const auto expected = protocol::script::Writer{}.PushInt(context.height).Release();
@@ -70,7 +70,7 @@ inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transacti
   return {};
 }
 
-// BIP141: A block containing witness data MUST contain a witness commitment.
+// From BIP141: A block containing witness data MUST contain a witness commitment.
 [[nodiscard]] inline Result ValidateWitnessDataHasCommitment(const WitnessContext& context) {
   // Contrapositive: A block without a witness commitment MUST NOT contain witness data.
   if (!context.commitment) {
@@ -81,14 +81,14 @@ inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transacti
   return {};
 }
 
-// BIP141: A post-Segwit block containing a witness commitment MUST contain a witness nonce.
+// From BIP141: A post-Segwit block containing a witness commitment MUST contain a witness nonce.
 [[nodiscard]] inline Result ValidateWitnessNonce(const WitnessContext& context) {
   if (context.commitment && !scripts::ExtractWitnessNonce(context.block)) return Error::Structure_BadWitnessNonce;
 
   return {};
 }
 
-// BIP141: A post-SegWit block containing a witness commitment MUST commit to its witness Merkle root and nonce.
+// From BIP141: A post-SegWit block containing a witness commitment MUST commit to its witness Merkle root and nonce.
 [[nodiscard]] inline Result ValidateWitnessMerkle(const WitnessContext& context) {
   if (context.commitment) {
     const auto nonce = scripts::ExtractWitnessNonce(context.block);

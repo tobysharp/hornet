@@ -23,7 +23,7 @@ namespace hornet::consensus::rules {
   return {};
 }
 
-// A transaction's serialized size (excluding witness data) MUST NOT exceed 1,000,000 bytes.
+// A transaction's serialized size excluding witness flags and data MUST NOT exceed 1,000,000 bytes.
 [[nodiscard]] inline Result ValidateTransactionSize(
     const protocol::TransactionConstView transaction) {
   if (transaction.SerializedBytesNoWitness() > 1'000'000)
@@ -31,7 +31,7 @@ namespace hornet::consensus::rules {
   return {};
 }
 
-// A transaction output amount MUST be non-negative.
+// All transaction output amounts MUST be non-negative.
 [[nodiscard]] inline Result ValidateOutputsNonNegative(
     const protocol::TransactionConstView transaction) {
   for (const auto& output : transaction.Outputs()) {
@@ -55,7 +55,7 @@ namespace hornet::consensus::rules {
   return {};
 }
 
-// A transaction's inputs MUST reference distinct outpoints (no duplicates).
+// A transaction's inputs MUST NOT contain duplicate outpoints.
 [[nodiscard]] inline Result ValidateUniqueInputs(
     const protocol::TransactionConstView transaction) {
   // Uses full sort rather than set insert for better performance on average.
@@ -69,7 +69,7 @@ namespace hornet::consensus::rules {
   return {};
 }
 
-// In a coinbase transaction, the scriptSig MUST be between 2 and 100 bytes inclusive.
+// A coinbase transaction's sig script size MUST be between 2 and 100 bytes inclusive.
 [[nodiscard]] inline Result ValidateCoinbaseSignatureSize(
     const protocol::TransactionConstView transaction) {
   if (transaction.IsCoinBase()) {
@@ -81,7 +81,7 @@ namespace hornet::consensus::rules {
   return {};
 }
 
-// A non-coinbase transaction's inputs MUST have non-null prevout values.
+// A non-coinbase transaction's inputs MUST have non-null previous outputs.
 [[nodiscard]] inline Result ValidateInputsPrevout(
     const protocol::TransactionConstView transaction) {
   if (!transaction.IsCoinBase()) {

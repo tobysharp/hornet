@@ -13,6 +13,9 @@ from pathlib import Path
 
 GRAPH_TOKEN_RE = re.compile(r"^@graph\((?P<graph>[A-Za-z_][A-Za-z0-9_]*)\)\s*$")
 RULESET_TOKEN_RE = re.compile(r"^@ruleset\((?P<function>[A-Za-z_][A-Za-z0-9_]*)\)\s*$")
+MARKDOWN_LINK_RE = re.compile(
+    r"(?<!!)(?P<full>\[(?P<label>[^\]]+)\]\((?P<target>[^)\s]+)(?P<suffix>\s+\"[^\"]*\")?\))"
+)
 FUNC_RE_TEMPLATE = r"\b{function}\s*\("
 RULE_ENTRY_RE = re.compile(r"^\s*(?P<kind>Rule|Group|Each)\s*\{\s*(?P<function>[A-Za-z_][A-Za-z0-9_]*)")
 GRAPH_DEF_RE = re.compile(
@@ -28,6 +31,16 @@ class Definition:
     file_path: Path
     line_number: int
     comment: str
+
+
+@dataclass(frozen=True)
+class CommentDrift:
+    function: str
+    graph_path: Path
+    leaf_path: Path
+    leaf_line_number: int
+    graph_comment: str
+    leaf_comment: str
 
 
 @dataclass(frozen=True)
@@ -80,7 +93,7 @@ class WrapperNode(GraphNode):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate spec markdown by expanding @graph(GraphName) and legacy @ruleset(FunctionName) tokens."
+        description="Generate spec markdown by expanding @graph(GraphName) and legacy @ruleset(FunctionName) tokens, and by rewriting ordinary Markdown links."
     )
     parser.add_argument("input", type=Path, help="Input template markdown file")
     parser.add_argument("output", type=Path, help="Output markdown file to write")
@@ -109,6 +122,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("src/hornetlib/consensus/rules"),
         help="Directory to scan for rule function definitions",
+    )
+    parser.add_argument(
+        "--fix-comments",
+        action="store_true",
+        help="Replace differing inline rule comments in graph files with the authoritative leaf comments",
     )
     return parser.parse_args()
 
@@ -581,6 +599,35 @@ def make_link(definition: Definition, output_dir: Path, repo_root: Path, args: a
     )
 
 
+def make_path_link(target_path: Path, output_dir: Path, repo_root: Path, args: argparse.Namespace) -> str:
+    resolved = target_path.resolve()
+    rel_to_root = resolved.relative_to(repo_root)
+    if args.link_mode == "relative":
+        return os.path.relpath(resolved, output_dir)
+    if args.link_mode == "branch":
+        branch = git_output(repo_root, "rev-parse", "--abbrev-ref", "HEAD")
+        return f"https://github.com/{args.repo_owner}/{args.repo_name}/blob/{branch}/{rel_to_root.as_posix()}"
+    sha = args.sha or git_output(repo_root, "rev-parse", "HEAD")
+    return f"https://github.com/{args.repo_owner}/{args.repo_name}/blob/{sha}/{rel_to_root.as_posix()}"
+
+
+def expand_template_links(template_text: str, input_path: Path, output_dir: Path, repo_root: Path, args: argparse.Namespace) -> str:
+    def replace(match: re.Match[str]) -> str:
+        raw_target = match.group("target").strip()
+        if (
+            raw_target.startswith("#")
+            or raw_target.startswith("/")
+            or re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", raw_target)
+        ):
+            return match.group("full")
+        target_path = (input_path.parent / raw_target).resolve()
+        rewritten_target = make_path_link(target_path, output_dir, repo_root, args)
+        suffix = match.group("suffix") or ""
+        return f"[{match.group('label')}]({rewritten_target}{suffix})"
+
+    return MARKDOWN_LINK_RE.sub(replace, template_text)
+
+
 def render_leaf(
     definition: Definition,
     section: Section,
@@ -596,12 +643,61 @@ def render_leaf(
     return f"{rule_id}|{definition.comment}|[`{definition.function}`]({link})"
 
 
-def resolve_leaf_comment(node_comment: str, definition: Definition) -> str:
-    if node_comment:
-        return node_comment
+def resolve_leaf_comment(node_comment: str, definition: Definition) -> tuple[str, bool]:
     if definition.comment:
-        return definition.comment
+        return definition.comment, bool(node_comment and node_comment != definition.comment)
+    if node_comment:
+        return node_comment, False
     raise SystemExit(f"No rule prose found for function {definition.function}")
+
+
+def warn_comment_drift(drift: CommentDrift) -> None:
+    rel_graph_path = os.path.relpath(drift.graph_path, Path.cwd())
+    rel_leaf_path = os.path.relpath(drift.leaf_path, Path.cwd())
+    print(
+        f"Warning: inline comment drift for {drift.function}: "
+        f"{rel_graph_path} differs from {rel_leaf_path}:{drift.leaf_line_number}\n"
+        f"  spec.h: {drift.graph_comment}\n"
+        f"  leaf:   {drift.leaf_comment}",
+        file=sys.stderr,
+    )
+
+
+def replace_graph_comment(
+    drift: CommentDrift,
+    graph_lines_cache: dict[Path, list[str]],
+    modified_graph_paths: set[Path],
+) -> None:
+    lines = graph_lines_cache.get(drift.graph_path)
+    if lines is None:
+        lines = drift.graph_path.read_text(encoding="utf-8").splitlines(keepends=True)
+        graph_lines_cache[drift.graph_path] = lines
+
+    pattern = re.compile(
+        rf"^(?P<prefix>.*\bRule\s*\{{\s*{re.escape(drift.function)}\s*\}}.*?//\s*)(?P<comment>.*?)(?P<suffix>\s*)$"
+    )
+    matches: list[int] = []
+    for index, line in enumerate(lines):
+        match = pattern.match(line.rstrip("\n"))
+        if match:
+            matches.append(index)
+
+    if not matches:
+        raise SystemExit(
+            f"Could not locate inline comment for {drift.function} in graph file {drift.graph_path}"
+        )
+    if len(matches) > 1:
+        raise SystemExit(
+            f"Multiple inline comments found for {drift.function} in graph file {drift.graph_path}"
+        )
+
+    index = matches[0]
+    line = lines[index]
+    line_ending = "\n" if line.endswith("\n") else ""
+    match = pattern.match(line.rstrip("\n"))
+    assert match is not None
+    lines[index] = f"{match.group('prefix')}{drift.leaf_comment}{match.group('suffix')}{line_ending}"
+    modified_graph_paths.add(drift.graph_path)
 
 
 def walk_graph_node(
@@ -615,6 +711,10 @@ def walk_graph_node(
     output_dir: Path,
     repo_root: Path,
     source_dir: Path,
+    graph_path: Path,
+    warned_drifts: set[str],
+    graph_lines_cache: dict[Path, list[str]],
+    modified_graph_paths: set[Path],
     args: argparse.Namespace,
 ) -> None:
     if isinstance(node, AllNode):
@@ -630,6 +730,10 @@ def walk_graph_node(
                 output_dir,
                 repo_root,
                 source_dir,
+                graph_path,
+                warned_drifts,
+                graph_lines_cache,
+                modified_graph_paths,
                 args,
             )
         return
@@ -646,6 +750,10 @@ def walk_graph_node(
             output_dir,
             repo_root,
             source_dir,
+            graph_path,
+            warned_drifts,
+            graph_lines_cache,
+            modified_graph_paths,
             args,
         )
         return
@@ -663,6 +771,9 @@ def walk_graph_node(
             output_dir,
             repo_root,
             source_dir,
+            warned_drifts,
+            graph_lines_cache,
+            modified_graph_paths,
             args,
         )
         return
@@ -672,12 +783,27 @@ def walk_graph_node(
             raise SystemExit(f"Rule leaf {node.function} was reached without an active section")
         definitions.setdefault(node.function, find_definition(node.function, source_dir))
         definition = definitions[node.function]
+        resolved_comment, has_drift = resolve_leaf_comment(node.comment, definition)
+        if has_drift and node.function not in warned_drifts:
+            drift = CommentDrift(
+                function=node.function,
+                graph_path=graph_path,
+                leaf_path=definition.file_path,
+                leaf_line_number=definition.line_number,
+                graph_comment=node.comment,
+                leaf_comment=definition.comment,
+            )
+            if args.fix_comments:
+                replace_graph_comment(drift, graph_lines_cache, modified_graph_paths)
+            else:
+                warn_comment_drift(drift)
+            warned_drifts.add(node.function)
         rendered = render_leaf(
             Definition(
                 function=definition.function,
                 file_path=definition.file_path,
                 line_number=definition.line_number,
-                comment=resolve_leaf_comment(node.comment, definition),
+                comment=resolved_comment,
             ),
             current_section,
             counters,
@@ -703,6 +829,9 @@ def walk_graph(
     output_dir: Path,
     repo_root: Path,
     source_dir: Path,
+    warned_drifts: set[str],
+    graph_lines_cache: dict[Path, list[str]],
+    modified_graph_paths: set[Path],
     args: argparse.Namespace,
 ) -> None:
     graph = graphs.setdefault(graph_name, find_graph_definition(graph_name, source_dir))
@@ -724,6 +853,10 @@ def walk_graph(
         output_dir,
         repo_root,
         source_dir,
+        graph.file_path,
+        warned_drifts,
+        graph_lines_cache,
+        modified_graph_paths,
         args,
     )
 
@@ -795,11 +928,16 @@ def walk_ruleset(
 def expand_template(template_text: str, definitions: dict[str, Definition], repo_root: Path, args: argparse.Namespace) -> str:
     output_lines: list[str] = []
     output_dir = args.output.resolve().parent
+    input_path = args.input.resolve()
     source_dir = (repo_root / args.source_dir).resolve() if not args.source_dir.is_absolute() else args.source_dir.resolve()
+    template_text = expand_template_links(template_text, input_path, output_dir, repo_root, args)
     lines_cache = {definition.file_path: load_lines(definition.file_path) for definition in definitions.values()}
     counters: dict[str, int] = {}
     graphs: dict[str, GraphDefinition] = {}
     parsed_graphs: dict[str, GraphNode] = {}
+    warned_drifts: set[str] = set()
+    graph_lines_cache: dict[Path, list[str]] = {}
+    modified_graph_paths: set[Path] = set()
     for line in template_text.splitlines():
         graph_match = GRAPH_TOKEN_RE.match(line.strip())
         if graph_match:
@@ -815,6 +953,9 @@ def expand_template(template_text: str, definitions: dict[str, Definition], repo
                 output_dir,
                 repo_root,
                 source_dir,
+                warned_drifts,
+                graph_lines_cache,
+                modified_graph_paths,
                 args,
             )
             continue
@@ -836,6 +977,8 @@ def expand_template(template_text: str, definitions: dict[str, Definition], repo
             source_dir,
             args,
         )
+    for graph_path in sorted(modified_graph_paths):
+        graph_path.write_text("".join(graph_lines_cache[graph_path]), encoding="utf-8")
     return "\n".join(output_lines) + "\n"
 
 

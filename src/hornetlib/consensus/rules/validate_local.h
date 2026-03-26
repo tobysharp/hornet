@@ -32,7 +32,7 @@ namespace hornet::consensus::rules {
   return {};
 }
 
-// A block’s Merkle root field MUST equal the Merkle root of its transaction list.
+// A block’s Merkle root field MUST equal the unique Merkle root of its transactions.
 [[nodiscard]] inline Result ValidateMerkleRoot(const protocol::Block& block) {
   const auto merkle_root = ComputeMerkleRoot(block);
   if (!merkle_root.unique || merkle_root.hash != block.Header().GetMerkleRoot())
@@ -40,21 +40,21 @@ namespace hornet::consensus::rules {
   return {};
 }
 
-// A block’s serialized size (before SegWit) MUST NOT exceed 1,000,000 bytes.
+// A block’s serialized size excluding witness flags and data MUST NOT exceed 1,000,000 bytes.
 [[nodiscard]] inline Result ValidateOriginalSizeLimit(const protocol::Block& block) {
   if (block.GetStrippedSize() > 1'000'000)
       return Error::Structure_BadSize;
   return {};
 }
 
-// A block MUST contain exactly one coinbase transaction, and it MUST be the first transaction.
+// A block's first transaction MUST be its only coinbase transaction.
 [[nodiscard]] inline Result ValidateCoinbase(const protocol::Block& block) {
   for (/* mutable */ int i = 0; i < block.GetTransactionCount(); ++i)
     if (block.Transaction(i).IsCoinBase() != (i == 0)) return Error::Structure_BadCoinBase;
   return {};
 }
 
-// The total number of signature operations in a block MUST NOT exceed the consensus maximum.
+// The total legacy signature operation count over all input and output scripts MUST NOT exceed 20,000.
 [[nodiscard]] inline Result ValidateSignatureOps(const protocol::Block& block) {
   /* mutable */ int sig_ops = 0;
   for (const auto& tx : block.Transactions())

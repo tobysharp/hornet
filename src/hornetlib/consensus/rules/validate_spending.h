@@ -20,7 +20,7 @@ namespace hornet::consensus::rules {
 // Spending validation rules per input
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Coinbase outputs MUST NOT be spent until 100 blocks after their creation.
+// Coinbase outputs MUST NOT be spent before 100 blocks after their creation.
 [[nodiscard]] inline Result ValidateCoinbaseMaturity(const InputSpendContext& context) {
   constexpr int kCoinbaseMaturity = 100;  // Number of blocks until coinbase maturity.
 
@@ -43,8 +43,8 @@ namespace hornet::consensus::rules {
   return (outputs_sum > inputs_sum) ? Error::Spending_OutputAmountsExceedInputAmounts : Result::Ok;
 }
 
-// BIP68: Each input that signals a relative lock-time interval MUST have reached relative finality.
-[[nodiscard]] inline Result ValidateSequenceLocks(const TransactionSpendContext& context) {
+// From BIP68: Each input that signals a relative lock-time interval MUST have reached relative finality.
+[[nodiscard]] inline Result /* [[BIP::SequenceLocks]] */ ValidateSequenceLocks(const TransactionSpendContext& context) {
   if (context.tx.Version() < 2) return {};  // BIP68 applies only to transactions with version >= 2.
 
   constexpr uint32_t kDisableMask = 1u << 31;
@@ -85,6 +85,12 @@ namespace hornet::consensus::rules {
   return {};
 }
 
+// A non-coinbase input's sig script and spent output’s pubkey script MUST evaluate successfully.
+[[nodiscard]] inline Result ValidateScripts(const TransactionSpendContext&) {
+  // TODO
+  return {};
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Spending validation rules per block
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -99,12 +105,12 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
   return {rhs.block, rhs.view, rhs.unspent, rhs.view.Length(), GetScriptVerifyFlags(rhs)};
 }
 
-// For every transaction input spending a previous transaction output, that output MUST exist and be unspent.
+// A transaction input MUST reference a previous transaction output that remains unspent.
 [[nodiscard]] inline Result ValidateInputPrevoutsUnspent(const BlockSpendContext& context) {
   return context.unspent.QueryPrevoutsUnspent(context.block);
 }
 
-// BIP30: Transaction output identifiers MUST NOT collide with those of existing unspent outputs.
+// Transaction outputs MUST NOT give rise to duplicates of existing unspent outpoints (BIP30).
 [[nodiscard]] inline Result ValidateOutPointsUnique(const BlockSpendContext& context) {
   // Skip this rule for two specific historical blocks that are known to violate it.
   static constexpr auto kKnownExceptions = std::array{
@@ -131,7 +137,7 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
   return context.unspent.QueryOutPointsUnique(context.block);
 }
 
-// The sum of sigop costs across all transactions MUST NOT exceed the maximum of 80,000.
+// The sum of sigop costs over all transactions MUST NOT exceed 80,000.
 [[nodiscard]] inline Result ValidateSigOpCosts(const BlockSpendContext& context) {
   constexpr int kMaxBlockSigOpCost = 80'000;
   int sigops_cost = 0;
