@@ -72,7 +72,7 @@ TEST(DatabaseTest, RejectsSameBlockCoinbaseSpendViaLocalPrevoutPath) {
                                            .pubkey_script = outputs[0].script.Span(scripts),
                                            .spend_input_index = inputs[0].input_index};
 
-  EXPECT_EQ(consensus::rules::ValidateSpendingInput({local_spend, kHeight}),
+  EXPECT_EQ(consensus::rules::ValidateCoinbaseMaturity({local_spend, kHeight}),
             consensus::Error::Spending_PrematureSpend);
 }
 

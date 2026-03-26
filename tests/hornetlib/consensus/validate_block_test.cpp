@@ -27,6 +27,7 @@
 namespace hornet::consensus {
 namespace {
 
+using hornet::consensus::rules::ValidateLocal;
 using hornet::protocol::Block;
 using hornet::protocol::BlockHeader;
 using hornet::protocol::Hash;
