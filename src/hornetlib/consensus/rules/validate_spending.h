@@ -35,7 +35,7 @@ namespace hornet::consensus::rules {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // The sum of output values in a transaction MUST NOT exceed the sum of all input values being spent.
-[[nodiscard]] inline Result ValidateOutputValuesAtMostInputValues(const TransactionSpendContext& context) {
+[[nodiscard]] inline Result ValidateOutputsAtMostInputs(const TransactionSpendContext& context) {
 
   const int64_t outputs_sum = util::Sum(context.tx.Outputs(), [](const auto& output) { return output.value; });
   const int64_t inputs_sum = util::Sum(context.spends, [](const auto& spend) { return spend.amount; });

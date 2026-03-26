@@ -153,8 +153,7 @@ def validate_link_mode_checkout(repo_root: Path, args: argparse.Namespace) -> No
         return
 
     assert args.link_mode == "sha"
-    assert args.sha is not None
-    if not head.startswith(args.sha):
+    if args.sha is not None and not head.startswith(args.sha):
         raise SystemExit(
             "--link-mode=sha requires local HEAD to match the requested SHA; "
             f"HEAD is '{head}' but --sha was '{args.sha}'."
@@ -395,8 +394,7 @@ def parse_graph_expression(text: str) -> GraphNode:
     if name == "From":
         if len(args) != 2:
             raise SystemExit(f"From expects exactly two arguments, got {len(args)}")
-        child = parse_graph_expression(args[0]) if not IDENTIFIER_RE.match(args[0]) else RuleNode(args[0], comment)
-        return WrapperNode(kind=name, child=child)
+        return WrapperNode(kind=name, child=parse_graph_expression(args[1]))
 
     raise SystemExit(f"Unsupported graph node kind: {name}")
 
@@ -576,10 +574,9 @@ def make_link(definition: Definition, output_dir: Path, repo_root: Path, args: a
             f"https://github.com/{args.repo_owner}/{args.repo_name}/blob/{branch}/"
             f"{rel_to_root.as_posix()}#L{definition.line_number}"
         )
-    if not args.sha:
-        raise SystemExit("--sha is required when --link-mode=sha")
+    sha = args.sha or git_output(repo_root, "rev-parse", "HEAD")
     return (
-        f"https://github.com/{args.repo_owner}/{args.repo_name}/blob/{args.sha}/"
+        f"https://github.com/{args.repo_owner}/{args.repo_name}/blob/{sha}/"
         f"{rel_to_root.as_posix()}#L{definition.line_number}"
     )
 
@@ -844,8 +841,6 @@ def expand_template(template_text: str, definitions: dict[str, Definition], repo
 
 def main() -> int:
     args = parse_args()
-    if args.link_mode == "sha" and not args.sha:
-        raise SystemExit("--sha is required when --link-mode=sha")
 
     repo_root = find_repo_root(args.input.parent)
     validate_link_mode_checkout(repo_root, args)

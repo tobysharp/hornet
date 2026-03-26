@@ -18,9 +18,9 @@ struct IsBIPActive {
   }
 };
 
-template <typename Fn>
-inline constexpr auto From(Fn&& fn, BIP bip) {
-  return When{IsBIPActive{bip}, Rule{std::forward<Fn>(fn)}};
+template <typename Node>
+inline constexpr decltype(auto) From(BIP bip, Node&& node) {
+  return When{IsBIPActive{bip}, std::forward<Node>(node)};
 }
 
 }  // namespace hornet::consensus::rules
