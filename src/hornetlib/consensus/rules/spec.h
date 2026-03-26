@@ -68,7 +68,7 @@ static constexpr auto kSpendingTransactionRules = All{
     Rule{ValidateCoinbaseMaturity}},      // Coinbase outputs MUST NOT be spent before 100 blocks after their creation.
   Rule{ValidateOutputsAtMostInputs},      // The sum of output values in a transaction MUST NOT exceed the sum of all input values being spent.
   From(BIP::SequenceLocks,
-    Rule{ValidateSequenceLocks}),         // From BIP68: Each input that signals a relative lock-time interval MUST have reached relative finality (BIP68).
+    Rule{ValidateSequenceLocks}),         // From BIP68: Each input that signals a relative lock-time interval MUST have reached relative finality.
   Rule{ValidateScripts}                   // A non-coinbase input's sig script and spent output’s pubkey script MUST evaluate successfully.
 };
 
