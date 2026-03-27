@@ -65,6 +65,7 @@ class Database {
   void SetMutableWindow(int heights);
 
   int GetContiguousLength() const;
+  void WaitForContiguousLength(int height) const;
 
  private:
   std::vector<uint8_t> Stage(std::span<const uint64_t> ids) const;
@@ -216,6 +217,10 @@ inline void Database::SetMutableWindow(int heights) {
 
 inline int Database::GetContiguousLength() const {
   return index_.GetContiguousLength();
+}
+
+inline void Database::WaitForContiguousLength(int height) const {
+  return index_.WaitForContiguousLength(height);
 }
 
 }  // namespace hornet::data::utxo

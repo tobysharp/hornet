@@ -54,7 +54,7 @@ TEST(SpendJoinerTest, TestPreemptiveSerial) {
         }
         return consensus::Result{};
       });
-      EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Fetched);
+      EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Joined);
       EXPECT_EQ(result, consensus::Result{});
 
       // The total amount spent must be bounded above by the sum of the coinbase transactions,
@@ -94,7 +94,7 @@ TEST(SpendJoinerTest, TestPreemptiveInvalidBlock) {
         }
         return consensus::Result{};
       });
-      EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Fetched);
+      EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Joined);
       EXPECT_EQ(result, consensus::Result{});
     }
     chain.Append(std::move(*block));
@@ -144,7 +144,7 @@ TEST(SpendJoinerTest, TestPreemptiveInvalidBlock) {
         }
         return consensus::Result{};
       });
-      EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Fetched);
+      EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Joined);
       EXPECT_EQ(result, consensus::Result{});
     }
     chain.Append(std::move(*block));
@@ -227,8 +227,13 @@ TEST(SpendJoinerTest, TestIncrementalResolution) {
   joiner.Advance();
   EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Fetched);
 
-  // Join.
+  // Join stage.
+  joiner.Advance();
+  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Joined);
+
+  // Consume joined spends.
   auto result = joiner.Join([](const protocol::TransactionConstView&, std::span<const consensus::SpendRecord>) { return consensus::Result{}; });
+  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Joined);
   EXPECT_TRUE(result);
 }
 
@@ -270,6 +275,8 @@ TEST(SpendJoinerTest, TestUnsortedFetchBug) {
   joiner.Advance();  // Re-query
   EXPECT_TRUE(joiner.IsAdvanceReady());
   joiner.Advance();  // Re-fetch
+  EXPECT_TRUE(joiner.IsAdvanceReady());
+  joiner.Advance();  // Join
   EXPECT_FALSE(joiner.IsAdvanceReady());
   EXPECT_TRUE(joiner.IsJoinReady());
 }
@@ -342,7 +349,11 @@ TEST(SpendJoinerTest, TestPartialFetchMisalignment) {
   joiner.Advance();
   EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Fetched);
 
-  // Join. We expect:
+  // Join stage.
+  joiner.Advance();
+  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Joined);
+
+  // Consume joined spends. We expect:
   // Input spending key0 -> Funding Height 0.
   // Input spending key1 -> Funding Height 1.
   bool found_key0 = false;
@@ -359,6 +370,7 @@ TEST(SpendJoinerTest, TestPartialFetchMisalignment) {
     }
     return consensus::Result{};
   });
+  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Joined);
   EXPECT_EQ(result, consensus::Result::Ok);
   EXPECT_TRUE(found_key0);
   EXPECT_TRUE(found_key1);
@@ -396,7 +408,7 @@ TEST(SpendJoinerTest, TestIntraBlockFunding_CorrectOrder) {
   while (joiner.IsAdvanceReady())
     joiner.Advance();
 
-  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Fetched);
+  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Joined);
   EXPECT_TRUE(joiner.IsJoinReady());
 
   int callback_count = 0;
@@ -451,9 +463,11 @@ TEST(SpendJoinerTest, RejectsIntraBlockCoinbaseSpendViaConsensusValidation) {
 
   ASSERT_TRUE(joiner.IsJoinReady());
 
-  const auto result = joiner.Join([](const protocol::TransactionConstView& tx, std::span<const consensus::SpendRecord> spends) {
-    return consensus::rules::ValidateSpendingInput(tx, spends[0], kHeight);
+  const auto result = joiner.Join([](const protocol::TransactionConstView&, std::span<const consensus::SpendRecord> spends) {
+    return consensus::rules::ValidateCoinbaseMaturity({spends[0], kHeight});
   });
+
+  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Joined);
 
   EXPECT_EQ(result, consensus::Error::Spending_PrematureSpend);
 }

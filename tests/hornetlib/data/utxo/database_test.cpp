@@ -9,6 +9,7 @@
 
 #include <gtest/gtest.h>
 
+#include "hornetlib/consensus/rules/context.h"
 #include "hornetlib/consensus/rules/validate.h"
 #include "hornetlib/data/utxo/sort.h"
 #include "hornetlib/protocol/block.h"
@@ -65,15 +66,13 @@ TEST(DatabaseTest, RejectsSameBlockCoinbaseSpendViaLocalPrevoutPath) {
   ASSERT_EQ(local_count, 1);
   ASSERT_EQ(rids[0], kLocalOutputId);
 
-  const protocol::Block& const_block = block;
-  const auto tx_view = const_block.Transaction(inputs[0].tx_index);
   const consensus::SpendRecord local_spend{.funding_height = outputs[0].header.height,
                                            .funding_flags = outputs[0].header.flags,
                                            .amount = outputs[0].header.amount,
                                            .pubkey_script = outputs[0].script.Span(scripts),
                                            .spend_input_index = inputs[0].input_index};
 
-  EXPECT_EQ(consensus::rules::ValidateSpendingInput(tx_view, local_spend, kHeight),
+  EXPECT_EQ(consensus::rules::ValidateCoinbaseMaturity({local_spend, kHeight}),
             consensus::Error::Spending_PrematureSpend);
 }
 

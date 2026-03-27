@@ -9,7 +9,6 @@
 #include "hornetlib/consensus/bips.h"
 #include "hornetlib/consensus/difficulty_adjustment.h"
 #include "hornetlib/consensus/header_ancestry_view.h"
-#include "hornetlib/consensus/rule.h"
 #include "hornetlib/consensus/rules/context.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/protocol/block_header.h"
@@ -30,13 +29,13 @@ inline bool IsVersionValidAtHeight(int32_t version, int height) {
 }
 }  // namespace detail
 
-// A header MUST reference the hash of its valid parent.
+// A header MUST reference the hash of a valid parent block.
 [[nodiscard]] inline Result ValidatePreviousHash(const HeaderValidationContext& context) {
   if (context.parent.ComputeHash() != context.header.GetPreviousBlockHash()) return Error::Header_ParentNotFound;
   return {};
 }
 
-// A header's 256-bit hash value MUST NOT exceed the header's proof-of-work target.
+// A header's hash MUST achieve its own proof-of-work target.
 [[nodiscard]] inline Result ValidateProofOfWork(const HeaderValidationContext& context) {
   const auto hash = context.header.ComputeHash();
   const auto target = context.header.GetCompactTarget().Expand();
@@ -44,7 +43,7 @@ inline bool IsVersionValidAtHeight(int32_t version, int height) {
   return {};
 }
 
-// A header's proof-of-work target MUST satisfy the difficulty adjustment formula.
+// A header's proof-of-work target MUST satisfy the difficulty adjustment formula for the timechain.
 [[nodiscard]] inline Result ValidateDifficultyAdjustment(const HeaderValidationContext& context) {
   if (context.header.GetCompactTarget() != AdjustCompactTarget(context.height, context.parent, context.view))
     return Error::Header_BadDifficultyTransition;
@@ -65,7 +64,7 @@ inline bool IsVersionValidAtHeight(int32_t version, int height) {
   return {};
 }
 
-// A header version number MUST meet deployment requirements depending on activated BIPs.
+// A header's version number MUST NOT have been retired by any activated soft fork.
 [[nodiscard]] inline Result ValidateVersion(const HeaderValidationContext& context) {
   if (!detail::IsVersionValidAtHeight(context.header.GetVersion(), context.height)) return Error::Header_BadVersion;
   return {};

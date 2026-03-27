@@ -4,7 +4,6 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
-#include "hornetlib/consensus/rule.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/protocol/transaction.h"
 
@@ -24,7 +23,7 @@ namespace hornet::consensus::rules {
   return {};
 }
 
-// A transaction's serialized size (excluding witness data) MUST NOT exceed 1,000,000 bytes.
+// A transaction's serialized size excluding witness flags and data MUST NOT exceed 1,000,000 bytes.
 [[nodiscard]] inline Result ValidateTransactionSize(
     const protocol::TransactionConstView transaction) {
   if (transaction.SerializedBytesNoWitness() > 1'000'000)
@@ -32,23 +31,31 @@ namespace hornet::consensus::rules {
   return {};
 }
 
-// All output values MUST be non-negative, and their sum MUST NOT exceed 21,000,000 coins.
-[[nodiscard]] inline Result ValidateOutputValues(
+// All transaction output amounts MUST be non-negative.
+[[nodiscard]] inline Result ValidateOutputsNonNegative(
+    const protocol::TransactionConstView transaction) {
+  for (const auto& output : transaction.Outputs()) {
+    if (output.value < 0) return Error::Transaction_NegativeOutputValue;
+  }
+  return {};
+}
+
+// The sum of a transaction's output amounts MUST NOT exceed 21,000,000 coins.
+[[nodiscard]] inline Result ValidateOutputsSum(
     const protocol::TransactionConstView transaction) {
   constexpr int64_t kSatoshisPerBitcoin = 100'000'000;
   constexpr int64_t kMoneySupplyLimit = 21'000'000 * kSatoshisPerBitcoin;
 
   /* mutable */ int64_t total_output_value = 0;
   for (const auto& output : transaction.Outputs()) {
-    if (output.value < 0) return Error::Transaction_NegativeOutputValue;
-    if (output.value > kMoneySupplyLimit) return Error::Transaction_OversizedOutputValue;
+    if (output.value > kMoneySupplyLimit) return Error::Transaction_OversizedOutputValues;
     total_output_value += output.value;
-    if (total_output_value > kMoneySupplyLimit) return Error::Transaction_OversizedTotalOutputValues;
+    if (total_output_value > kMoneySupplyLimit) return Error::Transaction_OversizedOutputValues;
   }
   return {};
 }
 
-// A transaction's inputs MUST reference distinct outpoints (no duplicates).
+// A transaction's inputs MUST NOT contain duplicate outpoints.
 [[nodiscard]] inline Result ValidateUniqueInputs(
     const protocol::TransactionConstView transaction) {
   // Uses full sort rather than set insert for better performance on average.
@@ -62,7 +69,7 @@ namespace hornet::consensus::rules {
   return {};
 }
 
-// In a coinbase transaction, the scriptSig MUST be between 2 and 100 bytes inclusive.
+// A coinbase transaction's sig script size MUST be between 2 and 100 bytes inclusive.
 [[nodiscard]] inline Result ValidateCoinbaseSignatureSize(
     const protocol::TransactionConstView transaction) {
   if (transaction.IsCoinBase()) {
@@ -74,7 +81,7 @@ namespace hornet::consensus::rules {
   return {};
 }
 
-// A non-coinbase transaction's inputs MUST have non-null prevout values.
+// A non-coinbase transaction's inputs MUST have non-null previous outputs.
 [[nodiscard]] inline Result ValidateInputsPrevout(
     const protocol::TransactionConstView transaction) {
   if (!transaction.IsCoinBase()) {

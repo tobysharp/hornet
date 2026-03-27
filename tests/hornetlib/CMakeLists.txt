@@ -2,6 +2,7 @@
 add_executable(hornetlib_tests
    consensus/difficulty_adjustment_test.cpp
    consensus/merkle_test.cpp
+   consensus/algebra_test.cpp
    consensus/spending_test_harness.cpp
    consensus/validate_sigop_costs_test.cpp
    consensus/validate_block_test.cpp

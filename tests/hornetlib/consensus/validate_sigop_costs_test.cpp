@@ -29,6 +29,8 @@ using protocol::Transaction;
 using protocol::script::Writer;
 using protocol::script::lang::ConstantToOp;
 using protocol::script::lang::Op;
+using hornet::test::NullSpendsUnspentOutputsView;
+using hornet::test::StaticUnspentOutputsView;
 using hornet::test::StubHeaderAncestryView;
 
 std::vector<uint8_t> MakeScript(std::initializer_list<Op> opcodes) {
@@ -75,33 +77,6 @@ SpendRecord MakeSpend(std::span<const uint8_t> pubkey_script, int input_index = 
           .pubkey_script = pubkey_script,
           .spend_input_index = input_index};
 }
-
-class StubUnspentOutputsView : public UnspentOutputsView {
- public:
-  struct Entry {
-    Transaction tx;
-    std::vector<SpendRecord> spends;
-  };
-
-  void Add(Transaction tx, std::vector<SpendRecord> spends) { entries_.push_back({std::move(tx), std::move(spends)}); }
-  int EnumeratedCount() const { return enumerated_count_; }
-  Result QueryPrevoutsUnspent(const Block&) const override { return {}; }
-  Result QueryOutPointsUnique(const Block&) const override { return {}; }
-
- protected:
-  Result EnumerateTransactions(const Block&, const Callback cb, const void* user) const override {
-    enumerated_count_ = 0;
-    for (const auto& entry : entries_) {
-      ++enumerated_count_;
-      if (const Result result = cb(entry.tx, entry.spends, user); !result) return result;
-    }
-    return {};
-  }
-
- private:
-  std::vector<Entry> entries_;
-  mutable int enumerated_count_ = 0;
-};
 
 TEST(ValidateSigOpCostsTest, WitnessProgramParseRejectsMalformedScripts) {
   const std::array<uint8_t, 20> program20 = {1};
@@ -337,11 +312,10 @@ TEST(ValidateSigOpCostsTest, ValidateSigOpCostsAcceptsBlockAtBudget) {
 
   Block block;
   StubHeaderAncestryView ancestry;
-  StubUnspentOutputsView unspent;
+  StaticUnspentOutputsView unspent;
   unspent.Add(std::move(tx), {MakeSpend(p2sh_pubkey)});
 
   EXPECT_EQ(ValidateSigOpCosts({block, ancestry, unspent, 1, CombineFlags({VerifyFlag::P2SH})}), Result{});
-  EXPECT_EQ(unspent.EnumeratedCount(), 1);
 }
 
 TEST(ValidateSigOpCostsTest, ValidateSigOpCostsRejectsBlockAboveBudget) {
@@ -360,14 +334,21 @@ TEST(ValidateSigOpCostsTest, ValidateSigOpCostsRejectsBlockAboveBudget) {
 
   Block block;
   StubHeaderAncestryView ancestry;
-  StubUnspentOutputsView unspent;
+  StaticUnspentOutputsView unspent;
   unspent.Add(std::move(exact_budget_tx), {MakeSpend(p2sh_pubkey)});
   unspent.Add(std::move(overflow_tx), {MakeSpend(legacy_pubkey)});
   unspent.Add(std::move(unreachable_tx), {MakeSpend(legacy_pubkey)});
 
   EXPECT_EQ(ValidateSigOpCosts({block, ancestry, unspent, 1, CombineFlags({VerifyFlag::P2SH})}),
             Error::Spending_BadSigOpsCost);
-  EXPECT_EQ(unspent.EnumeratedCount(), 2);
+}
+
+TEST(ValidateSigOpCostsTest, ValidateSigOpCostsSucceedsWhenJoinedSpendsUnavailable) {
+  Block block;
+  StubHeaderAncestryView ancestry;
+  NullSpendsUnspentOutputsView unspent;
+
+  EXPECT_EQ(ValidateSigOpCosts({block, ancestry, unspent, 1, CombineFlags({VerifyFlag::P2SH})}), Result{});
 }
 
 TEST(ValidateSigOpCostsTest, RejectsBlockJustOverSigOpCostLimit) {

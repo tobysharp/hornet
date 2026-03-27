@@ -45,7 +45,7 @@ TEST_F(SpendPipelineTest, ProcessBlocks) {
     auto joiner = pipeline_->Add(chain[i], i);
     
     // Wait for the joiner to be ready.
-    EXPECT_TRUE(joiner->WaitForFetch());
+    EXPECT_TRUE(joiner->WaitForJoin());
     
     const consensus::Result result = joiner->Join([i](const protocol::TransactionConstView&, std::span<const consensus::SpendRecord> spends) {
         for (const auto& spend : spends) {
@@ -81,7 +81,7 @@ TEST_F(SpendPipelineTest, ProcessBlocksOutOfOrder) {
   // Verify that all blocks complete successfully.
   for (int i = 0; i < kBlocks; ++i) {
     int height = i + 1;
-    EXPECT_TRUE(joiners[height]->WaitForFetch());
+    EXPECT_TRUE(joiners[height]->WaitForJoin());
     
     const consensus::Result result = joiners[height]->Join([height](const protocol::TransactionConstView&, std::span<const consensus::SpendRecord> spends) {
         for (const auto& spend : spends) {
@@ -101,7 +101,7 @@ TEST_F(SpendPipelineTest, ProcessInvalidBlock) {
   chain.Append(chain.Sample());
   auto joiner0 = pipeline_->Add(chain[1], 1);
 
-  EXPECT_TRUE(joiner0->WaitForFetch());
+  EXPECT_TRUE(joiner0->WaitForJoin());
   EXPECT_EQ(joiner0->Join([](const protocol::TransactionConstView&, std::span<const consensus::SpendRecord>) { return consensus::Result{}; }), consensus::Result{});
 
   // Add an invalid block that spends a non-existent output.
@@ -111,7 +111,7 @@ TEST_F(SpendPipelineTest, ProcessInvalidBlock) {
   auto joiner1 = pipeline_->Add(block1, 2);
   
   // WaitForFetch should return false because it will fail at the Query stage (inputs not found).
-  EXPECT_FALSE(joiner1->WaitForFetch());
+  EXPECT_FALSE(joiner1->WaitForJoin());
   EXPECT_EQ(joiner1->GetState(), SpendJoiner::State::Error);
 }
 

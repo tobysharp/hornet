@@ -11,6 +11,12 @@
 
 namespace hornet::consensus::rules {
 
+struct TransactionsInBlock {
+  auto operator()(const protocol::Block& block) const { 
+    return block.Transactions();
+  }
+};
+
 struct BlockValidationContext {
   const protocol::Block& block;
   const protocol::BlockHeader& parent;
@@ -52,5 +58,50 @@ struct WitnessContext {
   Assert(IsBIPActiveAtHeight(BIP::SegWit, context.height));
   return {context.block, scripts::ExtractWitnessCommitment(context.block)};  
 }
+
+struct BlockSpendContext {
+  const protocol::Block& block;
+  const HeaderAncestryView& ancestry;
+  const UnspentOutputsView& unspent;
+  const int height;
+  const uint64_t script_flags;
+};
+
+struct SpendsInBlock {
+  auto operator()(const BlockSpendContext& context) const {
+    const auto spends = context.unspent.Spends(context.block);  
+    return spends ? *spends : JoinedSpendRange{};
+  }
+};
+
+struct TransactionSpendContext {
+  const protocol::TransactionConstView tx;
+  const std::span<const SpendRecord> spends;
+  const HeaderAncestryView& ancestry;
+  const int height;
+};
+
+struct InputsInSpend {
+  auto operator()(const TransactionSpendContext& context) const {
+    return context.spends;
+  }
+};
+
+struct MakeTransactionSpendContext {
+  TransactionSpendContext operator()(const JoinedSpend& tx_spends, const BlockSpendContext& context) const {
+    return {tx_spends.tx, tx_spends.spends, context.ancestry, context.height};
+  }
+};
+
+struct InputSpendContext {
+  const SpendRecord spend;
+  const int height;
+};
+
+struct MakeInputSpendContext {
+  InputSpendContext operator()(const SpendRecord& spend, const TransactionSpendContext& context) const {
+    return {spend, context.height};
+  }
+};
 
 }  // namespace hornet::consensus::rules
