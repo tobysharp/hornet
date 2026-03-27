@@ -21,7 +21,8 @@ RULE_ENTRY_RE = re.compile(r"^\s*(?P<kind>Rule|Group|Each)\s*\{\s*(?P<function>[
 GRAPH_DEF_RE = re.compile(
     r"^\s*(?:inline\s+)?(?:static\s+)?constexpr\s+auto\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?P<expr>.*)$"
 )
-SECTION_COMMENT_RE = re.compile(r"^\s*//\s*@section\s+(?P<title>.*?)\s*$")
+SECTION_COMMENT_RE = re.compile(r"^\s*//\s*##\s+(?P<title>.*?)\s*$")
+INLINE_SECTION_TITLE_RE = re.compile(r"^##\s+(?P<title>.*?)\s*$")
 IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_:]*$")
 
 
@@ -72,23 +73,48 @@ class GraphNode:
 @dataclass(frozen=True)
 class AllNode(GraphNode):
     children: tuple[GraphNode, ...]
+    section: Section | None = None
 
 
 @dataclass(frozen=True)
 class RuleNode(GraphNode):
     function: str
     comment: str
+    section: Section | None = None
 
 
 @dataclass(frozen=True)
 class RefNode(GraphNode):
     name: str
+    section: Section | None = None
 
 
 @dataclass(frozen=True)
 class WrapperNode(GraphNode):
     kind: str
     child: GraphNode
+    section: Section | None = None
+
+
+def inline_section_from_comment(comment: str) -> Section | None:
+    match = INLINE_SECTION_TITLE_RE.match(comment.strip())
+    if not match:
+        return None
+    return section_from_title(match.group("title"))
+
+
+def attach_section(node: GraphNode, section: Section | None) -> GraphNode:
+    if section is None:
+        return node
+    if isinstance(node, AllNode):
+        return AllNode(node.children, section=section)
+    if isinstance(node, RuleNode):
+        return RuleNode(node.function, node.comment, section=section)
+    if isinstance(node, RefNode):
+        return RefNode(node.name, section=section)
+    if isinstance(node, WrapperNode):
+        return WrapperNode(node.kind, node.child, section=section)
+    return node
 
 
 def parse_args() -> argparse.Namespace:
@@ -379,10 +405,21 @@ def parse_graph_expression(text: str) -> GraphNode:
     code = code.strip().rstrip(",").strip()
     comment = comment.strip()
     if not code:
-        raise SystemExit("Encountered empty graph expression")
+        if not comment:
+            raise SystemExit("Encountered empty graph expression")
+        comment_lines = comment.splitlines()
+        section = inline_section_from_comment(comment_lines[0])
+        remainder = "\n".join(comment_lines[1:]).strip()
+        if remainder:
+            return attach_section(parse_graph_expression(remainder), section)
+        if section is not None:
+            return AllNode((), section=section)
+        return AllNode(())
+
+    section = inline_section_from_comment(comment)
 
     if IDENTIFIER_RE.match(code):
-        return RefNode(code)
+        return RefNode(code, section=section)
 
     unwrapped = unwrap_call(code)
     if unwrapped is None:
@@ -392,27 +429,30 @@ def parse_graph_expression(text: str) -> GraphNode:
     args = [part.strip() for part in split_top_level(inner) if part.strip()]
 
     if name == "All":
-        return AllNode(tuple(parse_graph_expression(arg) for arg in args))
+        if section is not None and args and not INLINE_SECTION_TITLE_RE.match(args[0]):
+            args[0] = f"// ## {section.title}\n{args[0]}"
+            section = None
+        return AllNode(tuple(parse_graph_expression(arg) for arg in args), section=section)
     if name == "Rule":
         if len(args) != 1:
             raise SystemExit(f"Rule expects exactly one argument, got {len(args)}")
-        return RuleNode(function=args[0], comment=comment)
+        return RuleNode(function=args[0], comment=comment, section=section)
     if name == "With":
         if len(args) != 2:
             raise SystemExit(f"With expects exactly two arguments, got {len(args)}")
-        return WrapperNode(kind=name, child=parse_graph_expression(args[1]))
+        return WrapperNode(kind=name, child=parse_graph_expression(args[1]), section=section)
     if name == "When":
         if len(args) != 2:
             raise SystemExit(f"When expects exactly two arguments, got {len(args)}")
-        return WrapperNode(kind=name, child=parse_graph_expression(args[1]))
+        return WrapperNode(kind=name, child=parse_graph_expression(args[1]), section=section)
     if name == "Each":
         if not args:
             raise SystemExit("Each expects at least one argument")
-        return WrapperNode(kind=name, child=parse_graph_expression(args[-1]))
+        return WrapperNode(kind=name, child=parse_graph_expression(args[-1]), section=section)
     if name == "From":
         if len(args) != 2:
             raise SystemExit(f"From expects exactly two arguments, got {len(args)}")
-        return WrapperNode(kind=name, child=parse_graph_expression(args[1]))
+        return WrapperNode(kind=name, child=parse_graph_expression(args[1]), section=section)
 
     raise SystemExit(f"Unsupported graph node kind: {name}")
 
@@ -581,6 +621,20 @@ def heading_lines(title: str) -> list[str]:
     return ["|", f"||**{title}**", "|"]
 
 
+def activate_section(
+    section: Section | None,
+    current_section: Section | None,
+    output_lines: list[str],
+    counters: dict[str, int],
+) -> Section | None:
+    if section is None:
+        return current_section
+    if section != current_section:
+        output_lines.extend(heading_lines(section.title))
+    counters[section.prefix] = 0
+    return section
+
+
 def make_link(definition: Definition, output_dir: Path, repo_root: Path, args: argparse.Namespace) -> str:
     rel_to_root = definition.file_path.resolve().relative_to(repo_root)
     if args.link_mode == "relative":
@@ -716,10 +770,22 @@ def walk_graph_node(
     graph_lines_cache: dict[Path, list[str]],
     modified_graph_paths: set[Path],
     args: argparse.Namespace,
-) -> None:
+) -> Section | None:
+    node_section = None
+    if isinstance(node, AllNode):
+        node_section = node.section
+    elif isinstance(node, RuleNode):
+        node_section = node.section
+    elif isinstance(node, WrapperNode):
+        node_section = node.section
+    elif isinstance(node, RefNode):
+        node_section = node.section
+
+    current_section = activate_section(node_section, current_section, output_lines, counters)
+
     if isinstance(node, AllNode):
         for child in node.children:
-            walk_graph_node(
+            current_section = walk_graph_node(
                 child,
                 current_section,
                 definitions,
@@ -736,10 +802,10 @@ def walk_graph_node(
                 modified_graph_paths,
                 args,
             )
-        return
+        return current_section
 
     if isinstance(node, WrapperNode):
-        walk_graph_node(
+        return walk_graph_node(
             node.child,
             current_section,
             definitions,
@@ -756,10 +822,9 @@ def walk_graph_node(
             modified_graph_paths,
             args,
         )
-        return
 
     if isinstance(node, RefNode):
-        walk_graph(
+        return walk_graph(
             node.name,
             current_section,
             False,
@@ -776,7 +841,6 @@ def walk_graph_node(
             modified_graph_paths,
             args,
         )
-        return
 
     if isinstance(node, RuleNode):
         if current_section is None:
@@ -812,7 +876,7 @@ def walk_graph_node(
             args,
         )
         output_lines.append(rendered)
-        return
+        return current_section
 
     raise SystemExit(f"Unsupported graph node type: {type(node).__name__}")
 
@@ -833,16 +897,16 @@ def walk_graph(
     graph_lines_cache: dict[Path, list[str]],
     modified_graph_paths: set[Path],
     args: argparse.Namespace,
-) -> None:
+) -> Section | None:
     graph = graphs.setdefault(graph_name, find_graph_definition(graph_name, source_dir))
     if graph_name not in parsed_graphs:
         parsed_graphs[graph_name] = parse_graph_expression(graph.expression)
 
-    section = graph.section or current_section
-    if graph.section and graph.section != current_section:
-        output_lines.extend(heading_lines(graph.section.title))
+    section = activate_section(graph.section, current_section, output_lines, counters)
+    if section is None:
+        section = current_section
 
-    walk_graph_node(
+    return walk_graph_node(
         parsed_graphs[graph_name],
         section,
         definitions,

@@ -2,7 +2,7 @@
 
 #include "hornetlib/consensus/header_ancestry_view.h"
 #include "hornetlib/consensus/rules/context.h"
-#include "hornetlib/consensus/rules/spec.h"
+#include "hornetlib/consensus/rules/rules.h"
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/consensus/utxo.h"
 #include "hornetlib/protocol/block.h"
@@ -34,7 +34,7 @@ namespace hornet::consensus::rules {
   return Validate(kLocalRules, block);
 }
 
-[[nodiscard]] inline Result ValidateWitnessCommitment(const BlockEnvironmentContext& context) {
+[[nodiscard]] inline Result ValidateWitness(const BlockEnvironmentContext& context) {
   return Validate(kWitnessRules, MakeWitnessContext(context));
 }
 
@@ -54,23 +54,3 @@ namespace hornet::consensus::rules {
 }
 
 }  // namespace hornet::consensus::rules
-
-
-// BIP141: A post-Segwit block MUST satisfy witness malleation rules.
-// [[nodiscard]] /* [[BIP::SegWit]] */ inline Result ValidateWitnessCommitment(const BlockEnvironmentContext& context) {
-//   return Validate(ruleset, context);
-// }
-
-// Contextual Rules
-// [[nodiscard]] inline Result ValidateContextual(const BlockEnvironmentContext& context) {
-//   return Validate(ruleset, context);
-// }
-
-// [[nodiscard]] inline Result ValidateSpendingInput(const InputSpendContext& context) {
-//   // clang-format off
-//   static const auto ruleset = 
-//       Rule{ValidateCoinbaseMaturity}         // Coinbase outputs MUST NOT be spent until 100 blocks after their creation.
-//   ;
-//   //clang-format on
-//   return Validate(ruleset, context);
-// }

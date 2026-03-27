@@ -288,13 +288,13 @@ TEST(ValidatorTest, RejectsWitnessDataBeforeSegwitActivation) {
 TEST(ValidatorTest, WitnessDataHasCommitmentAcceptsBlocksWithoutWitnessData) {
   const Block block = MakeBlock(MakeCoinbaseTransaction());
 
-  EXPECT_EQ(rules::ValidateWitnessDataHasCommitment(MakeSegWitWitnessContext(block)), Result{});
+  EXPECT_EQ(rules::ValidateWitnessCommitment(MakeSegWitWitnessContext(block)), Result{});
 }
 
 TEST(ValidatorTest, WitnessDataHasCommitmentRejectsWitnessBlocksWithoutCommitment) {
   const Block block = MakeBlock(MakeCoinbaseTransaction(), true);
 
-  EXPECT_EQ(rules::ValidateWitnessDataHasCommitment(MakeSegWitWitnessContext(block)),
+  EXPECT_EQ(rules::ValidateWitnessCommitment(MakeSegWitWitnessContext(block)),
             Error::Structure_WitnessDataWithoutCommitment);
 }
 
@@ -306,7 +306,7 @@ TEST(ValidatorTest, WitnessDataHasCommitmentAcceptsBlocksWithCommitment) {
   Block block = MakeBlock(coinbase, true);
   SetWitnessCommitmentOutput(block, ComputeWitnessCommitmentValue(block));
 
-  EXPECT_EQ(rules::ValidateWitnessDataHasCommitment(MakeSegWitWitnessContext(block)), Result{});
+  EXPECT_EQ(rules::ValidateWitnessCommitment(MakeSegWitWitnessContext(block)), Result{});
 }
 
 TEST(ValidatorTest, WitnessNonceAcceptsBlocksWithoutCommitment) {
@@ -399,7 +399,7 @@ TEST(ValidatorTest, WitnessCommitmentRejectsWitnessBlocksWithoutCommitment) {
   SetCoinbaseWitnessNonce(coinbase, MakeWitnessNonce());
   const Block block = MakeBlock(coinbase, true);
 
-  EXPECT_EQ(rules::ValidateWitnessCommitment(MakeSegWitContext(block)), Error::Structure_WitnessDataWithoutCommitment);
+  EXPECT_EQ(rules::ValidateWitness(MakeSegWitContext(block)), Error::Structure_WitnessDataWithoutCommitment);
 }
 
 TEST(ValidatorTest, WitnessCommitmentRejectsBadWitnessNonce) {
@@ -409,7 +409,7 @@ TEST(ValidatorTest, WitnessCommitmentRejectsBadWitnessNonce) {
   Block block = MakeBlock(coinbase, true);
   SetWitnessCommitmentOutput(block, MakeBytes(32, 0x71));
 
-  EXPECT_EQ(rules::ValidateWitnessCommitment(MakeSegWitContext(block)), Error::Structure_BadWitnessNonce);
+  EXPECT_EQ(rules::ValidateWitness(MakeSegWitContext(block)), Error::Structure_BadWitnessNonce);
 }
 
 TEST(ValidatorTest, WitnessCommitmentRejectsBadWitnessMerkle) {
@@ -421,7 +421,7 @@ TEST(ValidatorTest, WitnessCommitmentRejectsBadWitnessMerkle) {
   commitment[1] ^= 0xff;
   SetWitnessCommitmentOutput(block, commitment);
 
-  EXPECT_EQ(rules::ValidateWitnessCommitment(MakeSegWitContext(block)), Error::Structure_BadWitnessMerkle);
+  EXPECT_EQ(rules::ValidateWitness(MakeSegWitContext(block)), Error::Structure_BadWitnessMerkle);
 }
 
 TEST(ValidatorTest, ContextualValidationAcceptsCommitmentPrefixWithoutWitnessData) {
@@ -446,7 +446,7 @@ TEST(ValidatorTest, WitnessCommitmentAcceptsValidWitnessCommitment) {
   Block block = MakeBlock(coinbase, true);
   SetWitnessCommitmentOutput(block, ComputeWitnessCommitmentValue(block));
 
-  EXPECT_EQ(rules::ValidateWitnessCommitment(MakeSegWitContext(block)), Result{});
+  EXPECT_EQ(rules::ValidateWitness(MakeSegWitContext(block)), Result{});
 }
 
 TEST(ValidatorTest, RejectsBlockWithEmptyWitnessSerialization) {
