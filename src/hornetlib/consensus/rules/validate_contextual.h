@@ -71,7 +71,7 @@ inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transacti
 }
 
 // From BIP141: A block containing witness data MUST contain a witness commitment.
-[[nodiscard]] inline Result ValidateWitnessDataHasCommitment(const WitnessContext& context) {
+[[nodiscard]] inline Result ValidateWitnessCommitment(const WitnessContext& context) {
   // Contrapositive: A block without a witness commitment MUST NOT contain witness data.
   if (!context.commitment) {
     for (const auto& tx : context.block.Transactions()) {

@@ -34,7 +34,7 @@ Below is a complete list of all the semantic invariants that must be satisfied f
 
 | ID | Rule | Function |
 |-|-|-|
-@graph(kBlockRules)
+@graph(kConsensusRules)
 
 ## Definitions
 
