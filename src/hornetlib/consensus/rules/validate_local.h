@@ -54,7 +54,7 @@ namespace hornet::consensus::rules {
   return {};
 }
 
-// The total legacy signature operation count over all input and output scripts MUST NOT exceed 20,000.
+// The total legacy signature-operation count over all input and output scripts MUST NOT exceed 20,000.
 [[nodiscard]] inline Result ValidateSignatureOps(const protocol::Block& block) {
   /* mutable */ int sig_ops = 0;
   for (const auto& tx : block.Transactions())

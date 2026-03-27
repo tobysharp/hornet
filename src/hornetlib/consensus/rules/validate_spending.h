@@ -85,7 +85,7 @@ namespace hornet::consensus::rules {
   return {};
 }
 
-// A non-coinbase input's sig script and spent output’s pubkey script MUST evaluate successfully.
+// A non-coinbase input MUST satisfy the spent output's locking script.
 [[nodiscard]] inline Result ValidateScripts(const TransactionSpendContext&) {
   // TODO
   return {};
@@ -137,7 +137,7 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
   return context.unspent.QueryOutPointsUnique(context.block);
 }
 
-// The sum of sigop costs over all transactions MUST NOT exceed 80,000.
+// The total signature-operation cost over all transactions MUST NOT exceed 80,000.
 [[nodiscard]] inline Result ValidateSigOpCosts(const BlockSpendContext& context) {
   constexpr int kMaxBlockSigOpCost = 80'000;
   int sigops_cost = 0;

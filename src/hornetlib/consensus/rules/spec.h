@@ -28,12 +28,12 @@ static constexpr auto kConsensusRules = All{
     Rule{ValidateTimestampCurrent},           // A header timestamp MUST be less than or equal to network-adjusted time plus 2 hours.
     Rule{ValidateVersion}                     // A header's version number MUST NOT have been retired by any activated soft fork.
   }},
-  With{MakeEnvironmentContext, All{           // ## Local Rules
+  With{MakeEnvironmentContext, All{ All{      // ## Local Rules
     Rule{ValidateNonEmpty},                   // A block MUST contain at least one transaction.
     Rule{ValidateMerkleRoot},                 // A block’s Merkle root field MUST equal the unique Merkle root of its transactions.
     Rule{ValidateOriginalSizeLimit},          // A block’s serialized size excluding witness flags and data MUST NOT exceed 1,000,000 bytes.
     Rule{ValidateCoinbase},                   // A block's first transaction MUST be its only coinbase transaction.
-    Rule{ValidateSignatureOps},               // The total legacy signature operation count over all input and output scripts MUST NOT exceed 20,000.
+    Rule{ValidateSignatureOps},               // The total legacy signature-operation count over all input and output scripts MUST NOT exceed 20,000.
     Each{TransactionsInBlock{}, All{
       Rule{ValidateInputCount},               // A transaction MUST contain at least one input.
       Rule{ValidateOutputCount},              // A transaction MUST contain at least one output.
@@ -43,9 +43,8 @@ static constexpr auto kConsensusRules = All{
       Rule{ValidateUniqueInputs},             // A transaction's inputs MUST NOT contain duplicate outpoints.
       Rule{ValidateCoinbaseSignatureSize},    // A coinbase transaction's sig script size MUST be between 2 and 100 bytes inclusive.
       Rule{ValidateInputsPrevout}             // A non-coinbase transaction's inputs MUST have non-null previous outputs.    
-    }},
-  }},
-  With{MakeEnvironmentContext, All{           // ## Contextual Rules
+    }}}, 
+  All{                                        // ## Contextual Rules
     Rule{ValidateTransactionFinality},        // All transactions in the block MUST be final given the block height and locktime rules.
     Rule{ValidateNoWitnessPreSegwit},         // A pre-SegWit block MUST NOT contain any witness data.
     Rule{ValidateBlockWeight},                // A block’s total weight MUST NOT exceed 4,000,000 weight units.
@@ -56,15 +55,15 @@ static constexpr auto kConsensusRules = All{
       Rule{ValidateWitnessNonce},             // From BIP141: A post-Segwit block containing a witness commitment MUST contain a witness nonce.
       Rule{ValidateWitnessMerkle}             // From BIP141: A post-SegWit block containing a witness commitment MUST commit to its witness Merkle root and nonce.
     }})
-  }},
+  }}},
   With{MakeBlockSpendContext, All{            // ## Spending Rules
     Rule{ValidateOutPointsUnique},            // Transaction outputs MUST NOT give rise to duplicates of existing unspent outpoints (BIP30).
     Rule{ValidateInputPrevoutsUnspent},       // A transaction input MUST reference a previous transaction output that remains unspent.
-    Rule{ValidateSigOpCosts},                 // The sum of sigop costs over all transactions MUST NOT exceed 80,000.
+    Rule{ValidateSigOpCosts},                 // The total signature-operation cost over all transactions MUST NOT exceed 80,000.
     Rule{ValidateBlockSubsidy},               // The total amount in coinbase outputs MUST NOT exceed the block reward.
     Each{SpendsInBlock{}, MakeTransactionSpendContext{}, All{
       Rule{ValidateOutputsAtMostInputs},      // The sum of output values in a transaction MUST NOT exceed the sum of all input values being spent.
-      Rule{ValidateScripts},                  // A non-coinbase input's sig script and spent output’s pubkey script MUST evaluate successfully.
+      Rule{ValidateScripts},                  // A non-coinbase input MUST satisfy the spent output's locking script.
       From(BIP::SequenceLocks,
         Rule{ValidateSequenceLocks}),         // From BIP68: Each input that signals a relative lock-time interval MUST have reached relative finality.
       Each{InputsInSpend{}, MakeInputSpendContext{}, 

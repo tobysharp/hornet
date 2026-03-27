@@ -43,7 +43,7 @@ static constexpr auto kLocalRules = All{
   Rule{ValidateMerkleRoot},               // A block’s Merkle root field MUST equal the unique Merkle root of its transactions.
   Rule{ValidateOriginalSizeLimit},        // A block’s serialized size excluding witness flags and data MUST NOT exceed 1,000,000 bytes.
   Rule{ValidateCoinbase},                 // A block's first transaction MUST be its only coinbase transaction.
-  Rule{ValidateSignatureOps},             // The total legacy signature operation count over all input and output scripts MUST NOT exceed 20,000.
+  Rule{ValidateSignatureOps},             // The total legacy signature-operation count over all input and output scripts MUST NOT exceed 20,000.
   Each{TransactionsInBlock{}, kTransactionRules}
 };
 
@@ -66,7 +66,7 @@ static constexpr auto kContextualRules = All{
 
 static constexpr auto kSpendingTransactionRules = All{
   Rule{ValidateOutputsAtMostInputs},      // The sum of output values in a transaction MUST NOT exceed the sum of all input values being spent.
-  Rule{ValidateScripts},                  // A non-coinbase input's sig script and spent output’s pubkey script MUST evaluate successfully.
+  Rule{ValidateScripts},                  // A non-coinbase input MUST satisfy the spent output's locking script.
   From(BIP::SequenceLocks,
     Rule{ValidateSequenceLocks}),         // From BIP68: Each input that signals a relative lock-time interval MUST have reached relative finality.
   Each{InputsInSpend{}, MakeInputSpendContext{}, 
@@ -78,16 +78,15 @@ static constexpr auto kSpendingTransactionRules = All{
 static constexpr auto kSpendingRules = All{
   Rule{ValidateOutPointsUnique},          // Transaction outputs MUST NOT give rise to duplicates of existing unspent outpoints (BIP30).
   Rule{ValidateInputPrevoutsUnspent},     // A transaction input MUST reference a previous transaction output that remains unspent.
-  Rule{ValidateSigOpCosts},               // The sum of sigop costs over all transactions MUST NOT exceed 80,000.
-  Rule{ValidateBlockSubsidy},             // The total amount in coinbase outputs MUST NOT exceed the block reward.
+  Rule{ValidateSigOpCosts},               // The total signature-operation cost over all transactions MUST NOT exceed 80,000.
+  Rule{ValidateBlockSubsidy},             // The total amount in coinbase outputs MUST NOT exceed the block subsidy plus its total fees.
   Each{SpendsInBlock{}, MakeTransactionSpendContext{}, kSpendingTransactionRules}
 };
 
 // Block Validation Rules
 static constexpr auto kBlockRules = All{
   With{MakeHeaderContext,      kHeaderRules},
-  With{MakeEnvironmentContext, kLocalRules},
-  With{MakeEnvironmentContext, kContextualRules},
+  With{MakeEnvironmentContext, All{kLocalRules, kContextualRules}},
   With{MakeBlockSpendContext,  kSpendingRules}
 };
 
