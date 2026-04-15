@@ -8,7 +8,7 @@ It is implemented as a suite of modular, dependency-free, modern C++ libraries a
 
 Designed for clarity and speed, Hornet provides a highly optimized concurrent validation pipeline with a custom UTXO engine, while all consensus logic remains clearly encapsulated by the declarative specification.
 
-For more details, see docs/overview.md.
+For more details, see [docs/overview.md](docs/overview.md).
 
 ## Build Instructions
 
