@@ -11,26 +11,12 @@
 
 namespace hornet::protocol::script::runtime {
 
+using lang::Bytes;
 using lang::Op;
-
-template <typename Fn>
-inline void BinaryBitwise(const Context& context, Fn&& f) {
-  auto& stack = context.Stack();
-
-  // Retrieve the stack items as references to the internal data.
-  const auto& x1 = stack.At(1);
-  const auto& x2 = stack.At(0);
-
-  // Compute the binary function.
-  const bool out = f(x1, x2);
-
-  // Pop the inputs and push the output.
-  stack.Pop(2).Push(out);
-}
 
 // Op::Equal
 static void OnEqual(const Context& context) {
-  return BinaryBitwise(context, [](const auto& a, const auto& b) {
+  return context.Stack().Call([](const Bytes a, const Bytes b) {
     return std::ranges::equal(a, b);
   });
 }

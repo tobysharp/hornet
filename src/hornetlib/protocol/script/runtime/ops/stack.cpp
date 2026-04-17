@@ -51,7 +51,8 @@ static void OnPushData(const Context& context) {
 // Op::PushConstNegative1 ... Op::PushConst16
 template <int8_t N>
 static void OnPushConst(const Context& context) {
-  context.Stack().Push(lang::EncodeMinimalConst<N>());
+  const uint8_t byte = lang::EncodeMinimalConst<N>();
+  context.Stack().Push({&byte, 1});
 }
 
 // Op::Duplicate

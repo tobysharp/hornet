@@ -54,6 +54,7 @@ enum class Op : uint8_t {
 
   // Cryptographic operations.
   Hash160 = 0xa9,
+  CodeSeparator = 0xab,
 
   // Check signature opcodes.
   CheckSig = 0xac,

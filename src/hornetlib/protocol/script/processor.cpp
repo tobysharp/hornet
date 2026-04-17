@@ -15,13 +15,11 @@
 
 namespace hornet::protocol::script {
 
-Processor::Processor(std::span<const uint8_t> script,
-                    bool require_minimal,
+Processor::Processor(bool require_minimal,
                     int height
                     )
-    : parser_(script),
-      policy_{require_minimal},
-      env_{height, runtime::Version::Legacy},
+    : policy_{require_minimal},
+      env_{height, runtime::Version::Legacy, {}},
       machine_(runtime::Machine{.stack = stack_, .script = parser_.Script(), .policy = policy_}) {
 }
 
@@ -48,11 +46,9 @@ util::Expected<bool, lang::Error> Processor::Step() {
   }
 }
 
-void Processor::Reset(std::span<const uint8_t> script, int height) {
-  parser_ = {script};
+void Processor::Reset(std::span<const uint8_t> script) {
+  parser_.Reset(script);
   error_.reset();
-  stack_.Clear();
-  env_ = { height };
   machine_.emplace(runtime::Machine{.stack = stack_, .script = script, .policy = policy_});
 }
 

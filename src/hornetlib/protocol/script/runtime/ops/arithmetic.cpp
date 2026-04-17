@@ -8,21 +8,16 @@
 
 namespace hornet::protocol::script::runtime {
 
+using lang::Bytes;
 using lang::Op;
 
 template <typename Fn>
 inline void BinaryInt32(const Context& context, Fn&& f) {
-  auto& stack = context.Stack();
-
-  // Decode the stack items into integer format. 
-  const int64_t x1 = stack.Int32(1, context.RequiresMinimal());
-  const int64_t x2 = stack.Int32(0, context.RequiresMinimal());
-
-  // Compute the binary function.
-  const int64_t out = f(x1, x2);
-
-  // Pop the inputs and push the output.
-  stack.Pop(2).PushInt(out);
+  context.Stack().Call([&](Bytes lhs, Bytes rhs) -> int64_t {
+    const int64_t a = context.machine.DecodeInt32(lhs);
+    const int64_t b = context.machine.DecodeInt32(rhs);
+    return f(a, b);
+  });
 }
 
 // Op::Add

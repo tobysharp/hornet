@@ -12,6 +12,7 @@
 
 // clang-format off
 
+// Copyright (C) Toby Sharp 2026
 namespace hornet::consensus::rules {
 //
 // BLOCK VALIDITY SPECIFICATION
@@ -71,7 +72,6 @@ static constexpr auto kConsensusRules = All{
     }}
   }}
 };
-
 }  // namespace hornet::consensus::rules
 
 // clang-format on

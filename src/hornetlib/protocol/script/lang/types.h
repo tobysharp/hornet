@@ -19,8 +19,7 @@ using Bytes = std::span<const uint8_t>;
 struct Instruction {
   Op opcode;       // The opcode to be executed.
   Bytes data;      // The associated data argument for push instructions.
-  int offset = 0;  // The offset of the instruction within its script, if applicable.
-  int size = 0;    // The size of the instruction data in bytes.
+  Bytes raw;       // The raw bytes of the instruction.
 };
 
 // Reasons for Bitcoin Script failure.
@@ -31,7 +30,8 @@ enum class Error {
   StackItemOverflow,  // An item pushed to the stack was too large.
   StackOverflow,      // Too many items were pushed to the stack.
   StackUnderflow,     // An empty stack was popped.
-  OpCountExcessive    // Too many non-push operations were encountered in the script.
+  OpCountExcessive,   // Too many non-push operations were encountered in the script.
+  InvalidSpendContext // Tried to access the spending context, but it doesn't exist.
 };
 
 }  // namespace hornet::protocol::script::lang

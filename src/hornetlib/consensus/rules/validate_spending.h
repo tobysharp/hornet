@@ -14,6 +14,8 @@
 #include "hornetlib/protocol/transaction.h"
 #include "hornetlib/util/algorithm.h"
 
+#include "hornetlib/protocol/script/processor.h"
+
 namespace hornet::consensus::rules {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -36,7 +38,6 @@ namespace hornet::consensus::rules {
 
 // The sum of output values in a transaction MUST NOT exceed the sum of all input values being spent.
 [[nodiscard]] inline Result ValidateOutputsAtMostInputs(const TransactionSpendContext& context) {
-
   const int64_t outputs_sum = util::Sum(context.tx.Outputs(), [](const auto& output) { return output.value; });
   const int64_t inputs_sum = util::Sum(context.spends, [](const auto& spend) { return spend.amount; });
 
@@ -50,20 +51,20 @@ namespace hornet::consensus::rules {
   constexpr uint32_t kDisableMask = 1u << 31;
   constexpr uint32_t kDeltaMask = 0xffff;
   constexpr uint32_t kTimestampsMask = 1u << 22;
-  constexpr int      kTimestampsShift = 9;
+  constexpr int kTimestampsShift = 9;
 
-  int min_valid_height = 0;    // The minimum height at which finality is achieved for this transaction.
-  int64_t min_valid_mtp = 0;   // The minimum MTP time at which finality is achieved.
+  int min_valid_height = 0;   // The minimum height at which finality is achieved for this transaction.
+  int64_t min_valid_mtp = 0;  // The minimum MTP time at which finality is achieved.
 
   for (const auto& spend : context.spends) {
     const protocol::Input& input = context.tx.Input(spend.spend_input_index);
-    
+
     // Sequence numbers with the most significant bit set do not participate in this consensus rule.
     if (input.sequence & kDisableMask) continue;
 
     // The low 16 bits of nSequence store the number of temporal units until validity.
     const int delta = input.sequence & kDeltaMask;
-  
+
     // If bit 22 is set, the sequence variable is interpreted as time-based, otherwise it is height-based.
     if (input.sequence & kTimestampsMask) {
       // The time origin is defined as the Median Time Past of the block prior to the funding transaction.
@@ -86,8 +87,45 @@ namespace hornet::consensus::rules {
 }
 
 // A non-coinbase input MUST satisfy the spent output's locking script.
-[[nodiscard]] inline Result ValidateScripts(const TransactionSpendContext&) {
-  // TODO
+[[nodiscard]] inline Result ValidateScripts(const TransactionSpendContext& context) {
+  if (context.tx.IsCoinBase()) return {};
+
+  Assert(context.tx.InputCount() == std::ssize(context.spends));
+
+  // Core first checks in a script execution result cache.
+  // Next it precomputes the SHA256 hash of various quantities depending on whether the tx uses BIP143 or BIP341.
+  // Then the actual execution is in the VerifyScript / EvalScript functions.
+
+  // const uint64_t flags = 0;  // TODO
+  // const bool require_minimal = false;  // Not used for validating blocks.
+
+  // We need the script flags. These are determined by block hash and height in GetBlockScriptFlags.
+  //    - Generally p2sh, witness, and taproot. By activation height, dersig (BIP66), checklocktimeverify (BIP65),
+  //    checksequenceverify (BIP112), and nulldummy (BIP147).
+
+  for (int i = 0; i < context.tx.InputCount(); ++i) {
+    const SpendRecord& spend = context.spends[i];
+    Assert(spend.spend_input_index == i);  // If this isn't always true, I need to understand why not. If it is, then
+                                           // the input_index field can be removed from SpendRecord.
+
+    Assert(!scripts::IsPayToScriptHash(spend.pubkey_script));
+    Assert(!scripts::WitnessProgram::Parse(spend.pubkey_script));
+
+    // We execute the unlocking script (scriptSig) followed by the locking script (scriptPubKey) sequentially using the
+    // same stack to prevent script concatenation attacks. (See CVE-2010-5141.)
+    
+    protocol::script::Processor processor{/*require_minimal =*/false, context.height};
+    if (const auto unlock_result = processor.Run(context.tx.SignatureScript(i)); !unlock_result) 
+      return Error::Spending_ScriptLocked;  // Looks like this tx input script is inherently invalid.
+    const auto lock_result = processor.Run(spend.pubkey_script);
+    if (!lock_result || !*lock_result) return Error::Spending_ScriptLocked;
+
+    // TODO: Witness programs...
+    // TODO: P2SH scripts...
+    // TODO: Cleanstack check only for policy not consensus
+    // TODO: Witness => P2SH check
+  }
+
   return {};
 }
 
@@ -113,14 +151,12 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
 // Transaction outputs MUST NOT give rise to duplicates of existing unspent outpoints (BIP30).
 [[nodiscard]] inline Result ValidateOutPointsUnique(const BlockSpendContext& context) {
   // Skip this rule for two specific historical blocks that are known to violate it.
-  static constexpr auto kKnownExceptions = std::array{
-    std::tuple{91842, "00000000000a4d0a398161ffc163c503763b1f4360639393e0e4c8e300e0caec"_sha256}, 
-    std::tuple{91880, "00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721"_sha256}
-  };
+  static constexpr auto kKnownExceptions =
+      std::array{std::tuple{91842, "00000000000a4d0a398161ffc163c503763b1f4360639393e0e4c8e300e0caec"_sha256},
+                 std::tuple{91880, "00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721"_sha256}};
   const auto hash = context.block.Header().ComputeHash();
   for (const auto& known : kKnownExceptions) {
-    if (context.height == std::get<int>(known) && hash == std::get<protocol::Hash>(known))
-      return {};
+    if (context.height == std::get<int>(known) && hash == std::get<protocol::Hash>(known)) return {};
   }
 
   // Note that we can apply an optimization to skip this check for a common case where certain constraints hold.
@@ -129,7 +165,8 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
   // are known to hold before height 1,983,702, since that integer does exist in a pre-BIP34 coinbase script.
   static const int kBIP34Height = GetSoftForkActivationHeight(BIP::HeightInCoinbase);
   if (context.height > kBIP34Height &&
-      context.ancestry.HashAt(kBIP34Height) == "000000000000024b89b42a942fe0d9fea3bb44ab7bd1b19115dd6a759c0808b8"_sha256 &&
+      context.ancestry.HashAt(kBIP34Height) ==
+          "000000000000024b89b42a942fe0d9fea3bb44ab7bd1b19115dd6a759c0808b8"_sha256 &&
       context.height < 1'983'702)
     return {};
 
@@ -171,12 +208,11 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
   });
 
   // Computes the total of all non-coinbase transaction outputs for the block.
-  const int64_t outputs_total = Sum(context.block.Transactions(), [](const auto& tx) {
-    return tx.IsCoinBase() ? 0ll : tx.TotalOutputValue();
-  });
+  const int64_t outputs_total =
+      Sum(context.block.Transactions(), [](const auto& tx) { return tx.IsCoinBase() ? 0ll : tx.TotalOutputValue(); });
 
   // Computes the maximum block reward available for the current block.
-  //Assert(*inputs_total >= outputs_total);
+  // Assert(*inputs_total >= outputs_total);
   const int64_t fees_amount = inputs_total - outputs_total;
   const int64_t block_reward = block_subsidy + fees_amount;
   const int64_t coinbase_amount = context.block.Transaction(0).TotalOutputValue();

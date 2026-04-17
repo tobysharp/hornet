@@ -4,8 +4,12 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
+#include <optional>
+
+#include "hornetlib/protocol/transaction.h"
 #include "hornetlib/protocol/script/lang/types.h"
 #include "hornetlib/protocol/script/runtime/stack.h"
+#include "hornetlib/protocol/script/spend.h"
 
 namespace hornet::protocol::script::runtime {
 
@@ -35,13 +39,24 @@ struct Machine {
 
   // Immutable execution policy.
   const Policy& policy;
+
+  int32_t DecodeInt32(lang::Bytes bytes) const { return runtime::DecodeInt32(bytes, policy.require_minimal); }
 };
 
-// The external environment in which the script execution is contexualized:
+// Contextual information about the spending transaction and input, used by sig opcodes.
+struct SpendContext {
+  TransactionConstView tx;  // The spending transaction.
+  int input_index;          // The index of the spending input.
+  SpendPath path;           // The spend path of the input.
+  // Maybe: amount, locking script, funding height, flags, etc.
+};
+
+// The external environment in which the script execution is contextualized:
 // the transaction, block height, address type, etc.
 struct Environment {
   int height = 0;
   Version version = Version::Legacy;
+  std::optional<SpendContext> spend;
 };
 
 // All of the above script execution context, grouped for convenience.
@@ -54,18 +69,18 @@ struct Context {
   Stack& Stack() const { return machine.stack; }
   Version Version() const { return env.version; }
   lang::Op Op() const { return instruction.opcode; }
+  const SpendContext& Spend() const {
+    if (!env.spend) Throw(lang::Error::InvalidSpendContext);
+    return *env.spend;
+  }
 };
 
 using Handler = void (*)(const Context&);
 
 struct Dispatcher : public std::array<Handler, 256> {
   using Base = std::array<Handler, 256>;
-  Handler& operator[](lang::Op op) {
-    return Base::operator [](uint8_t(op));
-  }
-  const Handler& operator[](lang::Op op) const {
-    return Base::operator [](uint8_t(op));
-  }
+  Handler& operator[](lang::Op op) { return Base::operator[](uint8_t(op)); }
+  const Handler& operator[](lang::Op op) const { return Base::operator[](uint8_t(op)); }
   std::array<Handler, 256> entries;
 };
 

@@ -19,9 +19,9 @@ TEST(ScriptStackTest, PushImmediateConstants) {
   for (int32_t i = -1; i <= 16; ++i) {
     Writer w;
     w.PushInt(i);
-    Processor proc(w);
+    Processor proc;
     bool expected = i != 0;
-    ASSERT_EQ(*proc.Run(), expected);
+    ASSERT_EQ(*proc.Run(w), expected);
 
     auto opt = proc.TryPeekInt();
     ASSERT_TRUE(opt.has_value());
@@ -34,8 +34,8 @@ TEST(ScriptStackTest, PushMinimalIntsBeyondImmediateRange) {
   for (int32_t val : values) {
     Writer w;
     w.PushInt(val);
-    Processor proc(w);
-    ASSERT_TRUE(*proc.Run());
+    Processor proc;
+    ASSERT_TRUE(*proc.Run(w));
     auto opt = proc.TryPeekInt();
     ASSERT_TRUE(opt.has_value());
     EXPECT_EQ(*opt, val);
@@ -47,8 +47,8 @@ TEST(ScriptStackTest, PushSize1To75) {
     Writer w;
     auto data = MakeData(size, 0xAB);
     w.PushData(data);
-    Processor proc(w);
-    ASSERT_TRUE(*proc.Run());
+    Processor proc;
+    ASSERT_TRUE(*proc.Run(w));
 
     auto val = proc.TryPeek();
     ASSERT_TRUE(val.has_value());
@@ -61,8 +61,8 @@ TEST(ScriptStackTest, PushData1) {
   Writer w;
   auto data = MakeData(100);
   w.PushData(data);
-  Processor proc(w);
-  ASSERT_TRUE(*proc.Run());
+  Processor proc;
+  ASSERT_TRUE(*proc.Run(w));
 
   auto val = proc.TryPeek();
   ASSERT_TRUE(val.has_value());
@@ -73,8 +73,8 @@ TEST(ScriptStackTest, PushData2) {
   Writer w;
   auto data = MakeData(300);
   w.PushData(data);
-  Processor proc(w);
-  ASSERT_TRUE(*proc.Run());
+  Processor proc;
+  ASSERT_TRUE(*proc.Run(w));
 
   auto val = proc.TryPeek();
   ASSERT_TRUE(val.has_value());
@@ -84,8 +84,8 @@ TEST(ScriptStackTest, PushData2) {
 TEST(ScriptStackTest, OpDuplicate) {
   Writer w;
   w.PushInt(42).Then(Op::Duplicate);
-  Processor proc(w);
-  ASSERT_TRUE(*proc.Run());
+  Processor proc;
+  ASSERT_TRUE(*proc.Run(w));
 
   auto opt = proc.TryPeekInt();
   ASSERT_TRUE(opt.has_value());
@@ -95,8 +95,8 @@ TEST(ScriptStackTest, OpDuplicate) {
 TEST(ScriptStackTest, OpDuplicateOnEmptyStackFails) {
   Writer w;
   w.Then(Op::Duplicate);
-  Processor proc(w);
-  ASSERT_FALSE(proc.Run());
+  Processor proc;
+  ASSERT_FALSE(proc.Run(w));
 
   auto err = proc.LastError();
   ASSERT_TRUE(err.has_value());
@@ -106,8 +106,8 @@ TEST(ScriptStackTest, OpDuplicateOnEmptyStackFails) {
 TEST(ScriptStackTest, OpDrop) {
   Writer w;
   w.PushInt(99).Then(Op::Drop);
-  Processor proc(w);
-  ASSERT_FALSE(*proc.Run());
+  Processor proc;
+  ASSERT_FALSE(*proc.Run(w));
 
   auto val = proc.TryPeek();
   EXPECT_FALSE(val.has_value());
@@ -116,8 +116,8 @@ TEST(ScriptStackTest, OpDrop) {
 TEST(ScriptStackTest, OpDropOnEmptyStackFails) {
   Writer w;
   w.Then(Op::Drop);
-  Processor proc(w);
-  ASSERT_FALSE(proc.Run());
+  Processor proc;
+  ASSERT_FALSE(proc.Run(w));
 
   auto err = proc.LastError();
   ASSERT_TRUE(err.has_value());
@@ -128,8 +128,8 @@ TEST(ScriptStackTest, PushDataTooLargeFails) {
   Writer w;
   auto data = MakeData(521);  // Just above the limit
   w.PushData(data);           // Writer will pick PUSHDATA2 here
-  Processor proc(w);
-  ASSERT_FALSE(proc.Run());
+  Processor proc;
+  ASSERT_FALSE(proc.Run(w));
 
   auto err = proc.LastError();
   ASSERT_TRUE(err.has_value());
@@ -141,8 +141,8 @@ TEST(ScriptStackTest, StackOverflowFails) {
   for (int i = 0; i < 1001; ++i)
     w.PushInt(1);
 
-  Processor proc(w);
-  ASSERT_FALSE(proc.Run());
+  Processor proc;
+  ASSERT_FALSE(proc.Run(w));
 
   auto err = proc.LastError();
   ASSERT_TRUE(err.has_value());
@@ -153,8 +153,8 @@ TEST(ScriptStackTest, PushFalseyFinalStackFails) {
   Writer w;
   w.PushData(std::vector<uint8_t>{0x00});  // A falsey value that is not OP_0
 
-  Processor proc(w, /*require_minimal=*/false);
-  ASSERT_FALSE(*proc.Run());
+  Processor proc(/*require_minimal=*/false);
+  ASSERT_FALSE(*proc.Run(w));
 }
 
 TEST(ScriptStackTest, PushExactly520BytesSucceeds) {
@@ -162,8 +162,8 @@ TEST(ScriptStackTest, PushExactly520BytesSucceeds) {
   auto data = MakeData(520);
   w.PushData(data);
 
-  Processor proc(w);
-  ASSERT_TRUE(*proc.Run());
+  Processor proc;
+  ASSERT_TRUE(*proc.Run(w));
 
   auto val = proc.TryPeek();
   ASSERT_TRUE(val.has_value());
@@ -188,8 +188,8 @@ TEST(ScriptStackTest, PushData4_NonMinimal_ValidUnderConsensus) {
   auto data = MakeData(520, 0x42);
   auto script = MakePushData4(data);
 
-  Processor proc(script, /*require_minimal=*/false);
-  ASSERT_TRUE(*proc.Run());
+  Processor proc(/*require_minimal=*/false);
+  ASSERT_TRUE(*proc.Run(script));
 
   auto val = proc.TryPeek();
   ASSERT_TRUE(val.has_value());
@@ -200,8 +200,8 @@ TEST(ScriptStackTest, PushData4_NonMinimal_RejectedByMinimalPolicy) {
   auto data = MakeData(520, 0x42);
   auto script = MakePushData4(data);
 
-  Processor proc(script, /*require_minimal=*/true);
-  ASSERT_EQ(proc.Run(), lang::Error::NonMinimalPush);
+  Processor proc(/*require_minimal=*/true);
+  ASSERT_EQ(proc.Run(script), lang::Error::NonMinimalPush);
 }
 
 TEST(ScriptStackTest, PushZeroNonMinimalFails) {
@@ -210,8 +210,8 @@ TEST(ScriptStackTest, PushZeroNonMinimalFails) {
       ToByte(Op::PushSize1),  // 0x01
       0x00                    // payload: 1 byte of 0x00 (non-minimal encoding of 0)
   };
-  Processor proc(script);
-  ASSERT_EQ(proc.Run(), lang::Error::NonMinimalPush);
+  Processor proc;
+  ASSERT_EQ(proc.Run(script), lang::Error::NonMinimalPush);
 }
 
 TEST(ScriptStackTest, PushNegativeZeroFails) {
@@ -220,8 +220,8 @@ TEST(ScriptStackTest, PushNegativeZeroFails) {
       ToByte(Op::PushSize1),  // 0x01
       0x80                    // sign bit: -0 (non-minimal)
   };
-  Processor proc(script);
-  ASSERT_EQ(proc.Run(), lang::Error::NonMinimalPush);
+  Processor proc;
+  ASSERT_EQ(proc.Run(script), lang::Error::NonMinimalPush);
 }
 
 TEST(ScriptStackTest, PushZeroPaddedFails) {
@@ -231,8 +231,8 @@ TEST(ScriptStackTest, PushZeroPaddedFails) {
       0x02, 0x00,             // length: 2 bytes
       0x00, 0x00              // payload
   };
-  Processor proc(script);
-  ASSERT_EQ(proc.Run(), lang::Error::NonMinimalPush);
+  Processor proc;
+  ASSERT_EQ(proc.Run(script), lang::Error::NonMinimalPush);
 }
 
 

@@ -20,16 +20,17 @@ namespace hornet::protocol::script {
 
 class Processor {
  public:
-  explicit Processor(std::span<const uint8_t> script,
-                     bool require_minimal = true,  // Becomes execution policy
+  explicit Processor(bool require_minimal = true,  // Becomes execution policy
                      int height = 0                // Becomes environment context
                      );
 
-  void Reset(std::span<const uint8_t> script, int height);
-
   // Runs until completion and returns the Boolean interpretation of the top-of-stack (or error).                     
-  util::Expected<bool, lang::Error> Run();
+  util::Expected<bool, lang::Error> Run(std::span<const uint8_t> script) {
+    Reset(script);
+    return Run();
+  }
 
+  void Reset(std::span<const uint8_t> script);
   // Executes the next instruction and returns true iff it's possible to Step() again (or error).
   util::Expected<bool, lang::Error> Step();
 
@@ -52,6 +53,7 @@ class Processor {
   }
 
  private:
+  util::Expected<bool, lang::Error> Run();
   void Execute(const lang::Instruction& instruction);
 
   script::Parser parser_;
