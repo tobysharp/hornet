@@ -11,10 +11,10 @@
 #include "hornetlib/consensus/utxo.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/hash.h"
+#include "hornetlib/protocol/script/processor.h"
+#include "hornetlib/protocol/script/spend.h"
 #include "hornetlib/protocol/transaction.h"
 #include "hornetlib/util/algorithm.h"
-
-#include "hornetlib/protocol/script/processor.h"
 
 namespace hornet::consensus::rules {
 
@@ -104,20 +104,20 @@ namespace hornet::consensus::rules {
   //    checksequenceverify (BIP112), and nulldummy (BIP147).
 
   for (int i = 0; i < context.tx.InputCount(); ++i) {
-    const SpendRecord& spend = context.spends[i];
-    Assert(spend.spend_input_index == i);  // If this isn't always true, I need to understand why not. If it is, then
+    const SpendRecord& record = context.spends[i];
+    Assert(record.spend_input_index == i);  // If this isn't always true, I need to understand why not. If it is, then
                                            // the input_index field can be removed from SpendRecord.
 
-    Assert(!scripts::IsPayToScriptHash(spend.pubkey_script));
-    Assert(!scripts::WitnessProgram::Parse(spend.pubkey_script));
+    Assert(!scripts::IsPayToScriptHash(record.pubkey_script));
+    Assert(!scripts::WitnessProgram::Parse(record.pubkey_script));
 
     // We execute the unlocking script (scriptSig) followed by the locking script (scriptPubKey) sequentially using the
     // same stack to prevent script concatenation attacks. (See CVE-2010-5141.)
-    
-    protocol::script::Processor processor{/*require_minimal =*/false, context.height};
+    protocol::script::SpendContext spend = { context.tx, record.spend_input_index, protocol::script::SpendPath::LegacyDirect };
+    protocol::script::Processor processor{/*require_minimal =*/false, context.height, std::make_optional(spend)};
     if (const auto unlock_result = processor.Run(context.tx.SignatureScript(i)); !unlock_result) 
       return Error::Spending_ScriptLocked;  // Looks like this tx input script is inherently invalid.
-    const auto lock_result = processor.Run(spend.pubkey_script);
+    const auto lock_result = processor.Run(record.pubkey_script);
     if (!lock_result || !*lock_result) return Error::Spending_ScriptLocked;
 
     // TODO: Witness programs...

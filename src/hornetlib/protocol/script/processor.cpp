@@ -15,11 +15,12 @@
 
 namespace hornet::protocol::script {
 
-Processor::Processor(bool require_minimal,
-                    int height
+Processor::Processor(bool require_minimal /* = true */,
+                    int height /* = 0 */,
+                    std::optional<SpendContext> spend /* = std::nullopt */
                     )
     : policy_{require_minimal},
-      env_{height, runtime::Version::Legacy, {}},
+      env_{height, runtime::Version::Legacy, std::move(spend)},
       machine_(runtime::Machine{.stack = stack_, .script = parser_.Script(), .policy = policy_}) {
 }
 

@@ -82,8 +82,8 @@ void SetExtraNonce(protocol::Block& block, uint32_t nonce) {
   auto push_nonce = *instr;
   if (push_nonce.data.size() < sizeof(nonce))
     throw std::runtime_error("Coinbase sigscript nonce is less than 4 bytes.");
-  const auto nonce_ptr = sigscript.data() + push_nonce.offset + sizeof(protocol::script::lang::Op);
-  std::memcpy(nonce_ptr, &nonce, sizeof(nonce));
+  const auto nonce_ptr = push_nonce.data.begin();
+  std::memcpy(const_cast<uint8_t*>(&*nonce_ptr), &nonce, sizeof(nonce));
 }
 
 void ComputeHeader(protocol::Block& block, const protocol::Hash& previous) {

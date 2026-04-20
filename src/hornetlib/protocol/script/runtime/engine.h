@@ -6,10 +6,10 @@
 
 #include <optional>
 
-#include "hornetlib/protocol/transaction.h"
 #include "hornetlib/protocol/script/lang/types.h"
 #include "hornetlib/protocol/script/runtime/stack.h"
 #include "hornetlib/protocol/script/spend.h"
+#include "hornetlib/protocol/transaction.h"
 
 namespace hornet::protocol::script::runtime {
 
@@ -41,14 +41,6 @@ struct Machine {
   const Policy& policy;
 
   int32_t DecodeInt32(lang::Bytes bytes) const { return runtime::DecodeInt32(bytes, policy.require_minimal); }
-};
-
-// Contextual information about the spending transaction and input, used by sig opcodes.
-struct SpendContext {
-  TransactionConstView tx;  // The spending transaction.
-  int input_index;          // The index of the spending input.
-  SpendPath path;           // The spend path of the input.
-  // Maybe: amount, locking script, funding height, flags, etc.
 };
 
 // The external environment in which the script execution is contextualized:

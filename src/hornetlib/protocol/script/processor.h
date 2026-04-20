@@ -11,6 +11,7 @@
 #include "hornetlib/protocol/script/lang/op.h"
 #include "hornetlib/protocol/script/lang/types.h"
 #include "hornetlib/protocol/script/parser.h"
+#include "hornetlib/protocol/script/spend.h"
 #include "hornetlib/protocol/script/runtime/engine.h"
 #include "hornetlib/protocol/script/runtime/stack.h"
 #include "hornetlib/util/expected.h"
@@ -21,8 +22,8 @@ namespace hornet::protocol::script {
 class Processor {
  public:
   explicit Processor(bool require_minimal = true,  // Becomes execution policy
-                     int height = 0                // Becomes environment context
-                     );
+                     int height = 0,               // Becomes environment context
+                     std::optional<SpendContext> spend = std::nullopt);
 
   // Runs until completion and returns the Boolean interpretation of the top-of-stack (or error).                     
   util::Expected<bool, lang::Error> Run(std::span<const uint8_t> script) {

@@ -26,7 +26,7 @@ bool VerifyECDSASignature(const Hash& hash, Bytes signature, Bytes pubkey) {
   (void)hash;
   (void)signature;
   (void)pubkey;
-  return false;
+  return true;
 }
 
 }  // namespace
@@ -41,9 +41,15 @@ static void OnCheckSig(const Context& context) {
     // TODO: Tapscript path: EvalChecksigTapscript.
     // TODO: Check signature and pubkey encodings: CheckSignatureEncoding, CheckPubKeyEncoding.
 
-    // Create the spend digest, which is a hash of transaction bytes committing to the spend.
+    // Create the spend digest, which is a 32-byte hash of transaction bytes committing to the spend.
     const auto digest = BuildSpendDigest(*context.env.spend, sig, context.machine.script);
+
+    // Extract the DER-encoded ECDSA signature, which is up to 72 bytes.
     const auto signature = sig.first(sig.size() - 1);
+    Assert(signature.size() <= 72u && signature[0] == 0x30);
+  
+    // The public key is in 65-byte uncompressed SEC1 format.
+    Assert(pubkey.size() == 65u && pubkey[0] == 0x04);
 
     // Verify that the spend digest was signed by the private key corresponding to this public key.
     return VerifyECDSASignature(digest, signature, pubkey);

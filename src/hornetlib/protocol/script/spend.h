@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hornetlib/protocol/transaction.h"
+
 namespace hornet::protocol::script {
 
 // The type of locking script associated with a transaction output.
@@ -27,6 +29,14 @@ enum class SpendPath {
 // The validation mode to use when validating a spend, which determines the applicable consensus rules.
 enum class SpendValidationMode { Legacy, SegwitV0, TaprootKeyPath, Tapscript };
 
+// Contextual information about the spending transaction and input, used by sig opcodes.
+struct SpendContext {
+  TransactionConstView tx;                   // The spending transaction.
+  int input_index;                           // The index of the spending input.
+  SpendPath path = SpendPath::LegacyDirect;  // The spend path of the input.
+  // Maybe: amount, locking script, funding height, flags, etc.
+};
+
 inline constexpr SpendValidationMode GetSpendValidationMode(SpendPath path) {
   switch (path) {
     case SpendPath::LegacyDirect:
@@ -44,28 +54,6 @@ inline constexpr SpendValidationMode GetSpendValidationMode(SpendPath path) {
   }
 }
 
-// constexpr decltype(auto) VisitSpendPath(SpendPath path, auto&& fn, auto&&... args) {
-//   switch (path) {
-//     case SpendPath::LegacyDirect:
-//       return fn.template operator()<SpendPath::LegacyDirect>(std::forward<decltype(args)>(args)...);
-//     case SpendPath::P2SH_Legacy:
-//       return fn.template operator()<SpendPath::P2SH_Legacy>(std::forward<decltype(args)>(args)...);
-//     case SpendPath::P2SH_P2WPKH:
-//       return fn.template operator()<SpendPath::P2SH_P2WPKH>(std::forward<decltype(args)>(args)...);
-//     case SpendPath::P2SH_P2WSH:
-//       return fn.template operator()<SpendPath::P2SH_P2WSH>(std::forward<decltype(args)>(args)...);
-//     case SpendPath::P2WPKH:
-//       return fn.template operator()<SpendPath::P2WPKH>(std::forward<decltype(args)>(args)...);
-//     case SpendPath::P2WSH:
-//       return fn.template operator()<SpendPath::P2WSH>(std::forward<decltype(args)>(args)...);
-//     case SpendPath::P2TR_Key:
-//       return fn.template operator()<SpendPath::P2TR_Key>(std::forward<decltype(args)>(args)...);
-//     case SpendPath::P2TR_Script:
-//       return fn.template operator()<SpendPath::P2TR_Script>(std::forward<decltype(args)>(args)...);
-//   }
-//   util::ThrowLogicError();
-// }
-
 constexpr decltype(auto) VisitSpendValidationMode(SpendValidationMode mode, auto&& fn) {
   switch (mode) {
     case SpendValidationMode::Legacy:
@@ -78,5 +66,6 @@ constexpr decltype(auto) VisitSpendValidationMode(SpendValidationMode mode, auto
       return fn.template operator()<SpendValidationMode::Tapscript>();
   }
 }
+
 
 }  // namespace hornet::protocol::script

@@ -117,7 +117,7 @@ class BigUint {
       const auto [lo, hi] = MulWide(words_[i], rhs);
       result.words_[i] += lo;
       carry = hi + (result.words_[i] < lo);
-      // Propogates carry forward
+      // Propagates carry forward
       for (int j = i + 1; j < kWords && carry > 0; ++j) {
         result.words_[j] += carry;
         carry = result.words_[j] < carry;
