@@ -14,6 +14,7 @@
 // Define a common type for testing to avoid repetition
 using TestBigUint64 = hornet::util::BigUint<64, uint32_t>; // 2 words of 32-bit
 using TestBigUint128 = hornet::util::BigUint<128, uint64_t>; // 2 words of 64-bit
+using TestBigUint192 = hornet::util::BigUint<192, uint64_t>; // 3 words of 64-bit
 using TestUint256 = hornet::Uint256; // 4 words of 64-bit
 
 namespace hornet::util {
@@ -277,6 +278,15 @@ TEST_F(BigUintTest, LeftShiftByWordSize) {
   EXPECT_EQ(a, expected);
 }
 
+TEST_F(BigUintTest, LeftShiftByWordSizeThreeWords) {
+  TestBigUint192 a = MakeBigUint<192, uint64_t>({0x0123456789ABCDEFULL, 0x0FEDCBA987654321ULL,
+                                                 0xAAAAAAAA55555555ULL});
+  TestBigUint192 expected =
+      MakeBigUint<192, uint64_t>({0, 0x0123456789ABCDEFULL, 0x0FEDCBA987654321ULL});
+  a <<= 64; // Shift by one word on a 3-word value.
+  EXPECT_EQ(a, expected);
+}
+
 TEST_F(BigUintTest, LeftShiftByTotalBits) {
   TestBigUint64 a = MakeBigUint<64, uint32_t>({0x12345678, 0x9ABCDEF0});
   TestBigUint64 expected = TestBigUint64::Zero();
@@ -307,6 +317,15 @@ TEST_F(BigUintTest, RightShiftByWordSize) {
   TestBigUint64 a = MakeBigUint<64, uint32_t>({0, 0x12345678});
   TestBigUint64 expected = MakeBigUint<64, uint32_t>({0x12345678, 0});
   a >>= 32; // Shift by one word
+  EXPECT_EQ(a, expected);
+}
+
+TEST_F(BigUintTest, RightShiftByWordSizeThreeWords) {
+  TestBigUint192 a = MakeBigUint<192, uint64_t>({0x0123456789ABCDEFULL, 0x0FEDCBA987654321ULL,
+                                                 0xAAAAAAAA55555555ULL});
+  TestBigUint192 expected =
+      MakeBigUint<192, uint64_t>({0x0FEDCBA987654321ULL, 0xAAAAAAAA55555555ULL, 0});
+  a >>= 64; // Shift by one word on a 3-word value.
   EXPECT_EQ(a, expected);
 }
 
@@ -373,10 +392,10 @@ TEST_F(BigUintTest, SetBitThrowsOutOfRange) {
 
 // --- Division Tests ---
 
-TEST_F(BigUintTest, DivisionByZeroThrows) {
+TEST_F(BigUintTest, DivisionByZeroAsserts) {
   TestBigUint64 numerator = MakeBigUint<64, uint32_t>({10, 0});
   TestBigUint64 divisor = TestBigUint64::Zero();
-  EXPECT_THROW(numerator / divisor, std::invalid_argument);
+  EXPECT_DEBUG_DEATH(numerator / divisor, "");
 }
 
 TEST_F(BigUintTest, DivisionNumeratorLessThanDivisor) {
@@ -490,6 +509,23 @@ TEST_F(BigUintTest, MultiplyByWord) {
   EXPECT_EQ(b.Words()[1], 1u);
   for (int i = 2; i < U::kWords; ++i)
     EXPECT_EQ(b.Words()[i], 0u);
+
+  // Full 64x64 -> 128 product in the low two limbs.
+  U c{std::numeric_limits<uint64_t>::max()};
+  c *= std::numeric_limits<uint64_t>::max();
+  EXPECT_EQ(c.Words()[0], 1u);
+  EXPECT_EQ(c.Words()[1], std::numeric_limits<uint64_t>::max() - 1);
+  for (int i = 2; i < U::kWords; ++i)
+    EXPECT_EQ(c.Words()[i], 0u);
+
+  // Carry from one 64-bit product must feed the next limb correctly.
+  U d = MakeBigUint<256, uint64_t>({std::numeric_limits<uint64_t>::max(),
+                                    std::numeric_limits<uint64_t>::max(), 0, 0});
+  d *= 2u;
+  EXPECT_EQ(d.Words()[0], std::numeric_limits<uint64_t>::max() - 1);
+  EXPECT_EQ(d.Words()[1], std::numeric_limits<uint64_t>::max());
+  EXPECT_EQ(d.Words()[2], 1u);
+  EXPECT_EQ(d.Words()[3], 0u);
 }
 
 TEST_F(BigUintTest, DivideByWord) {
@@ -516,6 +552,15 @@ TEST_F(BigUintTest, DivideByWord) {
   U d{1209600u * 42};
   d /= 1209600u;
   EXPECT_EQ(d, U{42u});
+
+  // Exact division of a 128-bit value by a 64-bit divisor.
+  U e = MakeBigUint<256, uint64_t>({std::numeric_limits<uint64_t>::max() - 1, 1, 0, 0});
+  EXPECT_EQ(e / std::numeric_limits<uint64_t>::max(), U{2u});
+
+  // Division with non-zero remainder from a high limb dividend.
+  U f = MakeBigUint<256, uint64_t>({5, 1, 0, 0});
+  U expected_f = MakeBigUint<256, uint64_t>({0x5555555555555557ULL, 0, 0, 0});
+  EXPECT_EQ(f / 3u, expected_f);
 }
 
 }  // namespace

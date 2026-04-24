@@ -14,6 +14,8 @@
 #include <stdexcept>
 #include <tuple>
 
+#include "hornetlib/util/assert.h"
+
 namespace hornet::util {
 
 // Reperesents a multi-word unsigned integer, stored in little-endian order.
@@ -115,13 +117,9 @@ class BigUint {
     BigUint result = Zero();
     for (int i = 0; i < kWords; ++i) {
       const auto [lo, hi] = MulWide(words_[i], rhs);
-      result.words_[i] += lo;
-      carry = hi + (result.words_[i] < lo);
-      // Propagates carry forward
-      for (int j = i + 1; j < kWords && carry > 0; ++j) {
-        result.words_[j] += carry;
-        carry = result.words_[j] < carry;
-      }
+      const T sum = lo + carry;
+      result.words_[i] = sum;
+      carry = hi + (sum < carry);
     }
     // NB: if carry > 0 then overflow.
     return result;
@@ -137,7 +135,7 @@ class BigUint {
 
     T remainder = 0;
     for (int i = kWords - 1; i >= 0; --i) {
-      std::tie(words_[i], remainder) = DivDoubleWord(remainder, words_[i], rhs);
+      std::tie(words_[i], remainder) = DivWide(remainder, words_[i], rhs);
     }
     return *this;
   }
@@ -157,7 +155,7 @@ class BigUint {
     *this = 0;                  // Quotient
 
     // Handle special cases
-    if (divisor_sig_bits == 0) throw std::invalid_argument("BigUint division by zero.");
+    Assert(divisor_sig_bits != 0);  // Division by zero is undefined behavior.
     if (numerator_sig_bits < divisor_sig_bits) return *this;
 
     // This gives us the largest possible value L such that Divisor * 2^L could still
@@ -228,9 +226,9 @@ class BigUint {
     const int rshift_bits = kBitsPerWord - lshift_bits;
     for (int i = kWords - 1; i >= lshift_words + 1; --i) {
       words_[i] =
-          (words_[i - lshift_words] << lshift_bits) | (words_[i - lshift_words - 1] >> rshift_bits);
+          Shl(words_[i - lshift_words], lshift_bits) | Shr(words_[i - lshift_words - 1], rshift_bits);
     }
-    words_[lshift_words] = words_[0] << lshift_bits;
+    words_[lshift_words] = Shl(words_[0], lshift_bits);
     for (int i = lshift_words - 1; i >= 0; --i) words_[i] = 0;
     return *this;
   }
@@ -251,9 +249,9 @@ class BigUint {
     const int lshift_bits = kBitsPerWord - rshift_bits;
     for (int i = 0; i < kWords - rshift_words - 1; ++i) {
       words_[i] =
-          (words_[i + rshift_words] >> rshift_bits) | (words_[i + rshift_words + 1] << lshift_bits);
+          Shr(words_[i + rshift_words], rshift_bits) | Shl(words_[i + rshift_words + 1], lshift_bits);
     }
-    words_[kWords - rshift_words - 1] = words_[kWords - 1] >> rshift_bits;
+    words_[kWords - rshift_words - 1] = Shr(words_[kWords - 1], rshift_bits);
     for (int i = kWords - rshift_words; i < kWords; ++i) words_[i] = 0;
     return *this;
   }
@@ -300,16 +298,33 @@ class BigUint {
   static_assert(std::endian::native == std::endian::little);
   static_assert(kBits % kBitsPerWord == 0);
 
-  static constexpr std::pair<T, T> MulWide(T a, T b) noexcept {
-    using Prod = decltype(a * b);
+  template <typename U> struct DoubleWord;
+  template <> struct DoubleWord<uint32_t> { using Type = uint64_t; };
+#if defined(__SIZEOF_INT128__)
+  template <> struct DoubleWord<uint64_t> { using Type = unsigned __int128; };
+#endif
 
-    if constexpr (sizeof(Prod) > sizeof(T)) {
-      static_assert(sizeof(Prod) == 2 * sizeof(T));
-      const Prod product = a * b;
-      const T lo = static_cast<T>(product);
-      const T hi = static_cast<T>(product >> (sizeof(T) * 8));
-      return {lo, hi};
-    } else {
+  static T Shl(T a, int b) {
+    return b >= kBitsPerWord ? 0 : (a << b);
+  }
+
+  static T Shr(T a, int b) {
+    return b >= kBitsPerWord ? 0 : (a >> b);
+  }
+  
+  static constexpr std::pair<T, T> MulWide(T a, T b) noexcept {
+    if constexpr (requires { typename DoubleWord<T>::Type; }) {
+      const typename DoubleWord<T>::Type product = static_cast<DoubleWord<T>::Type>(a) * b;
+      return { static_cast<T>(product), static_cast<T>(product >> kBitsPerWord) };
+    }
+#if defined(_MSC_VER)
+    else if constexpr (sizeof(T) == 8) {
+      unsigned long long hi;
+      unsigned long long lo = _umul128(a, b, &hi);
+      return { static_cast<T>(lo), static_cast<T>(hi) };
+    }
+#endif
+    else {
       // Manual full-width multiplication fallback
       constexpr int kHalfBits = sizeof(T) * 4;
       constexpr T kLowMask = (T{1} << kHalfBits) - 1;
@@ -331,15 +346,21 @@ class BigUint {
     }
   }
 
-  static constexpr std::pair<T, T> DivDoubleWord(T hi, T lo, T divisor) noexcept {
-    using Wide = decltype((T{1} << (sizeof(T) * 8)) | T{1});
-
-    if constexpr (sizeof(Wide) > sizeof(T)) {
-      Wide dividend = (hi << (sizeof(T) * 8)) | lo;
+  static constexpr std::pair<T, T> DivWide(T hi, T lo, T divisor) noexcept {
+    if constexpr (requires { typename DoubleWord<T>::Type; }) {
+      typename DoubleWord<T>::Type dividend = (static_cast<DoubleWord<T>::Type>(hi) << kBitsPerWord) | lo;
       T q = static_cast<T>(dividend / divisor);
       T r = static_cast<T>(dividend % divisor);
       return {q, r};
-    } else {
+    }
+#if defined(_MSC_VER)
+    else if constexpr (sizeof(T) == 8) {
+      unsigned long long r = 0;
+      const unsigned long long q = _udiv128(hi, lo, divisor, &r);
+      return { static_cast<T>(q), static_cast<T>(r) };
+    }
+#endif
+    else {
       // Manual long division
       T q = 0;
       T r = hi;
