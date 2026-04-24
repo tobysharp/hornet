@@ -69,31 +69,38 @@ class BigUint {
     return ~Zero();
   }
 
-  constexpr BigUint& operator+=(const BigUint& rhs) noexcept {
-    T carry = 0;
+  [[nodiscard]] constexpr std::pair<BigUint, bool> AddWithCarry(const BigUint& rhs, bool carry_in = false) const noexcept {
+    BigUint result;
+    T carry = carry_in ? 1 : 0;
     for (int i = 0; i < kWords; ++i) {
       const T partial = words_[i] + carry;
-      words_[i] = partial + rhs.words_[i];
-      carry = (partial < carry) || (words_[i] < partial);
+      result.words_[i] = partial + rhs.words_[i];
+      carry = (partial < carry) || (result.words_[i] < partial);
     }
-    // NB: if carry > 0 then overflow.
-    return *this;
+    return {result, carry != 0};
   }
 
-  constexpr BigUint& operator-=(const BigUint& rhs) noexcept {
-    T borrow = 0;
+  constexpr BigUint& operator+=(const BigUint& rhs) noexcept {
+    return *this = AddWithCarry(rhs).first;
+  }
+
+  [[nodiscard]] constexpr std::pair<BigUint, bool> SubWithBorrow(const BigUint& rhs, bool borrow_in = false) const noexcept {
+    BigUint result;
+    T borrow = borrow_in ? 1 : 0;
     for (int i = 0; i < kWords; ++i) {
-      const T previous = words_[i];
       const T partial = words_[i] - borrow;
       // With no underflow, partial <= previous, borrow <= previous,
       // With underflow, previous < partial, previous < borrow.
-      words_[i] = partial - rhs.words_[i];
+      result.words_[i] = partial - rhs.words_[i];
       // With no underflow, words_[i] <= partial, rhs.words_[i] <= partial.
-      // With underflow, partial < words_[i], partial < rhs.words_[i].
-      borrow = (previous < borrow) || (partial < words_[i]);
+      // With underflow, partial < result.words_[i], partial < rhs.words_[i].
+      borrow = (words_[i] < borrow) || (partial < result.words_[i]);
     }
-    // NB: if borrow > 0 then underflow.
-    return *this;
+    return {result, borrow != 0};
+  }
+
+  constexpr BigUint& operator-=(const BigUint& rhs) noexcept {
+    return *this = SubWithBorrow(rhs).first;
   }
 
   constexpr BigUint& operator+=(T low) noexcept {
@@ -108,6 +115,25 @@ class BigUint {
 
   constexpr BigUint operator+(T low) const {
     return BigUint{*this} += low;
+  }
+
+  [[nodiscard]] constexpr BigUint<kBits * 2, T> MultiplyWide(const BigUint& rhs) const noexcept {
+    BigUint<kBits * 2, T> result = BigUint<kBits * 2, T>::Zero();
+    const auto AddWord = [&](int index, T value) {
+      for (int i = index; value != 0 && i < result.kWords; ++i) {
+        const T sum = result.Words()[i] + value;
+        value = sum < result.Words()[i];
+        result.Words()[i] = sum;
+      }
+    };
+    for (int i = 0; i < kWords; ++i) {
+      for (int j = 0; j < kWords; ++j) {
+        const auto [lo, hi] = MulWide(words_[i], rhs.words_[j]);
+        AddWord(i + j, lo);
+        AddWord(i + j + 1, hi);
+      }
+    }
+    return result;
   }
 
   constexpr BigUint operator*(T rhs) const noexcept {
@@ -269,6 +295,33 @@ class BigUint {
       }
     }
     return 0;
+  }
+
+  template <int kOutBits> [[nodiscard]] constexpr BigUint<kOutBits, T> LowBits() const noexcept {
+    static_assert(kOutBits > 0);
+    static_assert(kOutBits <= kBits);
+    static_assert(kOutBits % kBitsPerWord == 0);
+
+    constexpr int kOutWords = kOutBits / kBitsPerWord;
+    std::array<T, kOutWords> array;
+    std::copy(words_.begin(), words_.begin() + kOutWords, array.begin());
+    return BigUint<kOutBits, T>{array};
+  }
+
+  template <int kOutBits> [[nodiscard]] constexpr BigUint<kOutBits, T> HighBits() const noexcept {
+    static_assert(kOutBits > 0);
+    static_assert(kOutBits <= kBits);
+    static_assert(kOutBits % kBitsPerWord == 0);
+
+    constexpr int kOutWords = kOutBits / kBitsPerWord;
+    std::array<T, kOutWords> array;
+    std::copy(words_.begin() + (kWords - kOutWords), words_.end(), array.begin());
+    return BigUint<kOutBits, T>{array};
+  }
+  
+  [[nodiscard]] constexpr std::pair<BigUint, BigUint> MultiplyFull(const BigUint& rhs) const noexcept {
+    const auto wide = MultiplyWide(rhs);
+    return { wide.template LowBits<kBits>(), wide.template HighBits<kBits>() };
   }
 
   constexpr const std::array<T, kWords>& Words() const {
