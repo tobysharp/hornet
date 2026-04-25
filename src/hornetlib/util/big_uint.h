@@ -6,6 +6,7 @@
 
 #include <array>
 #include <bit>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -44,9 +45,11 @@ class BigUint {
     }
   }
 
-  constexpr explicit BigUint(T word) {
+  template <std::integral U>
+    requires std::convertible_to<U, T>
+  constexpr BigUint(U word) {
     words_ = {};
-    words_[0] = word;
+    words_[0] = static_cast<T>(word);
   }
 
   constexpr BigUint(const BigUint&) = default;
@@ -155,6 +158,52 @@ class BigUint {
     return *this = *this * rhs;
   }
 
+  template <int kOutBits>
+  [[nodiscard]] constexpr BigUint<kOutBits, T> ZeroExtend() const noexcept {
+    static_assert(kOutBits >= kBits);
+    BigUint<kOutBits, T> result;
+    for (int i = 0; i < result.kWords; ++i) result.Words()[i] = i < kWords ? words_[i] : T{0};
+    return result;
+  }
+
+  template <int kDivBits>
+  [[nodiscard]] constexpr std::pair<BigUint, BigUint<kDivBits, T>> QuotientRemainder(const BigUint<kDivBits, T>& rhs) const {
+    static_assert(kDivBits <= kBits);
+    const int numerator_sig_bits = SignificantBits();
+    const int divisor_sig_bits = rhs.SignificantBits();
+
+    // During this function, we will maintain the invariant:
+    //    Quotient * Divisor + Remainder = Numerator.
+    BigUint divisor = rhs.template ZeroExtend<kBits>();  // Divisor
+    BigUint remainder = *this;                           // Remainder
+    BigUint quotient = BigUint::Zero();                  // Quotient
+
+    // Handle special cases
+    Assert(divisor_sig_bits != 0);  // Division by zero is undefined behavior.
+    if (numerator_sig_bits < divisor_sig_bits) return {quotient, remainder.template LowBits<kDivBits>()};
+
+    // This gives us the largest possible value L such that Divisor * 2^L could still
+    // be less than or equal to Remainder.
+    int divisor_lshift = numerator_sig_bits - divisor_sig_bits;
+    divisor <<= divisor_lshift;  // = Divisor * 2^L
+
+    // We proceed to reduce Remainder, and continue until Remainder < Divisor.
+    for (; divisor_lshift >= 0; --divisor_lshift, divisor >>= 1) {
+      if (remainder >= divisor) {  // Remainder >= Divisor * 2^L
+        // Subtract Divisor * 2^L from Remainder, and add 2^L to Quotient:
+        remainder -= divisor;
+        quotient.SetBit(divisor_lshift);
+      }
+    }
+    // Now L=0, and Remainder < Divisor, so we're complete.
+    return {quotient, remainder.template LowBits<kDivBits>()};
+  }
+
+  template <int kDivBits>
+  [[nodiscard]] constexpr BigUint<kDivBits, T> Modulo(const BigUint<kDivBits, T>& rhs) const {
+    return QuotientRemainder(rhs).second;
+  }
+
   constexpr BigUint& operator /=(T rhs) {
     if (rhs == 0) throw std::invalid_argument("BigUint division by zero.");
     if (rhs == 1) return *this;
@@ -171,34 +220,7 @@ class BigUint {
   }
 
   constexpr BigUint& operator/=(const BigUint& rhs) {
-    const int numerator_sig_bits = SignificantBits();
-    const int divisor_sig_bits = rhs.SignificantBits();
-
-    // During this function, we will maintain the invariant:
-    //    Quotient * Divisor + Remainder = Numerator.
-    BigUint divisor = rhs;      // Divisor
-    BigUint remainder = *this;  // Remainder
-    *this = 0;                  // Quotient
-
-    // Handle special cases
-    Assert(divisor_sig_bits != 0);  // Division by zero is undefined behavior.
-    if (numerator_sig_bits < divisor_sig_bits) return *this;
-
-    // This gives us the largest possible value L such that Divisor * 2^L could still
-    // be less than or equal to Remainder.
-    int divisor_lshift = numerator_sig_bits - divisor_sig_bits;
-    divisor <<= divisor_lshift;  // = Divisor * 2^L
-
-    // We proceed to reduce Remainder, and continue until Remainder < Divisor.
-    for (; divisor_lshift >= 0; --divisor_lshift, divisor >>= 1) {
-      if (remainder >= divisor) {  // Remainder >= Divisor * 2^L
-        // Subtract Divisor * 2^L from Remainder, and add 2^L to Quotient:
-        remainder -= divisor;
-        SetBit(divisor_lshift);
-      }
-    }
-    // Now L=0, and Remainder < Divisor, so we're complete.
-    return *this;  // Quotient
+    return *this = QuotientRemainder(rhs).first;
   }
 
   constexpr BigUint operator/(const BigUint& rhs) const {

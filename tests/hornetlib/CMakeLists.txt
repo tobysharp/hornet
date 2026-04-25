@@ -12,6 +12,7 @@ add_executable(hornetlib_tests
    consensus/validate_spending_transaction_test.cpp
    consensus/validate_transaction_test.cpp
    crypto/hash_test.cpp
+   crypto/fp_test.cpp
    data/block_io_test.cpp
    data/chain_tree_test.cpp
    data/hashed_tree_test.cpp
