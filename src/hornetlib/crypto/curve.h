@@ -153,7 +153,7 @@ private:
         const Point R = u1 * G + u2 * publicKey;
         if (R.IsInfinity())
             return false;
-        return R.x.x == r.x;
+        return R.x.x.Modulo(n) == r.x;
     }
 
     template <size_t Size>

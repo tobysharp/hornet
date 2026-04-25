@@ -193,6 +193,14 @@ TEST(CurveTest, VerifySignatureAcceptsKnownValidToyExample) {
 	EXPECT_TRUE(ToyCurve::VerifySignature(public_key, signature, MakeToyDigest(1)));
 }
 
+TEST(CurveTest, VerifySignatureReducesResultXCoordinateModuloOrder) {
+	const ToyCurve::Point public_key = ToyCurve::G;
+	const ToyCurve::Signature signature{Uint64{2}, Uint64{3}};
+
+	ASSERT_GT((ToyCurve::Wide{3} * ToyCurve::G).x.x, kToyOrder);
+	EXPECT_TRUE(ToyCurve::VerifySignature(public_key, signature, MakeToyDigest(0)));
+}
+
 TEST(CurveTest, Secp256k1GeneratorIsOnCurveAndValidPublicKey) {
 	EXPECT_TRUE(secp256k1::IsOnCurve(secp256k1::G));
 	EXPECT_TRUE(secp256k1::IsPublicKeyValid(secp256k1::G));
