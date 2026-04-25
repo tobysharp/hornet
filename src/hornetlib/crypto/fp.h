@@ -62,14 +62,14 @@ constexpr UIntW<kBits> DivideModuloOdd(const UIntW<kBits>& a, const UIntW<kBits>
 // Represents an element of the finite field Fp for an odd prime p. The template parameter kBits is the bit width of the
 // underlying UIntW type, and must be large enough to represent p.
 template <size_t kBits, const UIntW<kBits>& p>
-class Fp {
- public:
+struct Fp {
   using Type = UIntW<kBits>;
   static_assert(!detail::IsEven<kBits>(p));
 
   constexpr Fp() : x(Type::Zero()) {}
   constexpr Fp(const Fp& rhs) = default;
   constexpr Fp(const Type& rhs) : x(rhs) { Assert(x < p); }
+  constexpr Fp(typename Type::Word rhs) : Fp(Type{rhs}) {}
   constexpr Fp& operator=(const Fp& rhs) = default;
 
   bool constexpr operator!=(const Fp& rhs) const { return x != rhs.x; }
@@ -103,7 +103,6 @@ class Fp {
 
   friend constexpr std::ostream& operator<<(std::ostream& s, const Fp& rhs) { return s << rhs.x; }
 
- private:
   Type x;
 };
 

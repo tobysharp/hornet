@@ -354,6 +354,15 @@ class BigUint {
     return words_;
   }
 
+  constexpr bool GetBit(int bitIndex) const
+  {
+    constexpr int Log2BitsPerElement = Log2(kBitsPerWord);    
+    const int elementIndex = bitIndex >> Log2BitsPerElement;
+    const int bitWithinElement = bitIndex - (elementIndex << Log2BitsPerElement);
+    const T bitMask = T{1} << bitWithinElement;
+    return (words_[elementIndex] & bitMask) != 0;
+  }
+  
   // Set the bit at the given bit index
   constexpr void SetBit(int index) {
     if (index >= kBits) throw std::invalid_argument("SetBit index out of range.");
@@ -379,12 +388,21 @@ class BigUint {
   template <> struct DoubleWord<uint64_t> { using Type = unsigned __int128; };
 #endif
 
-  static T Shl(T a, int b) {
+  static constexpr T Shl(T a, int b) {
     return b >= kBitsPerWord ? 0 : (a << b);
   }
 
-  static T Shr(T a, int b) {
+  static constexpr T Shr(T a, int b) {
     return b >= kBitsPerWord ? 0 : (a >> b);
+  }
+  
+  static consteval int Log2(int x)
+  {
+    // 1 << rv == x
+    int rv = 0;
+    while ((1 << rv) < x)
+        ++rv;
+    return rv;
   }
   
   static constexpr std::pair<T, T> MulWide(T a, T b) noexcept {

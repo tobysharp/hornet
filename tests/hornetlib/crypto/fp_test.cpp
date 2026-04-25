@@ -11,7 +11,7 @@
 
 #include <gtest/gtest.h>
 
-#include "hornetlib/crypto/Fp.h"
+#include "hornetlib/crypto/fp.h"
 
 namespace hornet::crypto::ecdsa {
 namespace {
