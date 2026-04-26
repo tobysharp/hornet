@@ -41,7 +41,7 @@ static void OnCheckSig(const Context& context) {
     const auto signature = ParseSignatureDER<secp256k1::Wide>(sigblob.first(sigblob.size() - 1), parse_method);
     if (!signature) return false;
   
-    // The public key is in 65-byte uncompressed SEC1 format.
+    // The public key is in SEC1 format.
     const auto pubkey = secp256k1::PublicKeyFromSEC1(pkblob);
     if (!pubkey) return false;
 
