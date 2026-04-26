@@ -30,17 +30,23 @@ using Uint64 = util::BigUint<64, uint64_t>;
 using Uint128 = util::BigUint<128, uint64_t>;
 
 inline constexpr Uint64 kPrime17{17};
+inline constexpr Uint64 kPrime11{11};
 inline constexpr Uint64 kLargePrime{18446744073709551557ull};
 inline constexpr Uint64 kComposite15{15};
 inline constexpr Uint128 kPrime128{std::array<uint64_t, 2>{0xffffffffffffff61ull, 0xffffffffffffffffull}};
 
 using Fp17 = Fp<64, kPrime17>;
+using Fp11 = Fp<64, kPrime11>;
 using FpLarge = Fp<64, kLargePrime>;
 using Fp15 = Fp<64, kComposite15>;
 using Fp128 = Fp<128, kPrime128>;
 
 Fp17 MakeFp17(uint64_t value) {
   return Fp17{Uint64{value}};
+}
+
+Fp11 MakeFp11(uint64_t value) {
+  return Fp11{Uint64{value}};
 }
 
 FpLarge MakeFpLarge(uint64_t value) {
@@ -120,6 +126,22 @@ TEST(FpTest, InverseAndDivisionMatchKnownResults) {
 TEST(FpTest, InverseAndDivisionThrowForZeroDenominator) {
   EXPECT_THROW(static_cast<void>(MakeFp17(0).Inverse()), std::runtime_error);
   EXPECT_THROW(static_cast<void>(MakeFp17(5) / MakeFp17(0)), std::runtime_error);
+}
+
+TEST(FpTest, SquareRootReturnsValidRootForQuadraticResiduesMod11) {
+  EXPECT_EQ(MakeFp11(0).SquareRoot(), MakeFp11(0));
+
+  for (uint64_t value : {1u, 3u, 4u, 5u, 9u}) {
+    const auto root = MakeFp11(value).SquareRoot();
+    ASSERT_TRUE(root.has_value()) << "value=" << value;
+    EXPECT_EQ(root->Squared(), MakeFp11(value)) << "value=" << value;
+  }
+}
+
+TEST(FpTest, SquareRootRejectsQuadraticNonResiduesMod11) {
+  for (uint64_t value : {2u, 6u, 7u, 8u, 10u}) {
+    EXPECT_FALSE(MakeFp11(value).SquareRoot().has_value()) << "value=" << value;
+  }
 }
 
 TEST(FpTest, ConstructorRejectsOutOfRangeValuesInDebugBuilds) {

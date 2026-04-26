@@ -193,7 +193,7 @@ TEST(CurveTest, Secp256k1GeneratorIsOnCurveAndValidPublicKey) {
 	EXPECT_TRUE((constants::n * secp256k1::G).IsInfinity());
 }
 
-TEST(CurveTest, Secp256k1PublicKeyFromUncompressedParsesAndValidates) {
+TEST(CurveTest, Secp256k1PublicKeyFromSEC1ParsesAndValidatesUncompressedKeys) {
 	const std::array<uint8_t, 65> public_key_bytes = {
 			0x04,
 			0x79, 0xbe, 0x66, 0x7e, 0xf9, 0xdc, 0xbb, 0xac,
@@ -206,7 +206,7 @@ TEST(CurveTest, Secp256k1PublicKeyFromUncompressedParsesAndValidates) {
 			0x9c, 0x47, 0xd0, 0x8f, 0xfb, 0x10, 0xd4, 0xb8,
 	};
 
-	const auto public_key = secp256k1::PublicKeyFromUncompressed(public_key_bytes);
+	const auto public_key = secp256k1::PublicKeyFromSEC1(public_key_bytes);
 
 	ASSERT_TRUE(public_key.has_value());
 	EXPECT_EQ(public_key->x, secp256k1::G.x);
@@ -214,11 +214,42 @@ TEST(CurveTest, Secp256k1PublicKeyFromUncompressedParsesAndValidates) {
 
 	auto wrong_prefix = public_key_bytes;
 	wrong_prefix[0] = 0x03;
-	EXPECT_FALSE(secp256k1::PublicKeyFromUncompressed(wrong_prefix).has_value());
+	EXPECT_FALSE(secp256k1::PublicKeyFromSEC1(wrong_prefix).has_value());
 
 	auto off_curve = public_key_bytes;
 	++off_curve.back();
-	EXPECT_FALSE(secp256k1::PublicKeyFromUncompressed(off_curve).has_value());
+	EXPECT_FALSE(secp256k1::PublicKeyFromSEC1(off_curve).has_value());
+}
+
+TEST(CurveTest, Secp256k1PublicKeyFromSEC1ParsesCompressedKeysWithEitherParity) {
+	const std::array<uint8_t, 33> even_generator = {
+			0x02,
+			0x79, 0xbe, 0x66, 0x7e, 0xf9, 0xdc, 0xbb, 0xac,
+			0x55, 0xa0, 0x62, 0x95, 0xce, 0x87, 0x0b, 0x07,
+			0x02, 0x9b, 0xfc, 0xdb, 0x2d, 0xce, 0x28, 0xd9,
+			0x59, 0xf2, 0x81, 0x5b, 0x16, 0xf8, 0x17, 0x98,
+	};
+	auto odd_generator = even_generator;
+	odd_generator[0] = 0x03;
+
+	const auto even_public_key = secp256k1::PublicKeyFromSEC1(even_generator);
+	const auto odd_public_key = secp256k1::PublicKeyFromSEC1(odd_generator);
+
+	ASSERT_TRUE(even_public_key.has_value());
+	ASSERT_TRUE(odd_public_key.has_value());
+	EXPECT_EQ(even_public_key->x, secp256k1::G.x);
+	EXPECT_EQ(even_public_key->y, secp256k1::G.y);
+	EXPECT_EQ(odd_public_key->x, secp256k1::G.x);
+	EXPECT_EQ(odd_public_key->y, -secp256k1::G.y);
+
+	const std::array<uint8_t, 33> invalid_x = {
+			0x02,
+			0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+			0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+			0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+			0xff, 0xff, 0xff, 0xfe, 0xff, 0xff, 0xfc, 0x2f,
+	};
+	EXPECT_FALSE(secp256k1::PublicKeyFromSEC1(invalid_x).has_value());
 }
 
 TEST(CurveTest, Secp256k1VerifiesKnownDeterministicSignatureExample) {
@@ -267,7 +298,7 @@ TEST(CurveTest, Secp256k1VerifiesBitcoinExampleUsingRawDigestDerAndUncompressedP
 			0x21, 0xa8, 0x76, 0x8d, 0x1d, 0x09,
 	};
 
-	const auto public_key = secp256k1::PublicKeyFromUncompressed(public_key_bytes);
+	const auto public_key = secp256k1::PublicKeyFromSEC1(public_key_bytes);
 	const auto signature = ParseDerSignature<secp256k1>(signature_bytes);
 
 	ASSERT_TRUE(public_key.has_value());

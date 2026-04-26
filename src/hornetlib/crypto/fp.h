@@ -1,21 +1,23 @@
 #pragma once
 
+#include <optional>
+
 #include "hornetlib/util/big_uint.h"
 #include "hornetlib/util/throw.h"
 
 namespace hornet::crypto::ecdsa {
 
-template <size_t kBits>
+template <int kBits>
 using UIntW = util::BigUint<kBits>;
 
 namespace detail {
 
-template <size_t kBits>
+template <int kBits>
 constexpr bool IsEven(const UIntW<kBits>& x) {
   return (x.Words()[0] & 1) == 0;
 }
 
-template <size_t kBits, const UIntW<kBits>& p>
+template <int kBits, const UIntW<kBits>& p>
 constexpr UIntW<kBits> HalfModuloOdd(const UIntW<kBits>& x) {
   if (IsEven<kBits>(x)) return x >> 1;
   auto [sum, carry] = x.AddWithCarry(p);
@@ -24,12 +26,12 @@ constexpr UIntW<kBits> HalfModuloOdd(const UIntW<kBits>& x) {
   return sum;
 }
 
-template <size_t kBits, const UIntW<kBits>& p>
+template <int kBits, const UIntW<kBits>& p>
 constexpr UIntW<kBits> MultiplyModuloM(const UIntW<kBits>& x, const UIntW<kBits>& y) {
   return x.MultiplyWide(y).Modulo(p);
 }
 
-template <size_t kBits, const UIntW<kBits>& p>
+template <int kBits, const UIntW<kBits>& p>
 constexpr UIntW<kBits> InvertModuloOdd(const UIntW<kBits>& b) {
   using Type = UIntW<kBits>;
   Type aa = b, uu = 1, bb = p, vv = 0;
@@ -51,7 +53,7 @@ constexpr UIntW<kBits> InvertModuloOdd(const UIntW<kBits>& b) {
   return vv;
 }
 
-template <size_t kBits, const UIntW<kBits>& p>
+template <int kBits, const UIntW<kBits>& p>
 constexpr UIntW<kBits> DivideModuloOdd(const UIntW<kBits>& a, const UIntW<kBits>& b) {
   const auto s = InvertModuloOdd<kBits, p>(b);
   return MultiplyModuloM<kBits, p>(s, a);
@@ -61,7 +63,7 @@ constexpr UIntW<kBits> DivideModuloOdd(const UIntW<kBits>& a, const UIntW<kBits>
 
 // Represents an element of the finite field Fp for an odd prime p. The template parameter kBits is the bit width of the
 // underlying UIntW type, and must be large enough to represent p.
-template <size_t kBits, const UIntW<kBits>& p>
+template <int kBits, const UIntW<kBits>& p>
 struct Fp {
   using Type = UIntW<kBits>;
   static_assert(!detail::IsEven<kBits>(p));
@@ -77,6 +79,27 @@ struct Fp {
 
   constexpr Fp Squared() const { return detail::MultiplyModuloM<kBits, p>(x, x); }
   constexpr Fp Inverse() const { return detail::InvertModuloOdd<kBits, p>(x); }
+
+  constexpr std::optional<Fp> SquareRoot() const {
+    // We rely on p = 3 (mod 4) in this implementation, with p an odd prime, which guarantees that (p+1)/4 is an
+    // integer and for any quadratic residue x, x^((p+1)/4) (mod p) is a square root of x, via Euler's criterion.
+    static_assert(p.template Modulo<sizeof(typename Type::Word)*8>(4) == 3);
+    static constexpr Type kExponent = (p + 1) >> 2;
+    static constexpr int kExponentBits = kExponent.SignificantBits();
+    
+    Fp result = 1;
+    Fp power = x;
+    for (int i = 0; i < kExponentBits; ++i)
+    {
+      if (kExponent.GetBit(i)) result *= power;
+      power = power.Squared();
+    }
+
+    // Now we need to check that result.Squared() == x, because otherwise x is a quadratic non-residue, and doesn't
+    // have a valid square root.
+    if (result.Squared() != *this) return std::nullopt;
+    return result;
+  }
 
   constexpr const Type* operator->() const { return &x; }
 
@@ -95,6 +118,10 @@ struct Fp {
 
   friend constexpr Fp operator*(const Fp& lhs, const Fp& rhs) {
     return detail::MultiplyModuloM<kBits, p>(lhs.x, rhs.x);
+  }
+
+  constexpr Fp& operator *=(const Fp& rhs) {
+    return *this = *this * rhs;
   }
 
   friend constexpr Fp operator/(const Fp& lhs, const Fp& rhs) {

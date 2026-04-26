@@ -101,43 +101,39 @@ class Curve {
     return true;
   }
 
-  inline static std::optional<Point> PublicKeyFromUncompressed(std::span<const uint8_t> bytes) {
+  inline static std::optional<Point> PublicKeyFromSEC1(std::span<const uint8_t> bytes) {
     constexpr int kBytes = kBits >> 3;
-    constexpr int kExpectedBytes = 1 + 2 * kBytes;
-    if (std::ssize(bytes) != kExpectedBytes || bytes[0] != 0x04) return std::nullopt;
+    if (bytes.empty()) return std::nullopt;
 
-    const Point publicKey{
-        Wide::FromBigEndianBytes(bytes.subspan(1, kBytes)),
-        Wide::FromBigEndianBytes(bytes.subspan(1 + kBytes, kBytes)),
-    };
-    if (!IsPublicKeyValid(publicKey)) return std::nullopt;
-    return publicKey;
-  }
+    if (bytes[0] == 0x02 || bytes[0] == 0x03) {
+      constexpr int kExpectedBytes = 1 + kBytes;
+      if (std::ssize(bytes) != kExpectedBytes) return std::nullopt;
 
-  std::optional<Signature> SignatureFromDER(std::span<const uint8_t> buffer) {
-    Signature rs = {{}, {}};
+      const Wide x = Wide::FromBigEndianBytes(bytes.subspan(1, kBytes));
+      if (x >= p) return std::nullopt;
 
-    if (buffer.size() < 6) return std::nullopt;
-    auto pb = buffer.begin();
-    if (*pb++ != 0x30) return std::nullopt;
-    const uint8_t totalEncodingBytes = *pb++ + 2;
-    if (totalEncodingBytes > buffer.size()) return std::nullopt;
+      const bool even_y = (bytes[0] & 1) == 0;
+      const Mod_p x_fp{x};
+      const Mod_p y2 = (x_fp.Squared() + a) * x_fp + b;
 
-    if (*pb++ != 0x02) return std::nullopt;
-    const uint8_t bytesToEncodeR = *pb++;
-    if (bytesToEncodeR * 8 > kBits + 8) return std::nullopt;
-    for (int i = 0; i < bytesToEncodeR; ++i, pb++)
-      if (*pb != 0)  // Avoid writing the extra byte needed purely for the signed format
-        rs.first.SetByte(bytesToEncodeR - 1 - i, *pb);
+      // Recover y from y^2 mod p and select the root matching even_y.
+      const auto root = y2.SquareRoot();
+      if (!root) return std::nullopt;
+      const Mod_p y = (detail::IsEven(root->x) == even_y) ? *root : -*root;
+      const Point publicKey{x, y.x};
+      if (IsPublicKeyValid(publicKey)) return publicKey;
 
-    if (*pb++ != 0x02) return std::nullopt;
-    const uint8_t bytesToEncodeS = *pb++;
-    if (bytesToEncodeS * 8 > kBits + 8) return std::nullopt;
-    for (int i = 0; i < bytesToEncodeS; ++i, pb++)
-      if (*pb != 0)  // Avoid writing the extra byte needed purely for the signed format
-        rs.second.SetByte(bytesToEncodeS - 1 - i, *pb);
+    } else if (bytes[0] == 0x04) {
+      constexpr int kExpectedBytes = 1 + 2 * kBytes;
+      if (std::ssize(bytes) != kExpectedBytes) return std::nullopt;
 
-    return rs;
+      const Point publicKey{
+          Wide::FromBigEndianBytes(bytes.subspan(1, kBytes)),
+          Wide::FromBigEndianBytes(bytes.subspan(1 + kBytes, kBytes)),
+      };
+      if (IsPublicKeyValid(publicKey)) return publicKey;
+    }
+    return std::nullopt;
   }
 
   inline static bool VerifySignature(const Point& publicKey, const Signature& signature,
