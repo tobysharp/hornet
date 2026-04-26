@@ -111,10 +111,13 @@ namespace hornet::consensus::rules {
     Assert(!scripts::IsPayToScriptHash(record.pubkey_script));
     Assert(!scripts::WitnessProgram::Parse(record.pubkey_script));
 
+    const bool is_strict_der_signatures = IsBIPActiveAtHeight(BIP::StrictDERSignatures, context.height);
+  
     // We execute the unlocking script (scriptSig) followed by the locking script (scriptPubKey) sequentially using the
     // same stack to prevent script concatenation attacks. (See CVE-2010-5141.)
     protocol::script::SpendContext spend = { context.tx, record.spend_input_index, protocol::script::SpendPath::LegacyDirect };
-    protocol::script::Processor processor{/*require_minimal =*/false, context.height, std::make_optional(spend)};
+    protocol::script::runtime::Policy policy = { false, is_strict_der_signatures };
+    protocol::script::Processor processor{policy, context.height, std::make_optional(spend)};
     if (const auto unlock_result = processor.Run(context.tx.SignatureScript(i)); !unlock_result) 
       return Error::Spending_ScriptLocked;  // Looks like this tx input script is inherently invalid.
     const auto lock_result = processor.Run(record.pubkey_script);

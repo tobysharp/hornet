@@ -3,6 +3,10 @@
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 
+#include <optional>
+
+#include "hornetlib/crypto/curve.h"
+#include "hornetlib/crypto/signature.h"
 #include "hornetlib/encoding/writer.h"
 #include "hornetlib/protocol/transaction.h"
 #include "hornetlib/protocol/script/lang/types.h"
@@ -17,42 +21,32 @@ namespace hornet::protocol::script::runtime {
 using lang::Bytes;
 using lang::Op;
 
-namespace {
-
-// TODO
-bool VerifyECDSASignature(const Hash& hash, Bytes signature, Bytes pubkey) {
-  // TODO: Check valid public key.
-
-  (void)hash;
-  (void)signature;
-  (void)pubkey;
-  return true;
-}
-
-}  // namespace
-
 // Op::CheckSig
 static void OnCheckSig(const Context& context) {
   // sig pubkey -- bool
-  context.Stack().Call([&](Bytes sig, Bytes pubkey) -> bool {
-    if (sig.empty()) return false;
+  context.Stack().Call([&](Bytes sigblob, Bytes pkblob) -> bool {
+    using namespace crypto::ecdsa;
     Assert(context.env.spend.has_value());
+
+    if (sigblob.empty()) return false;
 
     // TODO: Tapscript path: EvalChecksigTapscript.
     // TODO: Check signature and pubkey encodings: CheckSignatureEncoding, CheckPubKeyEncoding.
 
     // Create the spend digest, which is a 32-byte hash of transaction bytes committing to the spend.
-    const auto digest = BuildSpendDigest(*context.env.spend, sig, context.machine.script);
+    const auto digest = BuildSpendDigest(*context.env.spend, sigblob, context.machine.script);
 
     // Extract the DER-encoded ECDSA signature, which is up to 72 bytes.
-    const auto signature = sig.first(sig.size() - 1);
-    Assert(signature.size() <= 72u && signature[0] == 0x30);
+    const DERParseType parse_method = context.machine.policy.require_strict_der_signatures ? DERParseType::Strict : DERParseType::Lax;
+    const auto signature = ParseSignatureDER<secp256k1::Wide>(sigblob.first(sigblob.size() - 1), parse_method);
+    if (!signature) return false;
   
     // The public key is in 65-byte uncompressed SEC1 format.
-    Assert(pubkey.size() == 65u && pubkey[0] == 0x04);
+    const auto pubkey = secp256k1::PublicKeyFromUncompressed(pkblob);
+    if (!pubkey) return false;
 
     // Verify that the spend digest was signed by the private key corresponding to this public key.
-    return VerifyECDSASignature(digest, signature, pubkey);
+    return secp256k1::VerifySignature(*pubkey, *signature, digest);
   });
 }
 

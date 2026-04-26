@@ -21,8 +21,8 @@ namespace hornet::protocol::script {
 
 class Processor {
  public:
-  explicit Processor(bool require_minimal = true,  // Becomes execution policy
-                     int height = 0,               // Becomes environment context
+  explicit Processor(const runtime::Policy& policy = {},  // Execution policy
+                     int height = 0,                      // Becomes environment context
                      std::optional<SpendContext> spend = std::nullopt);
 
   // Runs until completion and returns the Boolean interpretation of the top-of-stack (or error).                     

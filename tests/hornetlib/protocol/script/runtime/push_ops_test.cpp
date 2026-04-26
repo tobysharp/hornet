@@ -153,7 +153,7 @@ TEST(ScriptStackTest, PushFalseyFinalStackFails) {
   Writer w;
   w.PushData(std::vector<uint8_t>{0x00});  // A falsey value that is not OP_0
 
-  Processor proc(/*require_minimal=*/false);
+  Processor proc(runtime::Policy{.require_minimal = false});
   ASSERT_FALSE(*proc.Run(w));
 }
 
@@ -188,7 +188,7 @@ TEST(ScriptStackTest, PushData4_NonMinimal_ValidUnderConsensus) {
   auto data = MakeData(520, 0x42);
   auto script = MakePushData4(data);
 
-  Processor proc(/*require_minimal=*/false);
+  Processor proc(runtime::Policy{.require_minimal = false});
   ASSERT_TRUE(*proc.Run(script));
 
   auto val = proc.TryPeek();
@@ -200,7 +200,7 @@ TEST(ScriptStackTest, PushData4_NonMinimal_RejectedByMinimalPolicy) {
   auto data = MakeData(520, 0x42);
   auto script = MakePushData4(data);
 
-  Processor proc(/*require_minimal=*/true);
+  Processor proc(runtime::Policy{.require_minimal = true});
   ASSERT_EQ(proc.Run(script), lang::Error::NonMinimalPush);
 }
 

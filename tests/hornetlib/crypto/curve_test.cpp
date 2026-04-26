@@ -38,20 +38,6 @@ inline constexpr Uint64 kToyOrder{7};
 using ToyCurve = Curve<64, kToyPrime, kToyA, kToyB, kToyGeneratorX, kToyGeneratorY, kToyOrder>;
 
 template <typename CurveType>
-typename CurveType::Point ParseUncompressedPublicKey(const std::array<uint8_t, 65>& bytes) {
-	EXPECT_EQ(bytes[0], 0x04);
-
-	std::array<uint8_t, 32> x_bytes;
-	std::array<uint8_t, 32> y_bytes;
-	std::copy(bytes.begin() + 1, bytes.begin() + 33, x_bytes.begin());
-	std::copy(bytes.begin() + 33, bytes.end(), y_bytes.begin());
-	std::reverse(x_bytes.begin(), x_bytes.end());
-	std::reverse(y_bytes.begin(), y_bytes.end());
-	return {typename CurveType::Mod_p{typename CurveType::Wide{x_bytes}},
-	        typename CurveType::Mod_p{typename CurveType::Wide{y_bytes}}};
-}
-
-template <typename CurveType>
 typename CurveType::Signature ParseDerSignature(const std::vector<uint8_t>& bytes) {
 	EXPECT_GE(bytes.size(), 8u);
 	EXPECT_EQ(bytes[0], 0x30);
@@ -207,6 +193,34 @@ TEST(CurveTest, Secp256k1GeneratorIsOnCurveAndValidPublicKey) {
 	EXPECT_TRUE((constants::n * secp256k1::G).IsInfinity());
 }
 
+TEST(CurveTest, Secp256k1PublicKeyFromUncompressedParsesAndValidates) {
+	const std::array<uint8_t, 65> public_key_bytes = {
+			0x04,
+			0x79, 0xbe, 0x66, 0x7e, 0xf9, 0xdc, 0xbb, 0xac,
+			0x55, 0xa0, 0x62, 0x95, 0xce, 0x87, 0x0b, 0x07,
+			0x02, 0x9b, 0xfc, 0xdb, 0x2d, 0xce, 0x28, 0xd9,
+			0x59, 0xf2, 0x81, 0x5b, 0x16, 0xf8, 0x17, 0x98,
+			0x48, 0x3a, 0xda, 0x77, 0x26, 0xa3, 0xc4, 0x65,
+			0x5d, 0xa4, 0xfb, 0xfc, 0x0e, 0x11, 0x08, 0xa8,
+			0xfd, 0x17, 0xb4, 0x48, 0xa6, 0x85, 0x54, 0x19,
+			0x9c, 0x47, 0xd0, 0x8f, 0xfb, 0x10, 0xd4, 0xb8,
+	};
+
+	const auto public_key = secp256k1::PublicKeyFromUncompressed(public_key_bytes);
+
+	ASSERT_TRUE(public_key.has_value());
+	EXPECT_EQ(public_key->x, secp256k1::G.x);
+	EXPECT_EQ(public_key->y, secp256k1::G.y);
+
+	auto wrong_prefix = public_key_bytes;
+	wrong_prefix[0] = 0x03;
+	EXPECT_FALSE(secp256k1::PublicKeyFromUncompressed(wrong_prefix).has_value());
+
+	auto off_curve = public_key_bytes;
+	++off_curve.back();
+	EXPECT_FALSE(secp256k1::PublicKeyFromUncompressed(off_curve).has_value());
+}
+
 TEST(CurveTest, Secp256k1VerifiesKnownDeterministicSignatureExample) {
 	const secp256k1::Point public_key{
 			secp256k1::Mod_p{"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"_h256},
@@ -253,10 +267,11 @@ TEST(CurveTest, Secp256k1VerifiesBitcoinExampleUsingRawDigestDerAndUncompressedP
 			0x21, 0xa8, 0x76, 0x8d, 0x1d, 0x09,
 	};
 
-	const auto public_key = ParseUncompressedPublicKey<secp256k1>(public_key_bytes);
+	const auto public_key = secp256k1::PublicKeyFromUncompressed(public_key_bytes);
 	const auto signature = ParseDerSignature<secp256k1>(signature_bytes);
 
-	EXPECT_TRUE(secp256k1::VerifySignature(public_key, signature, hashed_commitment_bytes));
+	ASSERT_TRUE(public_key.has_value());
+	EXPECT_TRUE(secp256k1::VerifySignature(*public_key, signature, hashed_commitment_bytes));
 }
 
 }  // namespace

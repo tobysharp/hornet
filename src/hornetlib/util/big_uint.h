@@ -12,6 +12,7 @@
 #include <cstring>
 #include <iomanip>
 #include <ostream>
+#include <span>
 #include <stdexcept>
 #include <tuple>
 
@@ -70,6 +71,19 @@ class BigUint {
 
   static constexpr BigUint Maximum() {
     return ~Zero();
+  }
+
+  static constexpr BigUint FromBigEndianBytes(std::span<const uint8_t> bytes) {
+    constexpr int kBytesPerWord = sizeof(T);
+    constexpr int kBytes = kWords * kBytesPerWord;
+    Assert(bytes.size() == kBytes);
+
+    BigUint result = Zero();
+    for (int i = 0; i < kWords; ++i) {
+      for (int j = 0; j < kBytesPerWord; ++j)
+        result.words_[i] |= T{bytes[kBytes - 1 - (i * kBytesPerWord + j)]} << (j << 3);
+    }
+    return result;
   }
 
   [[nodiscard]] constexpr std::pair<BigUint, bool> AddWithCarry(const BigUint& rhs, bool carry_in = false) const noexcept {

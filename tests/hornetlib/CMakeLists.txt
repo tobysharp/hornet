@@ -14,6 +14,7 @@ add_executable(hornetlib_tests
    crypto/curve_test.cpp
    crypto/hash_test.cpp
    crypto/fp_test.cpp
+   crypto/signature_test.cpp
    data/block_io_test.cpp
    data/chain_tree_test.cpp
    data/hashed_tree_test.cpp

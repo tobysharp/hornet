@@ -24,7 +24,12 @@ struct CommitMode {
   const uint8_t flags = std::to_underlying(CommitInputs::All) | std::to_underlying(CommitOutputs::All);
 
   constexpr CommitInputs InputsMode() const { return CommitInputs(flags & kInputsMask); }
-  constexpr CommitOutputs OutputsMode() const { return CommitOutputs(flags & kOutputsMask); }
+  constexpr CommitOutputs OutputsMode() const {
+    const uint8_t output_flags = flags & kOutputsMask;
+    if (output_flags == 2) return CommitOutputs::None;
+    if (output_flags == 3) return CommitOutputs::Single;
+    return CommitOutputs::All;
+  } 
   constexpr bool IsCommitOtherSequences() const { return OutputsMode() == CommitOutputs::All; }
 
   static constexpr uint8_t kInputsMask = 0x80;

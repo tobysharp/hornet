@@ -26,6 +26,7 @@ enum Version {
 // Execution policy defines specific rules for the script interpreter to follow.
 struct Policy {
   bool require_minimal = true;
+  bool require_strict_der_signatures = false;
 };
 
 // The virtual machine state.
