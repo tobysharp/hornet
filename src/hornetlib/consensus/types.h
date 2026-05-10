@@ -47,8 +47,9 @@ enum class Error {
   Transaction_BadCoinBaseSigScriptSize,
 
   // Spending
-  Spending_DuplicateOutPoint,
-  Spending_PrevoutNotUnspent,
+  Spending_OutPointDuplicate,
+  Spending_OutPointNotCreated,
+  Spending_OutPointSpent,
   Spending_PrematureSpend,
   Spending_OutputAmountsExceedInputAmounts,
   Spending_NonFinalTransaction,

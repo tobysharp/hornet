@@ -9,6 +9,34 @@
 namespace hornet::data::utxo {
 namespace {
 
+protocol::Transaction MakeCoinbaseLikeTransaction(int64_t amount = 50'000'000) {
+  protocol::Transaction tx;
+  tx.SetVersion(1);
+  tx.ResizeInputs(1);
+  tx.Input(0).previous_output = protocol::OutPoint::Null();
+  tx.Input(0).sequence = 0xffffffff;
+  tx.SetSignatureScript(0, std::vector<uint8_t>{0x02, 0x01});
+  tx.ResizeOutputs(1);
+  tx.Output(0).value = amount;
+  tx.SetPkScript(0, std::vector<uint8_t>{0x51});
+  tx.SetLockTime(0);
+  return tx;
+}
+
+protocol::Transaction MakeSpendTransaction(const protocol::OutPoint& prevout, int64_t amount = 1) {
+  protocol::Transaction tx;
+  tx.SetVersion(1);
+  tx.ResizeInputs(1);
+  tx.Input(0).previous_output = prevout;
+  tx.Input(0).sequence = 0xffffffff;
+  tx.SetSignatureScript(0, std::vector<uint8_t>{0x51});
+  tx.ResizeOutputs(1);
+  tx.Output(0).value = amount;
+  tx.SetPkScript(0, std::vector<uint8_t>{0x51});
+  tx.SetLockTime(0);
+  return tx;
+}
+
 TEST(SpendJoinerTest, TestConstruct) {
   test::Blockchain chain;
 
@@ -21,6 +49,24 @@ TEST(SpendJoinerTest, TestConstruct) {
   EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Init);
   EXPECT_FALSE(joiner.IsJoinReady());
   EXPECT_TRUE(joiner.IsAdvanceReady());
+}
+
+TEST(SpendJoinerTest, TestNoPrevoutsBlock) {
+  test::TempFolder dir;
+  Database db{dir.Path()};
+
+  auto block = std::make_shared<protocol::Block>();
+  block->AddTransaction(MakeCoinbaseLikeTransaction());
+
+  SpendJoiner joiner{db, block, 1};
+
+  while (joiner.IsAdvanceReady()) joiner.Advance();
+
+  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Joined);
+  EXPECT_TRUE(joiner.IsJoinReady());
+  EXPECT_TRUE(joiner.AllOutPointsCreated());
+  EXPECT_TRUE(joiner.AllOutPointsUnspent());
+  EXPECT_EQ(joiner.SpendSize(), 0);
 }
 
 TEST(SpendJoinerTest, TestPreemptiveSerial) {
@@ -410,6 +456,8 @@ TEST(SpendJoinerTest, TestIntraBlockFunding_CorrectOrder) {
 
   EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Joined);
   EXPECT_TRUE(joiner.IsJoinReady());
+  EXPECT_TRUE(joiner.AllOutPointsCreated());
+  EXPECT_TRUE(joiner.AllOutPointsUnspent());
 
   int callback_count = 0;
   const consensus::Result result = joiner.Join([&](const protocol::TransactionConstView&, std::span<const consensus::SpendRecord> spends) {
@@ -508,6 +556,108 @@ TEST(SpendJoinerTest, TestIntraBlockFunding_IncorrectOrder) {
   // Should fail because it can't find the input
   EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Error);
   EXPECT_FALSE(joiner.IsJoinReady());
+  EXPECT_FALSE(joiner.AllOutPointsCreated());
+  EXPECT_TRUE(joiner.AllOutPointsUnspent());
+}
+
+TEST(SpendJoinerTest, TestIntraBlockFunding_DuplicateLocalSpend) {
+  test::TempFolder dir;
+  Database db{dir.Path()};
+
+  auto block = std::make_shared<protocol::Block>();
+  block->SetHeader(protocol::BlockHeader{});
+
+  {
+    protocol::Transaction tx;
+    tx.ResizeInputs(1);
+    tx.Input(0).previous_output = protocol::OutPoint::Null();
+    tx.ResizeOutputs(1);
+    tx.Output(0).value = 1000;
+    block->AddTransaction(tx);
+  }
+
+  const protocol::OutPoint prevout{block->Transaction(0).GetHash(), 0};
+
+  {
+    protocol::Transaction tx;
+    tx.ResizeInputs(1);
+    tx.Input(0).previous_output = prevout;
+    tx.ResizeOutputs(1);
+    tx.Output(0).value = 900;
+    block->AddTransaction(tx);
+  }
+
+  {
+    protocol::Transaction tx;
+    tx.ResizeInputs(1);
+    tx.Input(0).previous_output = prevout;
+    tx.ResizeOutputs(1);
+    tx.Output(0).value = 800;
+    block->AddTransaction(tx);
+  }
+
+  SpendJoiner joiner{db, block, 1};
+
+  while (joiner.IsAdvanceReady())
+    joiner.Advance();
+
+  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Error);
+  EXPECT_FALSE(joiner.IsJoinReady());
+  EXPECT_TRUE(joiner.AllOutPointsCreated());
+  EXPECT_FALSE(joiner.AllOutPointsUnspent());
+}
+
+TEST(SpendJoinerTest, TestSpentAncestorPrevoutIsCreatedButNotUnspent) {
+  test::TempFolder dir;
+  Database db{dir.Path()};
+
+  test::Blockchain chain = test::Blockchain::Generate(120, 3, true);
+  for (int height = 1; height < chain.Length(); ++height) db.Append(*chain[height], height);
+
+  ASSERT_GT(chain.SpentSize(), 0);
+
+  auto block = std::make_shared<protocol::Block>();
+  block->AddTransaction(MakeCoinbaseLikeTransaction());
+
+  const auto spent_prevout = chain.Spent(0).prevout;
+  block->AddTransaction(MakeSpendTransaction(spent_prevout, 1));
+
+  SpendJoiner joiner{db, block, chain.Length()};
+
+  while (joiner.IsAdvanceReady()) joiner.Advance();
+
+  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Error);
+  EXPECT_FALSE(joiner.IsJoinReady());
+  EXPECT_TRUE(joiner.AllOutPointsCreated());
+  EXPECT_FALSE(joiner.AllOutPointsUnspent());
+}
+
+TEST(SpendJoinerTest, TestNonAdjacentDuplicatePrevoutsAreSpent) {
+  test::TempFolder dir;
+  Database db{dir.Path()};
+
+  test::Blockchain chain = test::Blockchain::Generate(120, 3, true);
+  for (int height = 1; height < chain.Length(); ++height) db.Append(*chain[height], height);
+
+  ASSERT_GT(chain.UnspentSize(), 1);
+
+  const auto duplicate_prevout = chain.Unspent(0).prevout;
+  const auto distinct_prevout = chain.Unspent(1).prevout;
+
+  auto block = std::make_shared<protocol::Block>();
+  block->AddTransaction(MakeCoinbaseLikeTransaction());
+  block->AddTransaction(MakeSpendTransaction(duplicate_prevout, 2));
+  block->AddTransaction(MakeSpendTransaction(distinct_prevout, 2));
+  block->AddTransaction(MakeSpendTransaction(duplicate_prevout, 2));
+
+  SpendJoiner joiner{db, block, chain.Length()};
+
+  while (joiner.IsAdvanceReady()) joiner.Advance();
+
+  EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Error);
+  EXPECT_FALSE(joiner.IsJoinReady());
+  EXPECT_TRUE(joiner.AllOutPointsCreated());
+  EXPECT_FALSE(joiner.AllOutPointsUnspent());
 }
 
 }  // namespace

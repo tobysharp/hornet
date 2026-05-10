@@ -36,11 +36,6 @@ class Database {
 
   static void SortIds(std::span<OutputId> rids);
 
-  static int ParseBlockPrevouts(const protocol::Block& block, int height,
-                                std::span<InputHeader> inputs, std::span<OutputKey> keys,
-                                std::span<OutputId> rids, std::span<OutputDetail> outputs,
-                                std::vector<uint8_t>& scripts);
-
   // Queries the whole database for each prevout and writes their IDs into the equivalent slots of
   // ids. Returns the number of matches found.
   int Query(std::span<const OutputKey> keys, std::span<OutputId> rids, int before) const {
@@ -101,56 +96,6 @@ inline Database::Database(const std::filesystem::path& folder) : table_(folder) 
       if (!input.previous_output.IsNull()) *pkey++ = input.previous_output;
 
   return keys;  // Returns unsorted.
-}
-
-inline int Database::ParseBlockPrevouts(const protocol::Block& block, int height,
-                                        std::span<InputHeader> inputs, std::span<OutputKey> keys,
-                                        std::span<OutputId> rids, std::span<OutputDetail> outputs,
-                                        std::vector<uint8_t>& scripts) {
-  struct HashFn {
-    size_t operator()(const OutputKey& prevout) const {
-      size_t prefix;
-      std::memcpy(&prefix, prevout.hash.data(), sizeof(prefix));
-      return std::hash<size_t>{}(prefix ^ prevout.index);
-    }
-  };
-  std::unordered_map<OutputKey, int, HashFn> map;
-  int local_count = 0;
-  int cursor = 0;
-
-  for (int i = 0; i < block.GetTransactionCount(); ++i) {
-    const auto tx = block.Transaction(i);
-    for (int j = 0; j < tx.InputCount(); ++j) {
-      const auto& prevout = tx.Input(j).previous_output;
-      if (!prevout.IsNull()) {
-        // First search the previous transactions in this local block.
-        const auto local_it = map.find(prevout);
-        inputs[cursor] = {i, j};
-        keys[cursor] = prevout;
-        if (local_it != map.end()) {
-          // If the prevout was found in the same block, write the funding data here.
-          const auto& funding_tx = block.Transaction(local_it->second);
-          if (prevout.index >= static_cast<uint32_t>(funding_tx.OutputCount())) return -1;
-          const auto pk_script = funding_tx.PkScript(prevout.index);
-          rids[cursor] = kLocalOutputId;
-          const OutputHeader header{height, funding_tx.IsCoinBase(), funding_tx.Output(prevout.index).value};
-          const util::SubArray<uint8_t> sub_array = {static_cast<int>(std::ssize(scripts)),
-                                                     static_cast<int>(std::ssize(pk_script))};
-          scripts.insert(scripts.end(), pk_script.begin(), pk_script.end());
-          outputs[cursor] = {header, sub_array};
-          map.erase(local_it);
-          ++local_count;
-        } else {
-          rids[cursor] = kNullOutputId;
-        }
-        ++cursor;
-      }
-    }
-    // Add the transactions' outputs into the local map.
-    for (int j = 0; j < tx.OutputCount(); ++j)
-      map.emplace(OutputKey{tx.GetHash(), static_cast<uint32_t>(j)}, i);
-  }
-  return local_count;
 }
 
 inline QueryResult Database::Query(std::span<const OutputKey> keys, std::span<OutputId> rids,

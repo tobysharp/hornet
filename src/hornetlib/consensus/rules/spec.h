@@ -41,7 +41,7 @@ static constexpr auto kConsensusRules = All{
       Rule{ValidateOutputsNonNegative},       // All transaction output amounts MUST be non-negative.
       Rule{ValidateOutputsSum},               // The sum of a transaction's output amounts MUST NOT exceed 21,000,000 coins.
       Rule{ValidateUniqueInputs},             // A transaction's inputs MUST NOT contain duplicate outpoints.
-      Rule{ValidateCoinbaseSignatureSize},    // A coinbase transaction's sig script size MUST be between 2 and 100 bytes inclusive.
+      Rule{ValidateCoinbaseSignatureSize},    // A coinbase's sig script size MUST be between 2 and 100 bytes inclusive.
       Rule{ValidateInputsPrevout}             // A non-coinbase transaction's inputs MUST have non-null previous outputs.    
     }}}, 
   All{                                        // ## Contextual Rules
@@ -49,7 +49,7 @@ static constexpr auto kConsensusRules = All{
     Rule{ValidateNoWitnessPreSegwit},         // A pre-SegWit block MUST NOT contain any witness data.
     Rule{ValidateBlockWeight},                // A block’s total weight MUST NOT exceed 4,000,000 weight units.
     From(BIP::HeightInCoinbase,
-      Rule{ValidateCoinbaseHeight}),          // From BIP34: The coinbase transaction’s sig script MUST begin by pushing the block height.
+      Rule{ValidateCoinbaseHeight}),          // From BIP34: A coinbase's sig script MUST begin by pushing the block height.
     From(BIP::SegWit, With{MakeWitnessContext, All{
       Rule{ValidateWitnessCommitment},        // From BIP141: A block containing witness data MUST contain a witness commitment.
       Rule{ValidateWitnessNonce},             // From BIP141: A post-Segwit block containing a witness commitment MUST contain a witness nonce.
@@ -57,8 +57,9 @@ static constexpr auto kConsensusRules = All{
     }})
   }}},
   With{MakeBlockSpendContext, All{            // ## Spending Rules
-    Rule{ValidateOutPointsUnique},            // Transaction outputs MUST NOT give rise to duplicates of existing unspent outpoints (BIP30).
-    Rule{ValidateInputPrevoutsUnspent},       // A transaction input MUST reference a previous transaction output that remains unspent.
+    Rule{ValidateOutPointsUnique},            // BIP30: Transaction outputs MUST NOT give rise to outpoints that reference existing unspent outputs, except in blocks listed in BIP30 Exceptions.
+    Rule{ValidateInputPrevoutsCreated},       // A non-coinbase input MUST reference an output created in a preceding transaction.
+    Rule{ValidateInputPrevoutsUnspent},       // A non-coinbase input MUST NOT reference an output that was spent in a preceding transaction.
     Rule{ValidateSigOpCosts},                 // The total signature-operation cost over all transactions MUST NOT exceed 80,000.
     Rule{ValidateBlockSubsidy},               // The total amount in coinbase outputs MUST NOT exceed the block reward.
     Each{SpendsInBlock{}, MakeTransactionSpendContext{}, All{
