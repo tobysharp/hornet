@@ -93,7 +93,7 @@ Timechain|A *timechain* is a tree of validated blocks.
 Proof of Work|A 256-bit hash must be found that does not exceed a given target value. 
 Preceding Transaction|A preceding transaction is one that appears in an ancestor block or earlier in the current block.
 Outpoint|An outpoint contains a transaction hash and output index. In a transaction input, it references the output of the most recent preceding transaction with the specified hash and index.
-Spent|An output is spent when it is referenced by a transaction input.
+Spent|An output is spent when it is referenced by a transaction input's outpoint.
 Coinbase|A coinbase is a transaction with exactly one input whose outpoint is null.
 Witness|Witness data is segregated transaction input data committed separately under SegWit rules.
 Signature Operation|A signature operation is a script accounting unit associated with signature-checking opcodes.
