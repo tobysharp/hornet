@@ -76,9 +76,9 @@ static constexpr auto kSpendingTransactionRules = All{
 
 // ## Spending Rules
 static constexpr auto kSpendingRules = All{
-  Rule{ValidateOutPointsUnique},          // Transaction outputs MUST NOT give rise to duplicates of existing unspent outpoints (BIP30).
+  Rule{ValidateOutPointsUnique},          // BIP30: Transaction outputs MUST NOT give rise to outpoints that reference existing unspent outputs, except in blocks listed in BIP30 Exceptions.
   Rule{ValidateInputPrevoutsCreated},     // A non-coinbase input MUST reference an output created by a preceding transaction.
-  Rule{ValidateInputPrevoutsUnspent},     // A non-coinbase input's referenced output MUST NOT have been spent by a preceding transaction.
+  Rule{ValidateInputPrevoutsUnspent},     // A non-coinbase input MUST NOT reference an output that was spent in a preceding transaction.
   Rule{ValidateSigOpCosts},               // The total signature-operation cost over all transactions MUST NOT exceed 80,000.
   Rule{ValidateBlockSubsidy},             // The total amount in coinbase outputs MUST NOT exceed the block subsidy plus its total fees.
   Each{SpendsInBlock{}, MakeTransactionSpendContext{}, kSpendingTransactionRules}

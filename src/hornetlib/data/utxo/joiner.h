@@ -80,7 +80,7 @@ class SpendJoiner {
                                           // an attempted double-spend.
 
     bool IsAnyUnresolved() const { return found_spent + found_unspent < prevout_count; }
-    bool IsAnySpent() const { return found_spent > 0 || has_duplicate_prevouts; }
+    bool IsAnySpent() const { return found_spent > 0 || (!IsAnyUnresolved() && has_duplicate_prevouts); }
     bool IsFetchComplete() const { return fetched_count == prevout_count; }
   };
   struct JoinedSpendStorage {
@@ -425,12 +425,6 @@ inline void SpendJoiner::GotoError() {
   ReleaseQuery();
   ReleaseJoin();
 }
-
-// inline bool SpendJoiner::WaitForQuery() const {
-//   release_query_.wait(false);
-//   if (state_ == State::Cancelled) throw CancelledException{};
-//   return state_ != State::Error;
-// }
 
 // Blocks until all previous blocks have been appended to the database, ready to call AllOutPointsUnique.
 inline void SpendJoiner::WaitForDependencies() const {
