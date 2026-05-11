@@ -74,22 +74,23 @@ class JoinedSpendRange {
   const VTable* vtable_ = nullptr;
 };
 
-// The unspent outputs view abstracts the accumulated UTXO state of the chain. Implementations MUST enforce transaction
+// The chain outputs view abstracts the accumulated UTXO state of the chain. Implementations MUST enforce transaction
 // ordering: "preceding transaction" means any transaction in an ancestor block, or an earlier transaction in the
 // current block. Intra-block forward references MUST be treated as non-existent.
-class UnspentOutputsView {
+class ChainOutputsView {
  public:
-  virtual ~UnspentOutputsView() = default;
+  virtual ~ChainOutputsView() = default;
 
-  // Returns success iff every spending input in this block references an output created by a preceding transaction.
-  virtual bool QueryOutPointsCreated(const protocol::Block& block) const = 0;
-
-  // Returns success iff no spending input in this block references an output spent by a preceding transaction.
-  virtual bool QueryOutPointsUnspent(const protocol::Block& block) const = 0;
-
-  // Returns success iff no output in this block duplicates an unspent outpoint created by a preceding transaction
+  // [S01] Returns success iff no output in this block duplicates an unspent outpoint created by a preceding transaction
   // (BIP30).
   virtual bool QueryOutPointsUnique(const protocol::Block& block) const = 0;
+
+  // [S02] Returns success iff every spending input in this block references an output created by a preceding
+  // transaction.
+  virtual bool QueryPreviousOutputsCreated(const protocol::Block& block) const = 0;
+
+  // [S03] Returns success iff no spending input in this block references an output spent by a preceding transaction.
+  virtual bool QueryPreviousOutputsUnspent(const protocol::Block& block) const = 0;
 
   virtual std::optional<JoinedSpendRange> Spends(const protocol::Block& block) const = 0;
 };

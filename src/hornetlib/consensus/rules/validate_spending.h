@@ -104,16 +104,6 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
   return {rhs.block, rhs.view, rhs.unspent, rhs.view.Length(), GetScriptVerifyFlags(rhs)};
 }
 
-// A non-coinbase input MUST reference an output created in a preceding transaction.
-[[nodiscard]] inline Result ValidateInputPrevoutsCreated(const BlockSpendContext& context) {
-  return context.unspent.QueryOutPointsCreated(context.block) ? Result::Ok : Error::Spending_OutPointNotCreated;
-}
-
-// A non-coinbase input MUST NOT reference an output that was spent in a preceding transaction.
-[[nodiscard]] inline Result ValidateInputPrevoutsUnspent(const BlockSpendContext& context) {
-  return context.unspent.QueryOutPointsUnspent(context.block) ? Result::Ok : Error::Spending_OutPointSpent;
-}
-
 // BIP30: Transaction outputs MUST NOT give rise to outpoints that reference existing unspent outputs, except in blocks
 // listed in BIP30 Exceptions.
 [[nodiscard]] inline Result ValidateOutPointsUnique(const BlockSpendContext& context) {
@@ -139,6 +129,16 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
 
   // In all other cases, we must validate that no transaction creates a duplicate UTXO.
   return context.unspent.QueryOutPointsUnique(context.block) ? Result::Ok : Error::Spending_OutPointDuplicate;
+}
+
+// A non-coinbase input MUST reference an output created in a preceding transaction.
+[[nodiscard]] inline Result ValidateInputPrevoutsCreated(const BlockSpendContext& context) {
+  return context.unspent.QueryPreviousOutputsCreated(context.block) ? Result::Ok : Error::Spending_OutPointNotCreated;
+}
+
+// A non-coinbase input MUST NOT reference an output that was spent in a preceding transaction.
+[[nodiscard]] inline Result ValidateInputPrevoutsUnspent(const BlockSpendContext& context) {
+  return context.unspent.QueryPreviousOutputsUnspent(context.block) ? Result::Ok : Error::Spending_OutPointSpent;
 }
 
 // The total signature-operation cost over all transactions MUST NOT exceed 80,000.

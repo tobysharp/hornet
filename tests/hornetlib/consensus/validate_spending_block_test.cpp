@@ -13,19 +13,19 @@
 namespace hornet::consensus::rules {
 namespace {
 
-using hornet::test::NullSpendsUnspentOutputsView;
+using hornet::test::NullSpendsChainOutputsView;
 using hornet::test::StubHeaderAncestryView;
 
 using hornet::test::MakeCoinbaseLikeTransaction;
 using hornet::test::MakeSpendTransaction;
 
-class ConfigurableUnspentOutputsView : public UnspentOutputsView {
+class ConfigurableChainOutputsView : public ChainOutputsView {
  public:
-  ConfigurableUnspentOutputsView(bool created, bool unspent, bool unique)
+  ConfigurableChainOutputsView(bool created, bool unspent, bool unique)
       : created_(created), unspent_(unspent), unique_(unique) {}
 
-  bool QueryOutPointsCreated(const protocol::Block&) const override { return created_; }
-  bool QueryOutPointsUnspent(const protocol::Block&) const override { return unspent_; }
+  bool QueryPreviousOutputsCreated(const protocol::Block&) const override { return created_; }
+  bool QueryPreviousOutputsUnspent(const protocol::Block&) const override { return unspent_; }
   bool QueryOutPointsUnique(const protocol::Block&) const override { return unique_; }
   std::optional<JoinedSpendRange> Spends(const protocol::Block&) const override { return std::nullopt; }
 
@@ -74,7 +74,7 @@ Result EvaluateCandidateSpendingRule(const test::Blockchain& chain, const protoc
 TEST(ValidateSpendingBlockTest, ValidateInputPrevoutsCreatedMapsFalseToNotCreated) {
   protocol::Block block;
   StubHeaderAncestryView ancestry;
-  ConfigurableUnspentOutputsView unspent{false, true, true};
+  ConfigurableChainOutputsView unspent{false, true, true};
 
   EXPECT_EQ(ValidateInputPrevoutsCreated({block, ancestry, unspent, 1, 0}),
             Error::Spending_OutPointNotCreated);
@@ -83,7 +83,7 @@ TEST(ValidateSpendingBlockTest, ValidateInputPrevoutsCreatedMapsFalseToNotCreate
 TEST(ValidateSpendingBlockTest, ValidateInputPrevoutsUnspentMapsFalseToSpent) {
   protocol::Block block;
   StubHeaderAncestryView ancestry;
-  ConfigurableUnspentOutputsView unspent{true, false, true};
+  ConfigurableChainOutputsView unspent{true, false, true};
 
   EXPECT_EQ(ValidateInputPrevoutsUnspent({block, ancestry, unspent, 1, 0}),
             Error::Spending_OutPointSpent);
@@ -92,7 +92,7 @@ TEST(ValidateSpendingBlockTest, ValidateInputPrevoutsUnspentMapsFalseToSpent) {
 TEST(ValidateSpendingBlockTest, ValidateOutPointsUniqueMapsFalseToDuplicate) {
   protocol::Block block;
   StubHeaderAncestryView ancestry;
-  ConfigurableUnspentOutputsView unspent{true, true, false};
+  ConfigurableChainOutputsView unspent{true, true, false};
 
   EXPECT_EQ(ValidateOutPointsUnique({block, ancestry, unspent, 1, 0}),
             Error::Spending_OutPointDuplicate);
@@ -136,7 +136,7 @@ TEST(ValidateSpendingBlockTest, ValidateBlockSubsidySucceedsWhenJoinedSpendsUnav
   test::FixMerkleRoot(candidate);
 
   StubHeaderAncestryView ancestry;
-  NullSpendsUnspentOutputsView unspent;
+  NullSpendsChainOutputsView unspent;
 
   EXPECT_EQ(ValidateBlockSubsidy({candidate, ancestry, unspent, 1, 0}), Result{});
 }

@@ -48,7 +48,7 @@ namespace hornet::consensus::rules {
                                         const protocol::BlockHeader& parent,
                                         const HeaderAncestryView& view,
                                         const int64_t current_time,
-                                        const UnspentOutputsView& unspent) {
+                                        const ChainOutputsView& unspent) {
   const BlockValidationContext context{block, parent, view, current_time, unspent};
   return Validate(kBlockRules, context);
 }

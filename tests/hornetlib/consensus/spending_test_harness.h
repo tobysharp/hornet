@@ -41,15 +41,15 @@ consensus::Result WithCandidateSpendState(const Blockchain& chain, const protoco
   while (joiner->IsAdvanceReady()) joiner->Advance();
   if (!joiner->IsJoinReady()) {
     const data::utxo::DatabaseView utxo{joiner};
-    if (!utxo.QueryOutPointsCreated(*joiner->GetBlock())) return consensus::Error::Spending_OutPointNotCreated;
-    if (!utxo.QueryOutPointsUnspent(*joiner->GetBlock())) return consensus::Error::Spending_OutPointSpent;
+    if (!utxo.QueryPreviousOutputsCreated(*joiner->GetBlock())) return consensus::Error::Spending_OutPointNotCreated;
+    if (!utxo.QueryPreviousOutputsUnspent(*joiner->GetBlock())) return consensus::Error::Spending_OutPointSpent;
     return consensus::Error::Spending_OutPointSpent;
   }
 
   return std::forward<Callback>(callback)(*ancestry, joiner, height);
 }
 
-class StaticUnspentOutputsView : public consensus::UnspentOutputsView {
+class StaticChainOutputsView : public consensus::ChainOutputsView {
  public:
   struct Entry {
     protocol::Transaction tx;
@@ -60,8 +60,8 @@ class StaticUnspentOutputsView : public consensus::UnspentOutputsView {
     entries_.push_back({std::move(tx), std::move(spends)});
   }
 
-  bool QueryOutPointsCreated(const protocol::Block&) const override { return true; }
-  bool QueryOutPointsUnspent(const protocol::Block&) const override { return true; }
+  bool QueryPreviousOutputsCreated(const protocol::Block&) const override { return true; }
+  bool QueryPreviousOutputsUnspent(const protocol::Block&) const override { return true; }
   bool QueryOutPointsUnique(const protocol::Block&) const override { return true; }
 
   std::optional<consensus::JoinedSpendRange> Spends(const protocol::Block&) const override {
@@ -79,10 +79,10 @@ class StaticUnspentOutputsView : public consensus::UnspentOutputsView {
   std::vector<Entry> entries_;
 };
 
-class NullSpendsUnspentOutputsView : public consensus::UnspentOutputsView {
+class NullSpendsChainOutputsView : public consensus::ChainOutputsView {
  public:
-  bool QueryOutPointsCreated(const protocol::Block&) const override { return true; }
-  bool QueryOutPointsUnspent(const protocol::Block&) const override { return true; }
+  bool QueryPreviousOutputsCreated(const protocol::Block&) const override { return true; }
+  bool QueryPreviousOutputsUnspent(const protocol::Block&) const override { return true; }
   bool QueryOutPointsUnique(const protocol::Block&) const override { return true; }
 
   std::optional<consensus::JoinedSpendRange> Spends(const protocol::Block&) const override {

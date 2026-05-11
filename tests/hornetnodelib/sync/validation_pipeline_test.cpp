@@ -184,7 +184,7 @@ TEST(ValidationPipelineTest, ProcessInvalidUTXO) {
     FAIL() << "Test file \"" << path << "\" was missing. Run tools/minetests.sh then re-run test.";
   }
 
-  const consensus::Error expected = consensus::Error::Spending_OutPointSpent;
+  const consensus::Error expected = consensus::Error::Spending_OutPointNotCreated;
   EXPECT_EQ(ValidateInOrder(path), expected);
   EXPECT_EQ(ValidateOutOfOrder(path), expected);
   EXPECT_EQ(ValidateShuffle(path), expected);
