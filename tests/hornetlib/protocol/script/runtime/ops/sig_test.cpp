@@ -52,7 +52,7 @@ TEST(SigOpsTest, CheckSigAcceptsCompressedSecp256k1PublicKeyOnLegacySpend) {
 
   script::SpendContext spend{tx, 0, script::SpendPath::LegacyDirect};
   script::Processor processor{Policy{.require_minimal = false, .require_strict_der_signatures = false},
-                              0,
+                              //0,
                               std::make_optional(spend)};
 
   ASSERT_TRUE(*processor.Run(unlocking_script));

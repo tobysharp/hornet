@@ -22,7 +22,7 @@ namespace hornet::protocol::script {
 class Processor {
  public:
   explicit Processor(const runtime::Policy& policy = {},  // Execution policy
-                     int height = 0,                      // Becomes environment context
+                     //int height = 0,                      // Becomes environment context
                      std::optional<SpendContext> spend = std::nullopt);
 
   // Runs until completion and returns the Boolean interpretation of the top-of-stack (or error).                     

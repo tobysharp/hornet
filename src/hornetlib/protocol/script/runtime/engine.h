@@ -47,7 +47,7 @@ struct Machine {
 // The external environment in which the script execution is contextualized:
 // the transaction, block height, address type, etc.
 struct Environment {
-  int height = 0;
+  //int height = 0;
   Version version = Version::Legacy;
   std::optional<SpendContext> spend;
 };

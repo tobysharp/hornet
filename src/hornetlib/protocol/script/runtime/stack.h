@@ -21,10 +21,7 @@ namespace hornet::protocol::script::runtime {
 
 class Stack {
  public:
-  Stack() {
-    data_.reserve(kMaxItemSize * kMaxItems);
-    items_.reserve(kMaxItems);
-  }
+  Stack() = default;
 
   bool Empty() const { return items_.empty(); }
 

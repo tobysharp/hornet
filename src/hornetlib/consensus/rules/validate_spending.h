@@ -12,6 +12,7 @@
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/hash.h"
 #include "hornetlib/protocol/script/processor.h"
+#include "hornetlib/protocol/script/satisfy.h"
 #include "hornetlib/protocol/script/spend.h"
 #include "hornetlib/protocol/transaction.h"
 #include "hornetlib/util/algorithm.h"
@@ -106,27 +107,18 @@ namespace hornet::consensus::rules {
   for (int i = 0; i < context.tx.InputCount(); ++i) {
     const SpendRecord& record = context.spends[i];
     Assert(record.spend_input_index == i);  // If this isn't always true, I need to understand why not. If it is, then
-                                           // the input_index field can be removed from SpendRecord.
+                                            // the input_index field can be removed from SpendRecord.
 
-    Assert(!scripts::IsPayToScriptHash(record.pubkey_script));
-    Assert(!scripts::WitnessProgram::Parse(record.pubkey_script));
-
-    const bool is_strict_der_signatures = IsBIPActiveAtHeight(BIP::StrictDERSignatures, context.height);
-  
-    // We execute the unlocking script (scriptSig) followed by the locking script (scriptPubKey) sequentially using the
-    // same stack to prevent script concatenation attacks. (See CVE-2010-5141.)
-    protocol::script::SpendContext spend = { context.tx, record.spend_input_index, protocol::script::SpendPath::LegacyDirect };
-    protocol::script::runtime::Policy policy = { false, is_strict_der_signatures };
-    protocol::script::Processor processor{policy, context.height, std::make_optional(spend)};
-    if (const auto unlock_result = processor.Run(context.tx.SignatureScript(i)); !unlock_result) 
-      return Error::Spending_ScriptLocked;  // Looks like this tx input script is inherently invalid.
-    const auto lock_result = processor.Run(record.pubkey_script);
-    if (!lock_result || !*lock_result) return Error::Spending_ScriptLocked;
-
-    // TODO: Witness programs...
-    // TODO: P2SH scripts...
-    // TODO: Cleanstack check only for policy not consensus
-    // TODO: Witness => P2SH check
+    protocol::script::SpendData data{
+        .tx = context.tx,
+        .input_index = i,
+        .prevout = {.pubkey_script = record.pubkey_script,
+                    .amount = record.amount,
+                    .funding_height = record.funding_height,
+                    .is_coinbase = record.IsCoinbase()},
+    };
+    const auto result = protocol::script::SatisfiesLockingScript(data);
+    if (!result || !*result) return Error::Spending_ScriptLocked;
   }
 
   return {};

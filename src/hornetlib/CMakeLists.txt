@@ -11,6 +11,7 @@ add_library(hornetlib STATIC
    protocol/script/runtime/ops/sig.cpp
    protocol/script/runtime/ops/stack.cpp
    protocol/script/runtime/signing.cpp
+   protocol/script/satisfy.cpp
    util/notify.cpp
 )
 target_compile_features(hornetlib PRIVATE cxx_std_20)
