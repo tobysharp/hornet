@@ -93,22 +93,11 @@ namespace hornet::consensus::rules {
 
   Assert(context.tx.InputCount() == std::ssize(context.spends));
 
-  // Core first checks in a script execution result cache.
-  // Next it precomputes the SHA256 hash of various quantities depending on whether the tx uses BIP143 or BIP341.
-  // Then the actual execution is in the VerifyScript / EvalScript functions.
-
-  // const uint64_t flags = 0;  // TODO
-  // const bool require_minimal = false;  // Not used for validating blocks.
-
-  // We need the script flags. These are determined by block hash and height in GetBlockScriptFlags.
-  //    - Generally p2sh, witness, and taproot. By activation height, dersig (BIP66), checklocktimeverify (BIP65),
-  //    checksequenceverify (BIP112), and nulldummy (BIP147).
-
   for (int i = 0; i < context.tx.InputCount(); ++i) {
     const SpendRecord& record = context.spends[i];
-    Assert(record.spend_input_index == i);  // If this isn't always true, I need to understand why not. If it is, then
-                                            // the input_index field can be removed from SpendRecord.
-
+    Assert(record.spend_input_index == i);  
+    // TODO: Implies the input_index field can be removed from SpendRecord.
+  
     protocol::script::SpendData data{
         .tx = context.tx,
         .input_index = i,
