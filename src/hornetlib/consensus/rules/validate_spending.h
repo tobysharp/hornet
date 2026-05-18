@@ -23,17 +23,6 @@ namespace hornet::consensus::rules {
 // Spending validation rules per input
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Each pre-Taproot script required to determine whether an input successfully spends its previous output MUST NOT exceed 10,000 bytes.
-[[nodiscard]] inline Result ValidateScriptSize(const InputSpendContext& context) {
-  constexpr int kMaxScriptBytes = 10'000;
-  const auto scripts = { context.spend.pubkey_script, context.tx.SignatureScript(context.spend.spend_input_index) };
-  
-  for (auto script : scripts) 
-    if (std::ssize(script) > kMaxScriptBytes) return Error::Spending_OversizedScript;
-
-  return {};
-}
-
 // A non-coinbase input MUST satisfy the spent output's locking script.
 [[nodiscard]] inline Result ValidateScripts(const InputSpendContext& context) {
   if (context.tx.IsCoinBase()) return {};
@@ -48,6 +37,17 @@ namespace hornet::consensus::rules {
   };
   const auto result = protocol::script::SatisfiesLockingScript(data);
   if (!result || !*result) return Error::Spending_ScriptLocked;
+
+  return {};
+}
+
+// A pre-Taproot script dependency of a non-coinbase input spend MUST NOT exceed 10,000 bytes.
+[[nodiscard]] inline Result ValidateScriptSize(const InputSpendContext& context) {
+  constexpr int kMaxScriptBytes = 10'000;
+  const auto scripts = { context.spend.pubkey_script, context.tx.SignatureScript(context.spend.spend_input_index) };
+  
+  for (auto script : scripts) 
+    if (std::ssize(script) > kMaxScriptBytes) return Error::Spending_OversizedScript;
 
   return {};
 }

@@ -72,14 +72,15 @@ C07|From BIP141: A post-SegWit block containing a witness commitment MUST commit
 |
 ||**Spending Rules**
 |
-S01|Transaction outputs MUST NOT give rise to duplicates of existing unspent outpoints (BIP30).|[`ValidateOutPointsUnique`](../src/hornetlib/consensus/rules/validate_spending.h#L114)
-S02|A transaction input MUST reference a previous transaction output that remains unspent.|[`ValidateInputPrevoutsUnspent`](../src/hornetlib/consensus/rules/validate_spending.h#L109)
-S03|The total signature-operation cost over all transactions MUST NOT exceed 80,000.|[`ValidateSigOpCosts`](../src/hornetlib/consensus/rules/validate_spending.h#L141)
-S04|The total amount in coinbase outputs MUST NOT exceed the block reward.|[`ValidateBlockSubsidy`](../src/hornetlib/consensus/rules/validate_spending.h#L155)
-S05|The sum of output values in a transaction MUST NOT exceed the sum of all input values being spent.|[`ValidateOutputsAtMostInputs`](../src/hornetlib/consensus/rules/validate_spending.h#L38)
-S06|A non-coinbase input MUST satisfy the spent output's locking script.|[`ValidateScripts`](../src/hornetlib/consensus/rules/validate_spending.h#L89)
-S07|From BIP68: Each input that signals a relative lock-time interval MUST have reached relative finality.|[`ValidateSequenceLocks`](../src/hornetlib/consensus/rules/validate_spending.h#L47)
-S08|Coinbase outputs MUST NOT be spent before 100 blocks after their creation.|[`ValidateCoinbaseMaturity`](../src/hornetlib/consensus/rules/validate_spending.h#L24)
+S01|Transaction outputs MUST NOT give rise to duplicates of existing unspent outpoints (BIP30).|[`ValidateOutPointsUnique`](../src/hornetlib/consensus/rules/validate_spending.h#L139)
+S02|A transaction input MUST reference a previous transaction output that remains unspent.|[`ValidateInputPrevoutsUnspent`](../src/hornetlib/consensus/rules/validate_spending.h#L134)
+S03|The total signature-operation cost over all transactions MUST NOT exceed 80,000.|[`ValidateSigOpCosts`](../src/hornetlib/consensus/rules/validate_spending.h#L165)
+S04|The total amount in coinbase outputs MUST NOT exceed the block reward.|[`ValidateBlockSubsidy`](../src/hornetlib/consensus/rules/validate_spending.h#L179)
+S05|The sum of output values in a transaction MUST NOT exceed the sum of all input values being spent.|[`ValidateOutputsAtMostInputs`](../src/hornetlib/consensus/rules/validate_spending.h#L70)
+S06|From BIP68: Each input that signals a relative lock-time interval MUST have reached relative finality.|[`ValidateSequenceLocks`](../src/hornetlib/consensus/rules/validate_spending.h#L78)
+S07|A non-coinbase input MUST satisfy the spent output's locking script.|[`ValidateScripts`](../src/hornetlib/consensus/rules/validate_spending.h#L27)
+S08|A pre-Taproot script dependency of a non-coinbase input spend MUST NOT exceed 10,000 bytes.|[`ValidateScriptSize`](../src/hornetlib/consensus/rules/validate_spending.h#L45)
+S09|Coinbase outputs MUST NOT be spent before 100 blocks after their creation.|[`ValidateCoinbaseMaturity`](../src/hornetlib/consensus/rules/validate_spending.h#L56)
 
 ## Definitions
 

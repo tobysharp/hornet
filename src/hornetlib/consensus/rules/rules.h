@@ -69,8 +69,8 @@ static constexpr auto kSpendingTransactionRules = All{
   From(BIP::SequenceLocks,
     Rule{ValidateSequenceLocks}),         // From BIP68: Each input that signals a relative lock-time interval MUST have reached relative finality.
   Each{InputsInSpend{}, MakeInputSpendContext{}, All{
-    Rule{ValidateScriptSize},             // A pre-Taproot script required to determine whether an input successfully spends its previous output MUST NOT exceed 10,000 bytes.
     Rule{ValidateScripts},                // A non-coinbase input MUST satisfy the spent output's locking script.
+    Rule{ValidateScriptSize},             // A pre-Taproot script dependency of a non-coinbase input spend MUST NOT exceed 10,000 bytes.
     Rule{ValidateCoinbaseMaturity}        // Coinbase outputs MUST NOT be spent before 100 blocks after their creation.
   }}
 };
