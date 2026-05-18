@@ -54,6 +54,7 @@ enum class Error {
   Spending_NonFinalTransaction,
   Spending_BadSigOpsCost,
   Spending_CoinbaseAmountExceedsBlockReward,
+  Spending_OversizedScript,
   Spending_ScriptLocked
 };
 

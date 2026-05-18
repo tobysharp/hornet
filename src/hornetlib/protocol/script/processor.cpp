@@ -59,6 +59,7 @@ util::Expected<bool, lang::Error> Processor::Run() {
 
   try {
     while (const auto instruction = parser_.Next()) Execute(*instruction);
+    if (!parser_.IsEof()) return lang::Error::MalformedScript;
   } catch (const runtime::Exception& e) {
     error_ = e.GetError();
     LogWarn() << "Script execution error code " << int(*error_) << ": " << e.what();

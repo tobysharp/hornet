@@ -15,6 +15,39 @@ namespace {
 using hornet::test::NullSpendsUnspentOutputsView;
 using hornet::test::StubHeaderAncestryView;
 
+test::Blockchain MakeLockingScriptSpendChain(std::span<const uint8_t> locking_script) {
+  test::Blockchain chain = test::LoadValidationPipelineChain();
+
+  protocol::Block funding = chain.Sample(2, true, 1, 1);
+  funding.Transaction(0).SetPkScript(0, std::vector<uint8_t>{0x51});
+  funding.Transaction(1).SetPkScript(0, locking_script);
+
+  const protocol::OutPoint prevout{funding.Transaction(1).GetHash(), 0};
+  const int64_t amount = funding.Transaction(1).Output(0).value;
+
+  test::FixMerkleRoot(funding);
+  chain.AppendFixed(funding);
+
+  protocol::Block spend = chain.Sample(1);
+  spend.Transaction(0).SetPkScript(0, std::vector<uint8_t>{0x51});
+
+  protocol::Transaction tx;
+  tx.SetVersion(1);
+  tx.ResizeInputs(1);
+  tx.ResizeOutputs(1);
+  tx.Input(0).previous_output = prevout;
+  tx.Input(0).sequence = chain.UnspentSize() - 1;
+  tx.Output(0).value = amount;
+  tx.SetPkScript(0, std::vector<uint8_t>{0x51});
+  tx.SetLockTime(0);
+
+  spend.AddTransaction(tx);
+  test::FixMerkleRoot(spend);
+  chain.AppendFixed(spend);
+
+  return chain;
+}
+
 template <typename Callback>
 Result EvaluateCandidateSpendingBlock(const test::Blockchain& chain, const protocol::Block& block,
                                       Callback&& callback) {
@@ -127,6 +160,27 @@ TEST(ValidateSpendingBlockTest, RejectsBlockInternalDoubleSpendOfExistingUtxo) {
         return data;
       },
       Error::Spending_PrevoutNotUnspent);
+}
+
+
+TEST(ValidateSpendingBlockTest, RejectsMalformedTrailingLockingScriptBytes) {
+  const std::vector<uint8_t> script = {0x51, 0x4c};
+  test::ExpectValidationResult([script] { return MakeLockingScriptSpendChain(script); }, Error::Spending_ScriptLocked);
+}
+
+TEST(ValidateSpendingBlockTest, RejectsOversizedLockingScript) {
+  constexpr int kPushCount = 20;
+  constexpr int kPushSize = 520;
+
+  std::array<uint8_t, kPushSize> payload;
+  payload.fill(0x01);
+
+  protocol::script::Writer writer;
+  for (int i = 0; i < kPushCount; ++i) writer.PushData(payload);
+  const auto script = writer.Release();
+
+  ASSERT_GT(script.size(), 10'000u);
+  test::ExpectValidationResult([script] { return MakeLockingScriptSpendChain(script); }, Error::Spending_OversizedScript);
 }
 
 }  // namespace
