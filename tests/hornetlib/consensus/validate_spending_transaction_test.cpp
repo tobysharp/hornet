@@ -209,7 +209,6 @@ TEST(ValidateSpendingTransactionTest, RejectsOutputAmountsExceedInputAmounts) {
         test::Blockchain data = test::LoadValidationPipelineChain();
 
         data.Append(data.Sample(2, true));
-        data.Back()->Transaction(0).Output(0).value -= 1;
         data.Back()->Transaction(1).Output(0).value += 1;
         test::FixMerkleRoot(*data.Back());
         return data;

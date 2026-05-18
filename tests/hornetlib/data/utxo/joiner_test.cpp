@@ -463,8 +463,9 @@ TEST(SpendJoinerTest, RejectsIntraBlockCoinbaseSpendViaConsensusValidation) {
 
   ASSERT_TRUE(joiner.IsJoinReady());
 
-  const auto result = joiner.Join([](const protocol::TransactionConstView&, std::span<const consensus::SpendRecord> spends) {
-    return consensus::rules::ValidateCoinbaseMaturity({spends[0], kHeight});
+  const auto result = joiner.Join([](const protocol::TransactionConstView& tx,
+                                     std::span<const consensus::SpendRecord> spends) {
+    return consensus::rules::ValidateCoinbaseMaturity({tx, spends[0], kHeight});
   });
 
   EXPECT_EQ(joiner.GetState(), SpendJoiner::State::Joined);

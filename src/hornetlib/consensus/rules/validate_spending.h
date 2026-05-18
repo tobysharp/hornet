@@ -23,6 +23,35 @@ namespace hornet::consensus::rules {
 // Spending validation rules per input
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// Each pre-Taproot script required to determine whether an input successfully spends its previous output MUST NOT exceed 10,000 bytes.
+[[nodiscard]] inline Result ValidateScriptSize(const InputSpendContext& context) {
+  constexpr int kMaxScriptBytes = 10'000;
+  const auto scripts = { context.spend.pubkey_script, context.tx.SignatureScript(context.spend.spend_input_index) };
+  
+  for (auto script : scripts) 
+    if (std::ssize(script) > kMaxScriptBytes) return Error::Spending_OversizedScript;
+
+  return {};
+}
+
+// A non-coinbase input MUST satisfy the spent output's locking script.
+[[nodiscard]] inline Result ValidateScripts(const InputSpendContext& context) {
+  if (context.tx.IsCoinBase()) return {};
+
+  protocol::script::SpendData data{
+      .tx = context.tx,
+      .input_index = context.spend.spend_input_index,
+      .prevout = {.pubkey_script = context.spend.pubkey_script,
+                  .amount = context.spend.amount,
+                  .funding_height = context.spend.funding_height,
+                  .is_coinbase = context.spend.IsCoinbase()},
+  };
+  const auto result = protocol::script::SatisfiesLockingScript(data);
+  if (!result || !*result) return Error::Spending_ScriptLocked;
+
+  return {};
+}
+
 // Coinbase outputs MUST NOT be spent before 100 blocks after their creation.
 [[nodiscard]] inline Result ValidateCoinbaseMaturity(const InputSpendContext& context) {
   constexpr int kCoinbaseMaturity = 100;  // Number of blocks until coinbase maturity.
@@ -83,32 +112,6 @@ namespace hornet::consensus::rules {
 
   // Return error if finality was not achieved.
   if (context.height < min_valid_height || parent_mtp < min_valid_mtp) return Error::Spending_NonFinalTransaction;
-
-  return {};
-}
-
-// A non-coinbase input MUST satisfy the spent output's locking script.
-[[nodiscard]] inline Result ValidateScripts(const TransactionSpendContext& context) {
-  if (context.tx.IsCoinBase()) return {};
-
-  Assert(context.tx.InputCount() == std::ssize(context.spends));
-
-  for (int i = 0; i < context.tx.InputCount(); ++i) {
-    const SpendRecord& record = context.spends[i];
-    Assert(record.spend_input_index == i);  
-    // TODO: Implies the input_index field can be removed from SpendRecord.
-  
-    protocol::script::SpendData data{
-        .tx = context.tx,
-        .input_index = i,
-        .prevout = {.pubkey_script = record.pubkey_script,
-                    .amount = record.amount,
-                    .funding_height = record.funding_height,
-                    .is_coinbase = record.IsCoinbase()},
-    };
-    const auto result = protocol::script::SatisfiesLockingScript(data);
-    if (!result || !*result) return Error::Spending_ScriptLocked;
-  }
 
   return {};
 }
