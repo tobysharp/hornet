@@ -127,9 +127,11 @@ inline protocol::Block Blockchain::Sample(int max_transactions /* = 1000 */,
                                           int max_fan_in /* = 2 */,
                                           int max_fan_out /* = 4 */) const {
   constexpr int64_t kBlockReward = 50ll * 100'000'000;
-  constexpr std::array<uint8_t, 24> pk_script = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-                                                 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10,
-                                                 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18};
+  const auto pk_script = [] {
+    std::array<uint8_t, 24> script{};
+    script.fill(0x51);  // OP_1: parser-valid and trivially spendable, while preserving the 24-byte test footprint.
+    return script;
+  }();
 
   protocol::Block block;
   const int height = Length();

@@ -94,13 +94,14 @@ struct MakeTransactionSpendContext {
 };
 
 struct InputSpendContext {
+  const protocol::TransactionConstView tx;
   const SpendRecord spend;
   const int height;
 };
 
 struct MakeInputSpendContext {
   InputSpendContext operator()(const SpendRecord& spend, const TransactionSpendContext& context) const {
-    return {spend, context.height};
+    return {context.tx, spend, context.height};
   }
 };
 

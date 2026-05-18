@@ -66,12 +66,13 @@ static constexpr auto kContextualRules = All{
 
 static constexpr auto kSpendingTransactionRules = All{
   Rule{ValidateOutputsAtMostInputs},      // The sum of output values in a transaction MUST NOT exceed the sum of all input values being spent.
-  Rule{ValidateScripts},                  // A non-coinbase input MUST satisfy the spent output's locking script.
   From(BIP::SequenceLocks,
     Rule{ValidateSequenceLocks}),         // From BIP68: Each input that signals a relative lock-time interval MUST have reached relative finality.
-  Each{InputsInSpend{}, MakeInputSpendContext{}, 
+  Each{InputsInSpend{}, MakeInputSpendContext{}, All{
+    Rule{ValidateScriptSize},             // A pre-Taproot script required to determine whether an input successfully spends its previous output MUST NOT exceed 10,000 bytes.
+    Rule{ValidateScripts},                // A non-coinbase input MUST satisfy the spent output's locking script.
     Rule{ValidateCoinbaseMaturity}        // Coinbase outputs MUST NOT be spent before 100 blocks after their creation.
-  }
+  }}
 };
 
 // ## Spending Rules

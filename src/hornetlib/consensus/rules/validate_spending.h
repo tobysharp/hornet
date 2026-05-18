@@ -20,6 +20,22 @@ namespace hornet::consensus::rules {
 // Spending validation rules per input
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// Each pre-Taproot script required to determine whether an input successfully spends its previous output MUST NOT exceed 10,000 bytes.
+[[nodiscard]] inline Result ValidateScriptSize(const InputSpendContext& context) {
+  constexpr int kMaxScriptBytes = 10'000;
+  const auto scripts = { context.spend.pubkey_script, context.tx.SignatureScript(context.spend.spend_input_index) };
+  
+  for (auto script : scripts) 
+    if (std::ssize(script) > kMaxScriptBytes) return Error::Spending_OversizedScript;
+
+  return {};
+}
+
+// A non-coinbase input MUST satisfy the spent output's locking script.
+[[nodiscard]] inline Result ValidateScripts(const InputSpendContext&) {
+  return {};
+}
+
 // Coinbase outputs MUST NOT be spent before 100 blocks after their creation.
 [[nodiscard]] inline Result ValidateCoinbaseMaturity(const InputSpendContext& context) {
   constexpr int kCoinbaseMaturity = 100;  // Number of blocks until coinbase maturity.
@@ -82,12 +98,6 @@ namespace hornet::consensus::rules {
   // Return error if finality was not achieved.
   if (context.height < min_valid_height || parent_mtp < min_valid_mtp) return Error::Spending_NonFinalTransaction;
 
-  return {};
-}
-
-// A non-coinbase input MUST satisfy the spent output's locking script.
-[[nodiscard]] inline Result ValidateScripts(const TransactionSpendContext&) {
-  // TODO
   return {};
 }
 

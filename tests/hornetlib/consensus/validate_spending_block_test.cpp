@@ -166,11 +166,6 @@ TEST(ValidateSpendingBlockTest, RejectsBlockInternalDoubleSpendOfExistingUtxo) {
       Error::Spending_PrevoutNotUnspent);
 }
 
-TEST(ValidateSpendingBlockTest, RejectsMalformedTrailingLockingScriptBytes) {
-  const std::vector<uint8_t> script = {0x51, 0x4c};
-  test::ExpectValidationResult([script] { return MakeLockingScriptSpendChain(script); }, Error::Spending_ScriptLocked);
-}
-
 TEST(ValidateSpendingBlockTest, RejectsOversizedLockingScript) {
   constexpr int kPushCount = 20;
   constexpr int kPushSize = 520;

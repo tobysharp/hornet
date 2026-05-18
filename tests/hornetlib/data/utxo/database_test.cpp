@@ -71,8 +71,9 @@ TEST(DatabaseTest, RejectsSameBlockCoinbaseSpendViaLocalPrevoutPath) {
                                            .amount = outputs[0].header.amount,
                                            .pubkey_script = outputs[0].script.Span(scripts),
                                            .spend_input_index = inputs[0].input_index};
+  const protocol::TransactionConstView spend_view = spend;
 
-  EXPECT_EQ(consensus::rules::ValidateCoinbaseMaturity({local_spend, kHeight}),
+  EXPECT_EQ(consensus::rules::ValidateCoinbaseMaturity({spend_view, local_spend, kHeight}),
             consensus::Error::Spending_PrematureSpend);
 }
 
