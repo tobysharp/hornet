@@ -17,8 +17,13 @@ static void OnVerify(const Context& context) {
   context.Call([&](Bytes input) { if (!AsBool(input)) Throw(Error::OpVerify); });
 }
 
+// Op::Nop
+static void OnNop(const Context&) {
+}
+
 // Register handlers
 void RegisterControlHandlers(Dispatcher& table) {
+  table[Op::Nop] = &OnNop;
   table[Op::Verify] = &OnVerify;
 }
 
