@@ -2,7 +2,6 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
-#include <algorithm>
 
 #include "hornetlib/protocol/script/lang/op.h"
 #include "hornetlib/protocol/script/lang/types.h"
@@ -13,21 +12,14 @@ namespace hornet::protocol::script::runtime {
 
 using namespace lang;
 
-// Op::Equal
-static void OnEqual(const Context& context) {
-  context.Call([](Bytes a, Bytes b) { return std::ranges::equal(a, b); });
-}
-
-// Op::EqualVerify
-static void OnEqualVerify(const Context& context) {
-  context.Call([](Bytes a, Bytes b) { return std::ranges::equal(a, b); });
-  context.Call([](Bytes a) { if (!AsBool(a)) Throw(Error::OpEqualVerify); });
+// Op::Verify
+static void OnVerify(const Context& context) {
+  context.Call([&](Bytes input) { if (!AsBool(input)) Throw(Error::OpVerify); });
 }
 
 // Register handlers
-void RegisterBitwiseHandlers(Dispatcher& table) {
-  table[Op::Equal] = &OnEqual;
-  table[Op::EqualVerify] = &OnEqualVerify;
+void RegisterControlHandlers(Dispatcher& table) {
+  table[Op::Verify] = &OnVerify;
 }
 
 }  // namespace hornet::protocol::script::runtime

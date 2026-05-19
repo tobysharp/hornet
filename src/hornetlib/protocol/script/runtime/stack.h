@@ -72,10 +72,7 @@ class Stack {
 
   // Interpret the top-of-stack as a Boolean. Throws if stack is empty.
   bool TopAsBool() const {
-    const auto top = Top();
-    for (int i = 0; i < std::ssize(top); ++i)
-      if (top[i] != 0) return i < std::ssize(top) - 1 || top[i] != 0x80;
-    return false;
+    return lang::AsBool(Top());
   }
 
   // Interpret the stack item at the given position as a 32-bit integer.

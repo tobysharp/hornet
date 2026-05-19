@@ -13,7 +13,7 @@ using lang::Op;
 
 template <typename Fn>
 inline void BinaryInt32(const Context& context, Fn&& f) {
-  context.Stack().Call([&](Bytes lhs, Bytes rhs) -> int64_t {
+  context.Call([&](Bytes lhs, Bytes rhs) -> int64_t {
     const int64_t a = context.machine.DecodeInt32(lhs);
     const int64_t b = context.machine.DecodeInt32(rhs);
     return f(a, b);

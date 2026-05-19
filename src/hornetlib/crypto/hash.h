@@ -12,6 +12,7 @@
 #include <span>
 
 #include "hornetlib/crypto/cpuinfo.h"
+#include "hornetlib/crypto/ripemd160.h"
 #include "hornetlib/crypto/sha256.h"
 #include "hornetlib/crypto/sha256_ni.h"
 #include "hornetlib/util/as_span.h"
@@ -19,6 +20,7 @@
 
 namespace hornet::crypto {
 
+using bytes20_t = std::array<uint8_t, 20>;
 using bytes32_t = std::array<uint8_t, 32>;
 
 template <typename T>
@@ -99,6 +101,12 @@ bytes32_t DoubleSha256(const Args&... args) {
 
   (append_arg(args), ...);
   return DoubleSha256(buffer.data(), dst);
+}
+
+template <typename Iter>
+inline bytes20_t ComputeHash160(Iter begin, Iter end) {
+  const auto sha = Sha256(begin, end);
+  return RIPEMD160::Hash(sha.begin(), sha.end());
 }
 
 // Writes the uint256_t as a 64-character hex string to an output stream,

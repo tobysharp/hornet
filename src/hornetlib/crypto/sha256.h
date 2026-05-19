@@ -21,11 +21,9 @@ using hash256_t = std::array<uint8_t, 32>;
 
 // Compute the SHA-256 hash of an arbitrary byte stream
 hash256_t Hash(std::span<const uint8_t> bytes);
-}  // namespace SHA256
 
 /* Implementation follows */
 
-namespace SHA256 {
 namespace Detail {
 using uint256_t = std::array<uint32_t, 8>;
 static constexpr uint256_t s_initialHash = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,

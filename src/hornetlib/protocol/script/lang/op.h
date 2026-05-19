@@ -39,6 +39,7 @@ enum class Op : uint8_t {
   PushTrue = PushConst1,      // Pushes the immediate Boolean TRUE.
 
   // Control operations.
+  Verify = 0x69,
   Return = 0x6a,
   
   // Stack operations.
@@ -48,6 +49,7 @@ enum class Op : uint8_t {
 
   // Bitwise operations.
   Equal = 0x87,
+  EqualVerify = 0x88,
 
   // Arithmetic operations.
   Add = 0x93,

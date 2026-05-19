@@ -66,6 +66,10 @@ struct Context {
     if (!env.spend) Throw(lang::Error::InvalidSpendContext);
     return *env.spend;
   }
+  template <typename Fn>
+  void Call(Fn&& fn) const {
+    machine.stack.Call(std::forward<Fn>(fn));
+  }
 };
 
 using Handler = void (*)(const Context&);
@@ -78,5 +82,6 @@ struct Dispatcher : public std::array<Handler, 256> {
 };
 
 void StepExecution(const Context&);
+void ExecuteHandler(lang::Op op, const Context& context);
 
 }  // namespace hornet::protocol::script::runtime

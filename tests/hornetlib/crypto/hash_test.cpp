@@ -33,6 +33,13 @@ TEST(HashTest, DoubleSha256HashOfKnownString) {
   EXPECT_EQ(oss.str(), expected);
 }
 
+TEST(HashTest, ShaRipemdHashOfKnownString) {
+  const std::string input = "hello";
+  constexpr auto expected = "b6a9c8c230722b7c748331a8b450f05566dc7d0f"_bytes;
+
+  EXPECT_EQ(ComputeHash160(input.begin(), input.end()), expected);
+}
+
 TEST(HashTest, ValidHexDigits) {
   using namespace hornet::util;
   EXPECT_EQ(HexValue<'0'>(), 0);
