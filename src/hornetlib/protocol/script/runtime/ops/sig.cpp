@@ -34,7 +34,7 @@ static void OnCheckSig(const Context& context) {
     // TODO: Check signature and pubkey encodings: CheckSignatureEncoding, CheckPubKeyEncoding.
 
     // Create the spend digest, which is a 32-byte hash of transaction bytes committing to the spend.
-    const auto digest = BuildSpendDigest(*context.env.spend, sigblob, context.machine.script);
+    const auto digest = BuildSpendDigest(*context.env.spend, sigblob, context.ScriptCode());
 
     // Extract the DER-encoded ECDSA signature, which is up to 72 bytes.
     const DERParseType parse_method = context.machine.policy.require_strict_der_signatures ? DERParseType::Strict : DERParseType::Lax;

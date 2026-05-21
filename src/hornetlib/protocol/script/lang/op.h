@@ -56,6 +56,7 @@ enum class Op : uint8_t {
   Add = 0x93,
 
   // Cryptographic operations.
+  SHA256 = 0xa8,
   Hash160 = 0xa9,
   CodeSeparator = 0xab,
 

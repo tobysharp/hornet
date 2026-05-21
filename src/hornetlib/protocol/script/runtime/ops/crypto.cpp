@@ -12,14 +12,26 @@ namespace hornet::protocol::script::runtime {
 
 using namespace lang;
 
-// Op::Hash160
+// Op::CodeSeparator = 0xab
+static void OnCodeSeparator(const Context& context) {
+  context.machine.SetCodeSeparator(context.instruction);
+}
+
+// Op::Hash160 = 0xa9
 static void OnHash160(const Context& context) {
-  context.Call([&](Bytes arg) { return crypto::ComputeHash160(arg.begin(), arg.end()); });
+  context.Call([&](Bytes arg) { return crypto::ComputeHash160(arg); });
+}
+
+// Op::SHA256 = 0xa8
+static void OnSHA256(const Context& context) {
+  context.Call([&](Bytes arg) { return crypto::Sha256(arg); });
 }
 
 // Register handlers
 void RegisterCryptoHandlers(Dispatcher& table) {
+  table[Op::CodeSeparator] = &OnCodeSeparator;
   table[Op::Hash160] = &OnHash160;
+  table[Op::SHA256] = &OnSHA256;
 }
 
 }  // namespace hornet::protocol::script::runtime

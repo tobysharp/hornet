@@ -180,5 +180,68 @@ TEST(SigOpsTest, P2PKHReturnsFalseWhenSignatureDoesNotValidate) {
   EXPECT_FALSE(*lock_result);
 }
 
+TEST(SigOpsTest, CheckSigSignsOnlyTheSuffixAfterCodeSeparator) {
+  const auto signing_script = Writer{}.Then(Op::CheckSig).Release();
+  const auto locking_script = Writer{}.Then(Op::Nop).Then(Op::CodeSeparator).Then(Op::CheckSig).Release();
+
+  Transaction tx = MakeLegacyCheckSigSpendTx();
+  script::SpendContext spend{tx, 0, script::SpendPath::LegacyDirect};
+  const auto signature = MakeP2PKHSignature(spend, signing_script);
+  const auto unlocking_script = Writer{}.PushData(signature).PushData(kCompressedPubkey).Release();
+  tx.SetSignatureScript(0, unlocking_script);
+
+  script::Processor processor{Policy{.require_minimal = false, .require_strict_der_signatures = false},
+                              std::make_optional(spend)};
+
+  ASSERT_TRUE(*processor.Run(unlocking_script));
+  const auto lock_result = processor.Run(locking_script);
+  ASSERT_TRUE(lock_result);
+  EXPECT_TRUE(*lock_result);
+}
+
+TEST(SigOpsTest, CheckSigStillCommitsToPrefixWithoutCodeSeparator) {
+  const auto signing_script = Writer{}.Then(Op::CheckSig).Release();
+  const auto locking_script = Writer{}.Then(Op::Nop).Then(Op::CheckSig).Release();
+
+  Transaction tx = MakeLegacyCheckSigSpendTx();
+  script::SpendContext spend{tx, 0, script::SpendPath::LegacyDirect};
+  const auto signature = MakeP2PKHSignature(spend, signing_script);
+  const auto unlocking_script = Writer{}.PushData(signature).PushData(kCompressedPubkey).Release();
+  tx.SetSignatureScript(0, unlocking_script);
+
+  script::Processor processor{Policy{.require_minimal = false, .require_strict_der_signatures = false},
+                              std::make_optional(spend)};
+
+  ASSERT_TRUE(*processor.Run(unlocking_script));
+  const auto lock_result = processor.Run(locking_script);
+  ASSERT_TRUE(lock_result);
+  EXPECT_FALSE(*lock_result);
+}
+
+TEST(SigOpsTest, CheckSigUsesTheMostRecentCodeSeparator) {
+  const auto signing_script = Writer{}.Then(Op::Nop).Then(Op::CodeSeparator).Then(Op::CheckSig).Release();
+  const auto locking_script = Writer{}
+      .Then(Op::Nop)
+      .Then(Op::CodeSeparator)
+      .Then(Op::Nop)
+      .Then(Op::CodeSeparator)
+      .Then(Op::CheckSig)
+      .Release();
+
+  Transaction tx = MakeLegacyCheckSigSpendTx();
+  script::SpendContext spend{tx, 0, script::SpendPath::LegacyDirect};
+  const auto signature = MakeP2PKHSignature(spend, signing_script);
+  const auto unlocking_script = Writer{}.PushData(signature).PushData(kCompressedPubkey).Release();
+  tx.SetSignatureScript(0, unlocking_script);
+
+  script::Processor processor{Policy{.require_minimal = false, .require_strict_der_signatures = false},
+                              std::make_optional(spend)};
+
+  ASSERT_TRUE(*processor.Run(unlocking_script));
+  const auto lock_result = processor.Run(locking_script);
+  ASSERT_TRUE(lock_result);
+  EXPECT_FALSE(*lock_result);
+}
+
 }  // namespace
 }  // namespace hornet::protocol::script::runtime::ops

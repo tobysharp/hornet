@@ -109,6 +109,10 @@ inline bytes20_t ComputeHash160(Iter begin, Iter end) {
   return RIPEMD160::Hash(sha.begin(), sha.end());
 }
 
+inline bytes20_t ComputeHash160(std::span<const uint8_t> bytes) {
+  return ComputeHash160(bytes.begin(), bytes.end());
+}
+
 // Writes the uint256_t as a 64-character hex string to an output stream,
 // using big-endian byte order (as typically displayed in Bitcoin).
 // Note: this is a textual representation, not binary output.

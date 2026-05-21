@@ -34,15 +34,19 @@ struct Machine {
   // Mutable machine state.
   runtime::Stack& stack;
   int non_push_op_count = 0;
-
+  
   // Immutable machine state.
   const lang::Bytes script;
+  int code_separator_offset = 0;
 
   // Immutable execution policy.
   const Policy& policy;
 
   int32_t DecodeInt32(lang::Bytes bytes) const { return runtime::DecodeInt32(bytes, policy.require_minimal); }
-};
+  lang::Bytes ScriptCode() const { return script.subspan(code_separator_offset); }
+  void SetCodeSeparator(const lang::Instruction& instruction) {
+    code_separator_offset = instruction.raw.data() + instruction.raw.size() - script.data();
+  }};
 
 // The external environment in which the script execution is contextualized:
 // the transaction, block height, address type, etc.
@@ -70,6 +74,7 @@ struct Context {
   void Call(Fn&& fn) const {
     machine.stack.Call(std::forward<Fn>(fn));
   }
+  lang::Bytes ScriptCode() const { return machine.ScriptCode(); }
 };
 
 using Handler = void (*)(const Context&);
