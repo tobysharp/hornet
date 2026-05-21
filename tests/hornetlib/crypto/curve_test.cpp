@@ -3,9 +3,11 @@
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <iomanip>
+#include <optional>
 #include <ostream>
 #include <vector>
 
@@ -63,6 +65,47 @@ typename CurveType::Signature ParseDerSignature(const std::vector<uint8_t>& byte
 	std::reverse(r_bytes.begin(), r_bytes.end());
 	std::reverse(s_bytes.begin(), s_bytes.end());
 	return {typename CurveType::Wide{r_bytes}, typename CurveType::Wide{s_bytes}};
+}
+
+template <typename CurveType>
+std::array<uint8_t, sizeof(typename CurveType::Wide)> ToBigEndianBytes(const typename CurveType::Wide& value) {
+	constexpr size_t kBytes = sizeof(typename CurveType::Wide);
+	constexpr size_t kBytesPerWord = sizeof(typename CurveType::Wide::Word);
+	std::array<uint8_t, kBytes> bytes{};
+	for (size_t word_index = 0; word_index < value.Words().size(); ++word_index) {
+		const auto word = value.Words()[word_index];
+		for (size_t byte_index = 0; byte_index < kBytesPerWord; ++byte_index) {
+			bytes[kBytes - 1 - (word_index * kBytesPerWord + byte_index)] =
+					static_cast<uint8_t>(word >> (byte_index * 8));
+		}
+	}
+	return bytes;
+}
+
+template <typename CurveType>
+
+std::array<uint8_t, 1 + 2 * sizeof(typename CurveType::Wide)> EncodeUncompressedPublicKey(
+		const typename CurveType::Point& point) {
+	constexpr size_t kBytes = sizeof(typename CurveType::Wide);
+	std::array<uint8_t, 1 + 2 * kBytes> bytes{};
+	bytes[0] = 0x04;
+	const auto x_bytes = ToBigEndianBytes<CurveType>(point.x.x);
+	const auto y_bytes = ToBigEndianBytes<CurveType>(point.y.x);
+	std::copy(x_bytes.begin(), x_bytes.end(), bytes.begin() + 1);
+	std::copy(y_bytes.begin(), y_bytes.end(), bytes.begin() + 1 + kBytes);
+	return bytes;
+}
+
+template <typename CurveType>
+std::optional<typename CurveType::PublicKey> ParsePublicKey(const typename CurveType::Point& point) {
+	return CurveType::PublicKeyFromSEC1(EncodeUncompressedPublicKey<CurveType>(point));
+}
+
+template <typename CurveType>
+void ExpectPublicKeyPointEq(const typename CurveType::PublicKey& actual, const typename CurveType::Point& expected) {
+	const auto& actual_point = static_cast<const typename CurveType::Point&>(actual);
+	EXPECT_EQ(actual_point.x, expected.x);
+	EXPECT_EQ(actual_point.y, expected.y);
 }
 
 ToyCurve::Point MakeToyPoint(uint64_t x, uint64_t y) {
@@ -139,57 +182,62 @@ TEST(CurveTest, PointAddAssignAndScalarMultiplicationMatchKnownMultiples) {
 
 TEST(CurveTest, PublicKeyValidationRejectsInfinityOffCurveOutOfRangeAndWrongSubgroup) {
 	const ToyCurve::Point generator = ToyCurve::G;
-	ToyCurve::Point out_of_range_x = generator;
-	ToyCurve::Point out_of_range_y = generator;
-	out_of_range_x.x.x = kToyPrime;
-	out_of_range_y.y.x = kToyPrime;
+	auto out_of_range_x = EncodeUncompressedPublicKey<ToyCurve>(generator);
+	auto out_of_range_y = EncodeUncompressedPublicKey<ToyCurve>(generator);
+	out_of_range_x[8] = static_cast<uint8_t>(kToyPrime.Words()[0]);
+	out_of_range_y[16] = static_cast<uint8_t>(kToyPrime.Words()[0]);
 
-	EXPECT_TRUE(ToyCurve::IsPublicKeyValid(generator));
-	EXPECT_FALSE(ToyCurve::IsPublicKeyValid(ToyCurve::Point{}));
-	EXPECT_FALSE(ToyCurve::IsPublicKeyValid(MakeToyPoint(1, 1)));
-	EXPECT_FALSE(ToyCurve::IsPublicKeyValid(out_of_range_x));
-	EXPECT_FALSE(ToyCurve::IsPublicKeyValid(out_of_range_y));
-	EXPECT_FALSE(ToyCurve::IsPublicKeyValid(MakeToyPoint(0, 2)));
+	const auto public_key = ParsePublicKey<ToyCurve>(generator);
+
+	ASSERT_TRUE(public_key.has_value());
+	ExpectPublicKeyPointEq<ToyCurve>(*public_key, generator);
+	EXPECT_FALSE(ToyCurve::PublicKeyFromSEC1(EncodeUncompressedPublicKey<ToyCurve>(ToyCurve::Point{})).has_value());
+	EXPECT_FALSE(ToyCurve::PublicKeyFromSEC1(EncodeUncompressedPublicKey<ToyCurve>(MakeToyPoint(1, 1))).has_value());
+	EXPECT_FALSE(ToyCurve::PublicKeyFromSEC1(out_of_range_x).has_value());
+	EXPECT_FALSE(ToyCurve::PublicKeyFromSEC1(out_of_range_y).has_value());
+	EXPECT_FALSE(ToyCurve::PublicKeyFromSEC1(EncodeUncompressedPublicKey<ToyCurve>(MakeToyPoint(0, 2))).has_value());
 }
 
-TEST(CurveTest, VerifySignatureRejectsInvalidPublicKeyAndInvalidScalarBounds) {
-	const ToyCurve::Point public_key = MakeToyPoint(16, 6);
+TEST(CurveTest, VerifySignatureRejectsInvalidScalarBounds) {
+	const auto public_key = ParsePublicKey<ToyCurve>(MakeToyPoint(16, 6));
 	const std::array<uint8_t, 8> digest = MakeToyDigest(1);
 
-	EXPECT_FALSE(ToyCurve::VerifySignature(ToyCurve::Point{}, {Uint64{4}, Uint64{6}}, digest));
-	EXPECT_FALSE(ToyCurve::VerifySignature(public_key, {Uint64{0}, Uint64{6}}, digest));
-	EXPECT_FALSE(ToyCurve::VerifySignature(public_key, {kToyOrder, Uint64{6}}, digest));
-	EXPECT_FALSE(ToyCurve::VerifySignature(public_key, {Uint64{4}, Uint64{0}}, digest));
-	EXPECT_FALSE(ToyCurve::VerifySignature(public_key, {Uint64{4}, kToyOrder}, digest));
+	ASSERT_TRUE(public_key.has_value());
+	EXPECT_FALSE(ToyCurve::VerifySignature(*public_key, {Uint64{0}, Uint64{6}}, digest));
+	EXPECT_FALSE(ToyCurve::VerifySignature(*public_key, {kToyOrder, Uint64{6}}, digest));
+	EXPECT_FALSE(ToyCurve::VerifySignature(*public_key, {Uint64{4}, Uint64{0}}, digest));
+	EXPECT_FALSE(ToyCurve::VerifySignature(*public_key, {Uint64{4}, kToyOrder}, digest));
 }
 
 TEST(CurveTest, VerifySignatureRejectsInfinityResultAndWrongDigest) {
-	const ToyCurve::Point public_key = MakeToyPoint(16, 6);
+	const auto public_key = ParsePublicKey<ToyCurve>(MakeToyPoint(16, 6));
 	const ToyCurve::Signature valid_signature{Uint64{4}, Uint64{6}};
 	const ToyCurve::Signature infinity_signature{Uint64{1}, Uint64{1}};
 
-	EXPECT_FALSE(ToyCurve::VerifySignature(public_key, infinity_signature, MakeToyDigest(4)));
-	EXPECT_FALSE(ToyCurve::VerifySignature(public_key, valid_signature, MakeToyDigest(2)));
+	ASSERT_TRUE(public_key.has_value());
+	EXPECT_FALSE(ToyCurve::VerifySignature(*public_key, infinity_signature, MakeToyDigest(4)));
+	EXPECT_FALSE(ToyCurve::VerifySignature(*public_key, valid_signature, MakeToyDigest(2)));
 }
 
 TEST(CurveTest, VerifySignatureAcceptsKnownValidToyExample) {
-	const ToyCurve::Point public_key = MakeToyPoint(16, 6);
+	const auto public_key = ParsePublicKey<ToyCurve>(MakeToyPoint(16, 6));
 	const ToyCurve::Signature signature{Uint64{4}, Uint64{6}};
 
-	EXPECT_TRUE(ToyCurve::VerifySignature(public_key, signature, MakeToyDigest(1)));
+	ASSERT_TRUE(public_key.has_value());
+	EXPECT_TRUE(ToyCurve::VerifySignature(*public_key, signature, MakeToyDigest(1)));
 }
 
 TEST(CurveTest, VerifySignatureReducesResultXCoordinateModuloOrder) {
-	const ToyCurve::Point public_key = ToyCurve::G;
+	const auto public_key = ParsePublicKey<ToyCurve>(ToyCurve::G);
 	const ToyCurve::Signature signature{Uint64{2}, Uint64{3}};
 
 	ASSERT_GT((ToyCurve::Wide{3} * ToyCurve::G).x.x, kToyOrder);
-	EXPECT_TRUE(ToyCurve::VerifySignature(public_key, signature, MakeToyDigest(0)));
+	ASSERT_TRUE(public_key.has_value());
+	EXPECT_TRUE(ToyCurve::VerifySignature(*public_key, signature, MakeToyDigest(0)));
 }
 
-TEST(CurveTest, Secp256k1GeneratorIsOnCurveAndValidPublicKey) {
+TEST(CurveTest, Secp256k1GeneratorIsOnCurveAndInMainSubgroup) {
 	EXPECT_TRUE(secp256k1::IsOnCurve(secp256k1::G));
-	EXPECT_TRUE(secp256k1::IsPublicKeyValid(secp256k1::G));
 	EXPECT_TRUE((constants::n * secp256k1::G).IsInfinity());
 }
 
@@ -209,8 +257,7 @@ TEST(CurveTest, Secp256k1PublicKeyFromSEC1ParsesAndValidatesUncompressedKeys) {
 	const auto public_key = secp256k1::PublicKeyFromSEC1(public_key_bytes);
 
 	ASSERT_TRUE(public_key.has_value());
-	EXPECT_EQ(public_key->x, secp256k1::G.x);
-	EXPECT_EQ(public_key->y, secp256k1::G.y);
+	ExpectPublicKeyPointEq<secp256k1>(*public_key, secp256k1::G);
 
 	auto wrong_prefix = public_key_bytes;
 	wrong_prefix[0] = 0x03;
@@ -237,10 +284,8 @@ TEST(CurveTest, Secp256k1PublicKeyFromSEC1ParsesCompressedKeysWithEitherParity) 
 
 	ASSERT_TRUE(even_public_key.has_value());
 	ASSERT_TRUE(odd_public_key.has_value());
-	EXPECT_EQ(even_public_key->x, secp256k1::G.x);
-	EXPECT_EQ(even_public_key->y, secp256k1::G.y);
-	EXPECT_EQ(odd_public_key->x, secp256k1::G.x);
-	EXPECT_EQ(odd_public_key->y, -secp256k1::G.y);
+	ExpectPublicKeyPointEq<secp256k1>(*even_public_key, secp256k1::G);
+	ExpectPublicKeyPointEq<secp256k1>(*odd_public_key, {secp256k1::G.x, -secp256k1::G.y});
 
 	const std::array<uint8_t, 33> invalid_x = {
 			0x02,
@@ -253,17 +298,16 @@ TEST(CurveTest, Secp256k1PublicKeyFromSEC1ParsesCompressedKeysWithEitherParity) 
 }
 
 TEST(CurveTest, Secp256k1VerifiesKnownDeterministicSignatureExample) {
-	const secp256k1::Point public_key{
-			secp256k1::Mod_p{"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"_h256},
-			secp256k1::Mod_p{"483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8"_h256}};
+	const auto public_key = ParsePublicKey<secp256k1>(secp256k1::G);
 	const secp256k1::Signature signature{
 			"f73f5ad664342164c3997a266e1dc6b066aeddacf4e231cb024c9134dd4a6ab8"_h256,
 			"b8f4f7af604af853c210c202c328944c8fe64bd1001154efbaeb3715b3ec9257"_h256};
 	const auto digest = "69b595411d2e081915f237bdff5a0a293f32a1138f406f7e8b89984ec74093cd"_bytes;
 	const auto wrong_digest = "69b595411d2e081915f237bdff5a0a293f32a1138f406f7e8b89984ec74093cc"_bytes;
 
-	EXPECT_TRUE(secp256k1::VerifySignature(public_key, signature, digest));
-	EXPECT_FALSE(secp256k1::VerifySignature(public_key, signature, wrong_digest));
+	ASSERT_TRUE(public_key.has_value());
+	EXPECT_TRUE(secp256k1::VerifySignature(*public_key, signature, digest));
+	EXPECT_FALSE(secp256k1::VerifySignature(*public_key, signature, wrong_digest));
 }
 
 TEST(CurveTest, Secp256k1VerifiesBitcoinExampleUsingRawDigestDerAndUncompressedPubkeyBytes) {

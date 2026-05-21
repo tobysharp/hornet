@@ -74,8 +74,9 @@ struct Fp {
   constexpr Fp(typename Type::Word rhs) : Fp(Type{rhs}) {}
   constexpr Fp& operator=(const Fp& rhs) = default;
 
-  bool constexpr operator!=(const Fp& rhs) const { return x != rhs.x; }
-  bool constexpr operator==(const Fp& rhs) const { return x == rhs.x; }
+  constexpr static bool HasSquareRoot() { return p.template Modulo<sizeof(typename Type::Word)*8>(4) == 3; }
+  constexpr bool operator!=(const Fp& rhs) const { return x != rhs.x; }
+  constexpr bool operator==(const Fp& rhs) const { return x == rhs.x; }
 
   constexpr Fp Squared() const { return detail::MultiplyModuloM<kBits, p>(x, x); }
   constexpr Fp Inverse() const { return detail::InvertModuloOdd<kBits, p>(x); }
@@ -83,7 +84,7 @@ struct Fp {
   constexpr std::optional<Fp> SquareRoot() const {
     // We rely on p = 3 (mod 4) in this implementation, with p an odd prime, which guarantees that (p+1)/4 is an
     // integer and for any quadratic residue x, x^((p+1)/4) (mod p) is a square root of x, via Euler's criterion.
-    static_assert(p.template Modulo<sizeof(typename Type::Word)*8>(4) == 3);
+    static_assert(HasSquareRoot());
     static constexpr Type kExponent = (p + 1) >> 2;
     static constexpr int kExponentBits = kExponent.SignificantBits();
     

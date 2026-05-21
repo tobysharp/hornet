@@ -82,6 +82,15 @@ class Curve {
     Mod_p x, y;
   };
 
+  class PublicKey {
+   public:
+    operator const Point&() const { return point_; }
+   private:
+    friend class Curve;
+    explicit PublicKey(Point point) : point_(std::move(point)) {}
+    Point point_; 
+  };
+
   static constexpr Point G = {Gx, Gy};
 
   inline static constexpr bool IsOnCurve(const Point& point) {
@@ -93,57 +102,58 @@ class Curve {
 
   static_assert(IsOnCurve(G));
 
-  inline static bool IsPublicKeyValid(const Point& publicKey) {
+  inline static std::optional<PublicKey> PublicKeyFromSEC1(std::span<const uint8_t> bytes) {
+    constexpr int kBytes = kBits >> 3;
+    if (bytes.empty()) return std::nullopt;
+
+    if (bytes[0] == 0x02 || bytes[0] == 0x03) {
+      if constexpr (!Mod_p::HasSquareRoot()) return std::nullopt;
+      else {
+        constexpr int kExpectedBytes = 1 + kBytes;
+        if (std::ssize(bytes) != kExpectedBytes) return std::nullopt;
+
+        const Wide x = Wide::FromBigEndianBytes(bytes.subspan(1, kBytes));
+        if (x >= p) return std::nullopt;
+
+        const bool even_y = (bytes[0] & 1) == 0;
+        const Mod_p x_fp{x};
+        const Mod_p y2 = (x_fp.Squared() + a) * x_fp + b;
+
+        // Recover y from y^2 mod p and select the root matching even_y.
+        const auto root = y2.SquareRoot();
+        if (!root) return std::nullopt;
+        const Mod_p y = (detail::IsEven(root->x) == even_y) ? *root : -*root;
+        const Point point{x, y.x};
+        if (IsValidPublicKey(point)) return PublicKey{point};
+      }
+    } else if (bytes[0] == 0x04) {
+      constexpr int kExpectedBytes = 1 + 2 * kBytes;
+      if (std::ssize(bytes) != kExpectedBytes) return std::nullopt;
+
+      const auto x = Wide::FromBigEndianBytes(bytes.subspan(1, kBytes));
+      const auto y = Wide::FromBigEndianBytes(bytes.subspan(1 + kBytes, kBytes));
+      if (x >= p || y >= p) return std::nullopt;
+      const Point point{x, y};
+      if (IsValidPublicKey(point)) return PublicKey{point};
+    }
+    return std::nullopt;
+  }
+
+  inline static bool VerifySignature(const PublicKey& public_key, const Signature& signature,
+                                     const std::array<uint8_t, kBits / 8>& hashed_message) {
+    return VerifySignatureImpl(public_key, signature, HashToInt(hashed_message));
+  }
+
+ private:
+  inline static bool IsValidPublicKey(const Point& publicKey) {
     if (publicKey.IsInfinity()) return false;
     if (publicKey.x.x >= p || publicKey.y.x >= p) return false;
     if (!IsOnCurve(publicKey)) return false;
     if (!(n * publicKey).IsInfinity()) return false;
     return true;
   }
-
-  inline static std::optional<Point> PublicKeyFromSEC1(std::span<const uint8_t> bytes) {
-    constexpr int kBytes = kBits >> 3;
-    if (bytes.empty()) return std::nullopt;
-
-    if (bytes[0] == 0x02 || bytes[0] == 0x03) {
-      constexpr int kExpectedBytes = 1 + kBytes;
-      if (std::ssize(bytes) != kExpectedBytes) return std::nullopt;
-
-      const Wide x = Wide::FromBigEndianBytes(bytes.subspan(1, kBytes));
-      if (x >= p) return std::nullopt;
-
-      const bool even_y = (bytes[0] & 1) == 0;
-      const Mod_p x_fp{x};
-      const Mod_p y2 = (x_fp.Squared() + a) * x_fp + b;
-
-      // Recover y from y^2 mod p and select the root matching even_y.
-      const auto root = y2.SquareRoot();
-      if (!root) return std::nullopt;
-      const Mod_p y = (detail::IsEven(root->x) == even_y) ? *root : -*root;
-      const Point publicKey{x, y.x};
-      if (IsPublicKeyValid(publicKey)) return publicKey;
-
-    } else if (bytes[0] == 0x04) {
-      constexpr int kExpectedBytes = 1 + 2 * kBytes;
-      if (std::ssize(bytes) != kExpectedBytes) return std::nullopt;
-
-      const Point publicKey{
-          Wide::FromBigEndianBytes(bytes.subspan(1, kBytes)),
-          Wide::FromBigEndianBytes(bytes.subspan(1 + kBytes, kBytes)),
-      };
-      if (IsPublicKeyValid(publicKey)) return publicKey;
-    }
-    return std::nullopt;
-  }
-
-  inline static bool VerifySignature(const Point& publicKey, const Signature& signature,
-                                     const std::array<uint8_t, kBits / 8>& hashedMessage) {
-    return VerifySignatureImpl(publicKey, signature, HashToInt(hashedMessage));
-  }
-
- private:
+   
   inline static bool VerifySignatureImpl(const Point& publicKey, const Signature& signature, const Mod_n& e) {
-    if (!IsPublicKeyValid(publicKey)) return false;
     if (signature.first == 0 || signature.first >= n) return false;
     if (signature.second == 0 || signature.second >= n) return false;
     const Mod_n r = signature.first, s = signature.second;
