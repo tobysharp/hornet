@@ -26,6 +26,8 @@ namespace {
 using protocol::Block;
 using protocol::Hash;
 using protocol::Transaction;
+using protocol::script::Feature;
+using protocol::script::FeatureFlags;
 using protocol::script::Writer;
 using protocol::script::lang::ConstantToOp;
 using protocol::script::lang::Op;
@@ -134,9 +136,10 @@ TEST(ValidateSigOpCostsTest, ExtractRedeemScriptRequiresPushOnlyScriptSig) {
 }
 
 TEST(ValidateSigOpCostsTest, SpendPathClassifyRecognizesAllSupportedForms) {
+  using namespace protocol::script;
   const std::array<uint8_t, 20> hash20 = {1, 2, 3};
   const std::array<uint8_t, 32> hash32 = {4, 5, 6};
-  const auto flags = CombineFlags({VerifyFlag::P2SH, VerifyFlag::Witness});
+  const FeatureFlags flags = {Feature::P2SH, Feature::Witness};
   const auto witness_pubkey = MakeWitnessProgram(0, hash20);
   const auto p2sh_pubkey = MakeP2SHScript(hash20);
   const auto redeem = MakeMultisigScript(2);
@@ -204,7 +207,7 @@ TEST(ValidateSigOpCostsTest, SpendPathCostCoversLegacyP2SHWitnessAndP2SHWitness)
   auto tx = MakeTransaction(1, 1, true);
   tx.ResizeComponents(0, 1);
   tx.SetWitnessScript(0, 0, witness_script);
-  const SpendScripts spend{{}, {}, tx.InputWitness(0), 0};
+  const SpendScripts spend{{}, {}, tx.InputWitness(0)};
 
   EXPECT_EQ(sigops::SpendPathCost(spend, {SpendPath::Legacy}), 0);
   EXPECT_EQ(sigops::SpendPathCost(spend, {SpendPath::P2SH, redeem}), 8);
@@ -233,7 +236,7 @@ TEST(ValidateSigOpCostsTest, SigOpCostReturnsLegacyCostForCoinbaseTransactions) 
   const std::vector<uint8_t> empty_script;
   const std::array spends = {MakeSpend(empty_script, 0, true)};
 
-  EXPECT_EQ(SigOpCost(tx, spends, 0), 8);
+  EXPECT_EQ(SigOpCost(tx, spends, {}), 8);
 }
 
 TEST(ValidateSigOpCostsTest, SigOpCostSkipsP2SHPathsWithoutP2SHFlag) {
@@ -245,7 +248,7 @@ TEST(ValidateSigOpCostsTest, SigOpCostSkipsP2SHPathsWithoutP2SHFlag) {
 
   const std::array spends = {MakeSpend(p2sh_pubkey)};
 
-  EXPECT_EQ(SigOpCost(tx, spends, 0), 0);
+  EXPECT_EQ(SigOpCost(tx, spends, {}), 0);
 }
 
 TEST(ValidateSigOpCostsTest, SigOpCostSkipsWitnessPathsWithoutWitnessFlag) {
@@ -258,7 +261,7 @@ TEST(ValidateSigOpCostsTest, SigOpCostSkipsWitnessPathsWithoutWitnessFlag) {
 
   const std::array spends = {MakeSpend(witness_pubkey)};
 
-  EXPECT_EQ(SigOpCost(tx, spends, CombineFlags({VerifyFlag::P2SH})), 0);
+  EXPECT_EQ(SigOpCost(tx, spends, Feature::P2SH), 0);
 }
 
 TEST(ValidateSigOpCostsTest, SigOpCostSkipsUnknownWitnessVersions) {
@@ -271,13 +274,13 @@ TEST(ValidateSigOpCostsTest, SigOpCostSkipsUnknownWitnessVersions) {
 
   const std::array spends = {MakeSpend(witness_pubkey)};
 
-  EXPECT_EQ(SigOpCost(tx, spends, CombineFlags({VerifyFlag::P2SH, VerifyFlag::Witness})), 0);
+  EXPECT_EQ(SigOpCost(tx, spends, {Feature::P2SH, Feature::Witness}), 0);
 }
 
 TEST(ValidateSigOpCostsTest, SigOpCostAccumulatesLegacyAndNonLegacyPaths) {
   const std::array<uint8_t, 20> hash20 = {1, 2, 3};
   const std::array<uint8_t, 32> hash32 = {4, 5, 6};
-  const auto flags = CombineFlags({VerifyFlag::P2SH, VerifyFlag::Witness});
+  const FeatureFlags flags = {Feature::P2SH, Feature::Witness};
   const auto legacy_pubkey = MakeScript({Op::CheckSig});
   const auto p2sh_pubkey = MakeP2SHScript(hash20);
   const auto witness_pubkey = MakeWitnessProgram(0, hash20);
@@ -315,7 +318,7 @@ TEST(ValidateSigOpCostsTest, ValidateSigOpCostsAcceptsBlockAtBudget) {
   StaticUnspentOutputsView unspent;
   unspent.Add(std::move(tx), {MakeSpend(p2sh_pubkey)});
 
-  EXPECT_EQ(ValidateSigOpCosts({block, ancestry, unspent, 1, CombineFlags({VerifyFlag::P2SH})}), Result{});
+  EXPECT_EQ(ValidateSigOpCosts({block, ancestry, unspent, 1, Feature::P2SH}), Result{});
 }
 
 TEST(ValidateSigOpCostsTest, ValidateSigOpCostsRejectsBlockAboveBudget) {
@@ -339,7 +342,7 @@ TEST(ValidateSigOpCostsTest, ValidateSigOpCostsRejectsBlockAboveBudget) {
   unspent.Add(std::move(overflow_tx), {MakeSpend(legacy_pubkey)});
   unspent.Add(std::move(unreachable_tx), {MakeSpend(legacy_pubkey)});
 
-  EXPECT_EQ(ValidateSigOpCosts({block, ancestry, unspent, 1, CombineFlags({VerifyFlag::P2SH})}),
+  EXPECT_EQ(ValidateSigOpCosts({block, ancestry, unspent, 1, Feature::P2SH}),
             Error::Spending_BadSigOpsCost);
 }
 
@@ -348,7 +351,7 @@ TEST(ValidateSigOpCostsTest, ValidateSigOpCostsSucceedsWhenJoinedSpendsUnavailab
   StubHeaderAncestryView ancestry;
   NullSpendsUnspentOutputsView unspent;
 
-  EXPECT_EQ(ValidateSigOpCosts({block, ancestry, unspent, 1, CombineFlags({VerifyFlag::P2SH})}), Result{});
+  EXPECT_EQ(ValidateSigOpCosts({block, ancestry, unspent, 1, Feature::P2SH}), Result{});
 }
 
 TEST(ValidateSigOpCostsTest, RejectsBlockJustOverSigOpCostLimit) {

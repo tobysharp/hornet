@@ -39,8 +39,6 @@ struct CommitMode {
 // This class writes the byte stream that commits to a spending transaction for the spend digest.
 class LegacyCommitSerializer {
  public:
-  LegacyCommitSerializer(lang::Bytes sigarg) : match_(Writer{}.PushData(sigarg).Release()) {}
-
   std::vector<uint8_t> operator()(const SpendContext& spend, CommitMode commit, lang::Bytes script_code) {
     writer_.Clear();
     // TODO: writer_.Reserve(...);
@@ -57,16 +55,15 @@ class LegacyCommitSerializer {
   // anyway.
   void SerializeScriptCode(lang::Bytes script) {
     // Writes a stripped version of the script into a temporary note.
-    Writer note;
+    std::vector<uint8_t> buffer;
     for (const auto& instruction : View{script}.Instructions()) {
-      if (instruction.opcode != Op::CodeSeparator && !std::ranges::equal(instruction.raw, match_))
-        note.Write(instruction.raw);
+      if (instruction.opcode != Op::CodeSeparator)
+        buffer.append_range(instruction.raw);
     }
-    const auto stripped = note.Release();
 
     // Copy the stripped code directly into the main writer.
-    writer_.WriteVarInt(std::ssize(stripped));
-    writer_.WriteBytes(stripped);
+    writer_.WriteVarInt(std::ssize(buffer));
+    writer_.WriteBytes(buffer);
   }
 
   void SerializeInput(const OutPoint& prevout, lang::Bytes script, uint32_t sequence) {
@@ -136,7 +133,6 @@ class LegacyCommitSerializer {
   }
 
   encoding::Writer writer_;
-  const std::vector<uint8_t> match_;
 };
 
 template <SpendValidationMode kMode>
@@ -160,7 +156,7 @@ Hash BuildSpendDigest<SpendValidationMode::Legacy>(const SpendContext& spend, co
   }
 
   // The serialization determines which information is committed to by the signature.
-  const std::vector<uint8_t> serialized = LegacyCommitSerializer{sig_arg}(spend, commit, code);
+  const std::vector<uint8_t> serialized = LegacyCommitSerializer{}(spend, commit, code);
 
   // Hash the serialized bytes.
   return crypto::DoubleSha256(serialized);

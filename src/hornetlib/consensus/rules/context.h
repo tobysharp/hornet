@@ -8,6 +8,7 @@
 #include "hornetlib/consensus/utxo.h"
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/block_header.h"
+#include "hornetlib/protocol/script/satisfy.h"
 
 namespace hornet::consensus::rules {
 
@@ -55,7 +56,7 @@ struct WitnessContext {
 };
 
 [[nodiscard]] inline WitnessContext MakeWitnessContext(const BlockEnvironmentContext& context) {
-  Assert(IsBIPActiveAtHeight(BIP::SegWit, context.height));
+  Assert(IsBIPActiveAtHeight(BIP::SegWitV0, context.height));
   return {context.block, scripts::ExtractWitnessCommitment(context.block)};  
 }
 
@@ -64,7 +65,7 @@ struct BlockSpendContext {
   const HeaderAncestryView& ancestry;
   const UnspentOutputsView& unspent;
   const int height;
-  const uint64_t script_flags;
+  const protocol::script::FeatureFlags script_flags = {};
 };
 
 struct SpendsInBlock {
@@ -79,6 +80,7 @@ struct TransactionSpendContext {
   const std::span<const SpendRecord> spends;
   const HeaderAncestryView& ancestry;
   const int height;
+  const protocol::script::FeatureFlags script_flags = {};
 };
 
 struct InputsInSpend {
@@ -89,7 +91,7 @@ struct InputsInSpend {
 
 struct MakeTransactionSpendContext {
   TransactionSpendContext operator()(const JoinedSpend& tx_spends, const BlockSpendContext& context) const {
-    return {tx_spends.tx, tx_spends.spends, context.ancestry, context.height};
+    return {tx_spends.tx, tx_spends.spends, context.ancestry, context.height, context.script_flags};
   }
 };
 
@@ -97,11 +99,12 @@ struct InputSpendContext {
   const protocol::TransactionConstView tx;
   const SpendRecord spend;
   const int height;
+  const protocol::script::FeatureFlags script_flags = {};
 };
 
 struct MakeInputSpendContext {
   InputSpendContext operator()(const SpendRecord& spend, const TransactionSpendContext& context) const {
-    return {context.tx, spend, context.height};
+    return {context.tx, spend, context.height, context.script_flags};
   }
 };
 

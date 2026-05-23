@@ -61,7 +61,7 @@ static constexpr auto kContextualRules = All{
   Rule {ValidateBlockWeight},             // A block’s total weight MUST NOT exceed 4,000,000 weight units.
   From (BIP::HeightInCoinbase,
     Rule{ValidateCoinbaseHeight}),        // From BIP34: The coinbase transaction’s sig script MUST begin by pushing the block height.
-  From(BIP::SegWit, With{MakeWitnessContext, kWitnessRules}),
+  From(BIP::SegWitV0, With{MakeWitnessContext, kWitnessRules}),
 };
 
 static constexpr auto kSpendingTransactionRules = All{

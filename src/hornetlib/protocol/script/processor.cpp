@@ -15,14 +15,24 @@
 
 namespace hornet::protocol::script {
 
-Processor::Processor(const runtime::Policy& policy /* = {} */,
-                    //int height /* = 0 */,
-                    std::optional<SpendContext> spend /* = std::nullopt */
-                    )
-    : policy_{policy},
-      env_{/*height, */runtime::Version::Legacy, std::move(spend)},
-      machine_(runtime::Machine{.stack = stack_, .script = parser_.Script(), .policy = policy_}) {
+// Returns the maximum permitted number of non-push operations during a script, depending on script
+// version.
+static int MaxNonPushOps(runtime::Version version) {
+  static constexpr int kMaxNonPushOps = 201;
+  return version == runtime::Version::Legacy || version == runtime::Version::SegwitV0 ? kMaxNonPushOps
+                                                                                      : std::numeric_limits<int>::max();
 }
+
+Processor::Processor(const runtime::Policy& policy /* = {} */,
+                     // int height /* = 0 */,
+                     std::optional<SpendContext> spend /* = std::nullopt */
+                     )
+    : policy_{policy},
+      env_{/*height, */ runtime::Version::Legacy, std::move(spend)},
+      machine_(runtime::Machine{.stack = stack_,
+                                .max_non_push_ops = MaxNonPushOps(env_.version),
+                                .script = parser_.Script(),
+                                .policy = policy_}) {}
 
 std::optional<int32_t> Processor::TryPeekInt() const {
   if (stack_.Empty()) return std::nullopt;
@@ -50,7 +60,8 @@ util::Expected<bool, lang::Error> Processor::Step() {
 void Processor::Reset(std::span<const uint8_t> script) {
   parser_.Reset(script);
   error_.reset();
-  machine_.emplace(runtime::Machine{.stack = stack_, .script = script, .policy = policy_});
+  machine_.emplace(runtime::Machine{
+      .stack = stack_, .max_non_push_ops = MaxNonPushOps(env_.version), .script = script, .policy = policy_});
 }
 
 // Run the script to the end and return its Boolean result.

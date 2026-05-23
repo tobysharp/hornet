@@ -37,7 +37,12 @@ enum class Error {
   InvalidSpendContext,  // Tried to access the spending context, but it doesn't exist.
   MalformedScript,      // Script not parseable as well-formed.
   OpVerify,             // An Op::Verify opcode failed.
-  OpEqualVerify         // An Op::EqualVerify opcode failed.
+  OpEqualVerify,        // An Op::EqualVerify opcode failed.
+  MultiSigKeyCount,     // An invalid number of keys for a multisig opcode.
+  MultiSigSigCount,     // An invalid number of signatures for a multisig opcode.
+  InvalidDERSignature,  // A DER signature could not be parsed.
+  InvalidPublicKey,     // A public key could not be parsed or validated.
+  SigNullDummy,         // The dummy element in a CheckMultiSig opcode was not empty.
 };
 
 // Returns false for empty, zero, and negative zero.

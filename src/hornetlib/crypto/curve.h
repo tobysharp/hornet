@@ -5,8 +5,10 @@
 #include <iomanip>
 #include <optional>
 #include <random>
+#include <tuple>
 
 #include "hornetlib/crypto/fp.h"
+#include "hornetlib/crypto/signature.h"
 #include "hornetlib/util/hex.h"
 
 namespace hornet::crypto::ecdsa {
@@ -139,7 +141,11 @@ class Curve {
     return std::nullopt;
   }
 
-  inline static bool VerifySignature(const PublicKey& public_key, const Signature& signature,
+  static std::optional<Signature> ParseDERSignature(std::span<const uint8_t> bytes, DERParseType strictness = DERParseType::Lax) {
+    return ParseSignatureDER<Wide>(bytes, strictness);
+  }
+
+  static bool VerifySignature(const PublicKey& public_key, const Signature& signature,
                                      const std::array<uint8_t, kBits / 8>& hashed_message) {
     return VerifySignatureImpl(public_key, signature, HashToInt(hashed_message));
   }

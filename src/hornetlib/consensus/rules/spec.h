@@ -51,7 +51,7 @@ static constexpr auto kConsensusRules = All{
     Rule{ValidateBlockWeight},                // A block’s total weight MUST NOT exceed 4,000,000 weight units.
     From(BIP::HeightInCoinbase,
       Rule{ValidateCoinbaseHeight}),          // From BIP34: The coinbase transaction’s sig script MUST begin by pushing the block height.
-    From(BIP::SegWit, With{MakeWitnessContext, All{
+    From(BIP::SegWitV0, With{MakeWitnessContext, All{
       Rule{ValidateWitnessCommitment},        // From BIP141: A block containing witness data MUST contain a witness commitment.
       Rule{ValidateWitnessNonce},             // From BIP141: A post-Segwit block containing a witness commitment MUST contain a witness nonce.
       Rule{ValidateWitnessMerkle}             // From BIP141: A post-SegWit block containing a witness commitment MUST commit to its witness Merkle root and nonce.

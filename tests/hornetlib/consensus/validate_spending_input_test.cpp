@@ -18,6 +18,7 @@ namespace {
 
 using protocol::script::Writer;
 using protocol::script::lang::Op;
+using secp256k1 = crypto::ecdsa::secp256k1;
 
 constexpr auto kCompressedPubkey =
     "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"_bytes;
@@ -65,6 +66,16 @@ std::vector<uint8_t> EncodeDerSignature(const crypto::ecdsa::secp256k1::Signatur
   return der;
 }
 
+std::vector<uint8_t> OverpadDerSignatureR(std::vector<uint8_t> signature) {
+  EXPECT_GE(signature.size(), 7u);
+  EXPECT_EQ(signature[0], 0x30);
+  EXPECT_EQ(signature[2], 0x02);
+  ++signature[1];
+  ++signature[3];
+  signature.insert(signature.begin() + 4, 0x00);
+  return signature;
+}
+
 protocol::Transaction MakeLegacySpendTx() {
   protocol::Transaction tx;
   tx.SetVersion(1);
@@ -88,14 +99,27 @@ std::vector<uint8_t> MakeP2PKHLockingScript(std::span<const uint8_t> pubkey_hash
       .Release();
 }
 
-std::vector<uint8_t> MakeP2PKHSignature(const protocol::script::SpendContext& spend, std::span<const uint8_t> locking_script) {
-  using secp256k1 = crypto::ecdsa::secp256k1;
+std::vector<uint8_t> MakeCheckMultiSigLockingScript(int sig_count, std::span<const uint8_t> pubkey) {
+  return Writer{}
+      .PushInt(sig_count)
+      .PushData(pubkey)
+      .PushInt(1)
+      .Then(Op::CheckMultiSig)
+      .Release();
+}
 
+std::vector<uint8_t> MakeCheckMultiSigUnlockingScript(std::span<const uint8_t> signature,
+                                                      std::span<const uint8_t> dummy = {}) {
+  return Writer{}.PushData(dummy).PushData(signature).Release();
+}
+
+std::vector<uint8_t> MakeLegacySignature(const protocol::script::SpendContext& spend,
+                                         std::span<const uint8_t> locking_script,
+                                         const secp256k1::Wide& private_key = secp256k1::Wide{1},
+                                         const secp256k1::Wide& nonce = secp256k1::Wide{1}) {
   static constexpr std::array<uint8_t, 1> kSigHashAll = {0x01};
   const auto digest = protocol::script::runtime::BuildSpendDigest(spend, kSigHashAll, locking_script);
 
-  const secp256k1::Wide private_key{1};
-  const secp256k1::Wide nonce{1};
   const secp256k1::Point nonce_point = nonce * secp256k1::G;
   const secp256k1::Mod_n r{nonce_point.x.x.Modulo(crypto::ecdsa::constants::n)};
   const secp256k1::Mod_n z{secp256k1::Wide::FromBigEndianBytes(digest)};
@@ -103,6 +127,10 @@ std::vector<uint8_t> MakeP2PKHSignature(const protocol::script::SpendContext& sp
   const secp256k1::Mod_n s = (z + r * d) / secp256k1::Mod_n{nonce};
 
   return EncodeDerSignature({r.x, s.x}, kSigHashAll.front());
+}
+
+std::vector<uint8_t> MakeP2PKHSignature(const protocol::script::SpendContext& spend, std::span<const uint8_t> locking_script) {
+  return MakeLegacySignature(spend, locking_script);
 }
 
 SpendRecord MakeSpendRecord(std::span<const uint8_t> pubkey_script) {
@@ -160,6 +188,35 @@ TEST(ValidateSpendingInputTest, RejectsP2PKHSpendWhenSignatureDoesNotValidate) {
 
   const SpendRecord spend = MakeSpendRecord(locking_script);
   EXPECT_EQ(ValidateScripts(InputSpendContext{tx, spend, 2}), Error::Spending_ScriptLocked);
+}
+
+TEST(ValidateSpendingInputTest, CheckMultiSigEnforcesStrictDERWhenFeatureEnabled) {
+  const auto locking_script = MakeCheckMultiSigLockingScript(1, kCompressedPubkey);
+  protocol::Transaction tx = MakeLegacySpendTx();
+
+  protocol::script::SpendContext spend_context{tx, 0, protocol::script::SpendPath::LegacyDirect};
+  auto signature = MakeLegacySignature(spend_context, locking_script);
+  signature = OverpadDerSignatureR(std::move(signature));
+  tx.SetSignatureScript(0, MakeCheckMultiSigUnlockingScript(signature));
+
+  const protocol::script::FeatureFlags strict_der_flags{protocol::script::Feature::StrictDER};
+  const SpendRecord spend = MakeSpendRecord(locking_script);
+  EXPECT_EQ(ValidateScripts(InputSpendContext{tx, spend, 2}), Result{});
+  EXPECT_EQ(ValidateScripts(InputSpendContext{tx, spend, 2, strict_der_flags}), Error::Spending_ScriptLocked);
+}
+
+TEST(ValidateSpendingInputTest, CheckMultiSigEnforcesNullDummyWhenFeatureEnabled) {
+  const auto locking_script = MakeCheckMultiSigLockingScript(1, kCompressedPubkey);
+  protocol::Transaction tx = MakeLegacySpendTx();
+
+  protocol::script::SpendContext spend_context{tx, 0, protocol::script::SpendPath::LegacyDirect};
+  const auto signature = MakeLegacySignature(spend_context, locking_script);
+  tx.SetSignatureScript(0, MakeCheckMultiSigUnlockingScript(signature, std::array<uint8_t, 1>{0x01}));
+
+  const protocol::script::FeatureFlags null_dummy_flags{protocol::script::Feature::NullDummy};
+  const SpendRecord spend = MakeSpendRecord(locking_script);
+  EXPECT_EQ(ValidateScripts(InputSpendContext{tx, spend, 2}), Result{});
+  EXPECT_EQ(ValidateScripts(InputSpendContext{tx, spend, 2, null_dummy_flags}), Error::Spending_ScriptLocked);
 }
 
 }  // namespace

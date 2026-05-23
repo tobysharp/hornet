@@ -50,6 +50,8 @@ class FeatureFlags {
     flags_ |= Mask(feature);
     return *this;
   }
+  FeatureFlags& operator |=(Feature feature) { return Add(feature); }
+  bool operator &(Feature feature) const { return Has(feature); }
 
  private:
   static constexpr uint8_t Mask(Feature feature) {

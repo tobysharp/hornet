@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <optional>
 #include <span>
@@ -27,6 +28,13 @@ constexpr auto kCompressedPubkey =
 
 constexpr auto kCompressedPubkeyHash =
   "751e76e8199196d454941c45d1b3a323f1433bd6"_bytes;
+
+using secp256k1 = crypto::ecdsa::secp256k1;
+
+struct TestKey {
+  secp256k1::Wide private_key;
+  std::vector<uint8_t> public_key;
+};
 
 template <typename Wide>
 std::array<uint8_t, sizeof(Wide)> ToBigEndianBytes(const Wide& value) {
@@ -68,6 +76,21 @@ std::vector<uint8_t> EncodeDerSignature(const crypto::ecdsa::secp256k1::Signatur
   return der;
 }
 
+std::vector<uint8_t> EncodeCompressedPublicKey(const secp256k1::Point& point) {
+  std::vector<uint8_t> sec1;
+  sec1.reserve(33);
+  sec1.push_back(crypto::ecdsa::detail::IsEven(point.y.x) ? 0x02 : 0x03);
+
+  const auto x = ToBigEndianBytes(point.x.x);
+  sec1.insert(sec1.end(), x.begin(), x.end());
+  return sec1;
+}
+
+TestKey MakeTestKey(uint32_t scalar) {
+  const secp256k1::Wide private_key{scalar};
+  return {private_key, EncodeCompressedPublicKey(private_key * secp256k1::G)};
+}
+
 std::vector<uint8_t> MakeP2PKHLockingScript(std::span<const uint8_t> pubkey_hash) {
   return Writer{}
       .Then(Op::Duplicate)
@@ -78,21 +101,50 @@ std::vector<uint8_t> MakeP2PKHLockingScript(std::span<const uint8_t> pubkey_hash
       .Release();
 }
 
-std::vector<uint8_t> MakeP2PKHSignature(const script::SpendContext& spend, std::span<const uint8_t> locking_script) {
-  using secp256k1 = crypto::ecdsa::secp256k1;
+std::vector<uint8_t> MakeCheckMultiSigLockingScript(int sig_count, std::span<const std::vector<uint8_t>> pubkeys) {
+  Writer writer;
+  writer.PushInt(sig_count);
+  for (const auto& pubkey : pubkeys) writer.PushData(pubkey);
+  writer.PushInt(int(pubkeys.size()));
+  return writer.Then(Op::CheckMultiSig).Release();
+}
 
-  static constexpr std::array<uint8_t, 1> kSigHashAll = {0x01};
-  const auto digest = BuildSpendDigest(spend, kSigHashAll, locking_script);
+std::vector<uint8_t> MakeCheckMultiSigUnlockingScript(std::span<const std::vector<uint8_t>> signatures,
+                                                      std::span<const uint8_t> dummy = {}) {
+  Writer writer;
+  writer.PushData(dummy);
+  for (const auto& signature : signatures) writer.PushData(signature);
+  return writer.Release();
+}
 
-  const secp256k1::Wide private_key{1};
-  const secp256k1::Wide nonce{1};
+std::vector<uint8_t> MakeLegacySignature(const script::SpendContext& spend, std::span<const uint8_t> locking_script,
+                                         const secp256k1::Wide& private_key, const secp256k1::Wide& nonce,
+                                         uint8_t sighash_type = 0x01) {
+  const std::array<uint8_t, 1> sighash = {sighash_type};
+  const auto digest = BuildSpendDigest(spend, sighash, locking_script);
+
   const secp256k1::Point nonce_point = nonce * secp256k1::G;
   const secp256k1::Mod_n r{nonce_point.x.x.Modulo(crypto::ecdsa::constants::n)};
   const secp256k1::Mod_n z{secp256k1::Wide::FromBigEndianBytes(digest)};
   const secp256k1::Mod_n d{private_key};
   const secp256k1::Mod_n s = (z + r * d) / secp256k1::Mod_n{nonce};
 
-  return EncodeDerSignature({r.x, s.x}, kSigHashAll.front());
+  return EncodeDerSignature({r.x, s.x}, sighash_type);
+}
+
+std::vector<uint8_t> MakeP2PKHSignature(const script::SpendContext& spend, std::span<const uint8_t> locking_script) {
+  return MakeLegacySignature(spend, locking_script, secp256k1::Wide{1}, secp256k1::Wide{1});
+}
+
+Policy MakeLegacyPolicy(bool strict_der = false, bool null_dummy = true) {
+  script::FeatureFlags features;
+  if (strict_der) features |= script::Feature::StrictDER;
+  if (null_dummy) features |= script::Feature::NullDummy;
+  return Policy{.require_minimal = false, .features = features};
+}
+
+script::Processor MakeLegacyProcessor(const script::SpendContext& spend, bool strict_der = false, bool null_dummy = true) {
+  return script::Processor{MakeLegacyPolicy(strict_der, null_dummy), std::make_optional(spend)};
 }
 
 Transaction MakeLegacyCheckSigSpendTx() {
@@ -116,9 +168,7 @@ TEST(SigOpsTest, CheckSigAcceptsCompressedSecp256k1PublicKeyOnLegacySpend) {
   tx.SetSignatureScript(0, unlocking_script);
 
   script::SpendContext spend{tx, 0, script::SpendPath::LegacyDirect};
-  script::Processor processor{Policy{.require_minimal = false, .require_strict_der_signatures = false},
-                              //0,
-                              std::make_optional(spend)};
+  script::Processor processor{MakeLegacyPolicy(), std::make_optional(spend)};
 
   ASSERT_TRUE(*processor.Run(unlocking_script));
   const auto lock_result = processor.Run(locking_script);
@@ -135,8 +185,7 @@ TEST(SigOpsTest, P2PKHAcceptsValidCompressedSecp256k1Spend) {
   const auto unlocking_script = Writer{}.PushData(signature).PushData(kCompressedPubkey).Release();
   tx.SetSignatureScript(0, unlocking_script);
 
-  script::Processor processor{Policy{.require_minimal = false, .require_strict_der_signatures = false},
-                              std::make_optional(spend)};
+  script::Processor processor{MakeLegacyPolicy(), std::make_optional(spend)};
 
   ASSERT_TRUE(*processor.Run(unlocking_script));
   const auto lock_result = processor.Run(locking_script);
@@ -154,8 +203,7 @@ TEST(SigOpsTest, P2PKHFailsEqualVerifyWhenPubkeyHashDoesNotMatch) {
   const auto unlocking_script = Writer{}.PushData(signature).PushData(kCompressedPubkey).Release();
   tx.SetSignatureScript(0, unlocking_script);
 
-  script::Processor processor{Policy{.require_minimal = false, .require_strict_der_signatures = false},
-                              std::make_optional(spend)};
+  script::Processor processor{MakeLegacyPolicy(), std::make_optional(spend)};
 
   ASSERT_TRUE(*processor.Run(unlocking_script));
   EXPECT_EQ(processor.Run(locking_script), lang::Error::OpEqualVerify);
@@ -171,8 +219,7 @@ TEST(SigOpsTest, P2PKHReturnsFalseWhenSignatureDoesNotValidate) {
   const auto unlocking_script = Writer{}.PushData(bad_signature).PushData(kCompressedPubkey).Release();
   tx.SetSignatureScript(0, unlocking_script);
 
-  script::Processor processor{Policy{.require_minimal = false, .require_strict_der_signatures = false},
-                              std::make_optional(spend)};
+  script::Processor processor{MakeLegacyPolicy(), std::make_optional(spend)};
 
   ASSERT_TRUE(*processor.Run(unlocking_script));
   const auto lock_result = processor.Run(locking_script);
@@ -190,8 +237,7 @@ TEST(SigOpsTest, CheckSigSignsOnlyTheSuffixAfterCodeSeparator) {
   const auto unlocking_script = Writer{}.PushData(signature).PushData(kCompressedPubkey).Release();
   tx.SetSignatureScript(0, unlocking_script);
 
-  script::Processor processor{Policy{.require_minimal = false, .require_strict_der_signatures = false},
-                              std::make_optional(spend)};
+  script::Processor processor{MakeLegacyPolicy(), std::make_optional(spend)};
 
   ASSERT_TRUE(*processor.Run(unlocking_script));
   const auto lock_result = processor.Run(locking_script);
@@ -209,8 +255,7 @@ TEST(SigOpsTest, CheckSigStillCommitsToPrefixWithoutCodeSeparator) {
   const auto unlocking_script = Writer{}.PushData(signature).PushData(kCompressedPubkey).Release();
   tx.SetSignatureScript(0, unlocking_script);
 
-  script::Processor processor{Policy{.require_minimal = false, .require_strict_der_signatures = false},
-                              std::make_optional(spend)};
+  script::Processor processor{MakeLegacyPolicy(), std::make_optional(spend)};
 
   ASSERT_TRUE(*processor.Run(unlocking_script));
   const auto lock_result = processor.Run(locking_script);
@@ -234,13 +279,247 @@ TEST(SigOpsTest, CheckSigUsesTheMostRecentCodeSeparator) {
   const auto unlocking_script = Writer{}.PushData(signature).PushData(kCompressedPubkey).Release();
   tx.SetSignatureScript(0, unlocking_script);
 
-  script::Processor processor{Policy{.require_minimal = false, .require_strict_der_signatures = false},
-                              std::make_optional(spend)};
+  script::Processor processor{MakeLegacyPolicy(), std::make_optional(spend)};
 
   ASSERT_TRUE(*processor.Run(unlocking_script));
   const auto lock_result = processor.Run(locking_script);
   ASSERT_TRUE(lock_result);
   EXPECT_FALSE(*lock_result);
+}
+
+TEST(SigOpsTest, CheckMultiSigAcceptsValidTwoOfTwoSpend) {
+  const auto key1 = MakeTestKey(1);
+  const auto key2 = MakeTestKey(2);
+  const std::array pubkeys = {key1.public_key, key2.public_key};
+  const auto locking_script = MakeCheckMultiSigLockingScript(2, pubkeys);
+
+  Transaction tx = MakeLegacyCheckSigSpendTx();
+  script::SpendContext spend{tx, 0, script::SpendPath::LegacyDirect};
+  const std::array signatures = {
+      MakeLegacySignature(spend, locking_script, key1.private_key, secp256k1::Wide{1}),
+      MakeLegacySignature(spend, locking_script, key2.private_key, secp256k1::Wide{2}),
+  };
+  const auto unlocking_script = MakeCheckMultiSigUnlockingScript(signatures);
+  tx.SetSignatureScript(0, unlocking_script);
+
+  auto processor = MakeLegacyProcessor(spend);
+  ASSERT_TRUE(*processor.Run(unlocking_script));
+  const auto lock_result = processor.Run(locking_script);
+  ASSERT_TRUE(lock_result);
+  EXPECT_TRUE(*lock_result);
+}
+
+TEST(SigOpsTest, CheckMultiSigMatchesOrderedSubsequenceOfPubkeys) {
+  const auto key1 = MakeTestKey(1);
+  const auto key2 = MakeTestKey(2);
+  const auto key3 = MakeTestKey(3);
+  const std::array pubkeys = {key1.public_key, key2.public_key, key3.public_key};
+  const auto locking_script = MakeCheckMultiSigLockingScript(2, pubkeys);
+
+  Transaction tx = MakeLegacyCheckSigSpendTx();
+  script::SpendContext spend{tx, 0, script::SpendPath::LegacyDirect};
+  const std::array signatures = {
+      MakeLegacySignature(spend, locking_script, key1.private_key, secp256k1::Wide{1}),
+      MakeLegacySignature(spend, locking_script, key3.private_key, secp256k1::Wide{3}),
+  };
+  const auto unlocking_script = MakeCheckMultiSigUnlockingScript(signatures);
+  tx.SetSignatureScript(0, unlocking_script);
+
+  auto processor = MakeLegacyProcessor(spend);
+  ASSERT_TRUE(*processor.Run(unlocking_script));
+  const auto lock_result = processor.Run(locking_script);
+  ASSERT_TRUE(lock_result);
+  EXPECT_TRUE(*lock_result);
+}
+
+TEST(SigOpsTest, CheckMultiSigReturnsFalseWhenRemainingKeysCannotSatisfySignatures) {
+  const auto key1 = MakeTestKey(1);
+  const auto key2 = MakeTestKey(2);
+  const auto key3 = MakeTestKey(3);
+  const std::array pubkeys = {key1.public_key, key2.public_key, key3.public_key};
+  const auto locking_script = MakeCheckMultiSigLockingScript(2, pubkeys);
+
+  Transaction tx = MakeLegacyCheckSigSpendTx();
+  script::SpendContext spend{tx, 0, script::SpendPath::LegacyDirect};
+  const std::array signatures = {
+      MakeLegacySignature(spend, locking_script, key3.private_key, secp256k1::Wide{3}),
+      MakeLegacySignature(spend, locking_script, key1.private_key, secp256k1::Wide{1}),
+  };
+  const auto unlocking_script = MakeCheckMultiSigUnlockingScript(signatures);
+  tx.SetSignatureScript(0, unlocking_script);
+
+  auto processor = MakeLegacyProcessor(spend);
+  ASSERT_TRUE(*processor.Run(unlocking_script));
+  const auto lock_result = processor.Run(locking_script);
+  ASSERT_TRUE(lock_result);
+  EXPECT_FALSE(*lock_result);
+}
+
+TEST(SigOpsTest, CheckMultiSigStripsMatchingSignaturePushesFromScriptCode) {
+  const auto key = MakeTestKey(1);
+  const std::array pubkeys = {key.public_key};
+  const auto base_script = MakeCheckMultiSigLockingScript(1, pubkeys);
+  const auto signing_script = Writer{}.Then(Op::Drop).Write(base_script).Release();
+
+  Transaction tx = MakeLegacyCheckSigSpendTx();
+  script::SpendContext spend{tx, 0, script::SpendPath::LegacyDirect};
+  const auto signature = MakeLegacySignature(spend, signing_script, key.private_key, secp256k1::Wide{1});
+  const auto locking_script = Writer{}
+                                  .PushData(signature)
+                                  .Write(signing_script)
+                                  .Release();
+  const std::array signatures = {signature};
+  const auto unlocking_script = MakeCheckMultiSigUnlockingScript(signatures);
+  tx.SetSignatureScript(0, unlocking_script);
+
+  auto processor = MakeLegacyProcessor(spend);
+  ASSERT_TRUE(*processor.Run(unlocking_script));
+  const auto lock_result = processor.Run(locking_script);
+  ASSERT_TRUE(lock_result);
+  EXPECT_TRUE(*lock_result);
+}
+
+TEST(SigOpsTest, CheckMultiSigReturnsFalseForEmptySignature) {
+  const auto key = MakeTestKey(1);
+  const std::array pubkeys = {key.public_key};
+  const auto locking_script = MakeCheckMultiSigLockingScript(1, pubkeys);
+  const std::array signatures = {std::vector<uint8_t>{}};
+
+  Transaction tx = MakeLegacyCheckSigSpendTx();
+  script::SpendContext spend{tx, 0, script::SpendPath::LegacyDirect};
+  const auto unlocking_script = MakeCheckMultiSigUnlockingScript(signatures);
+  tx.SetSignatureScript(0, unlocking_script);
+
+  auto processor = MakeLegacyProcessor(spend);
+  ASSERT_TRUE(processor.Run(unlocking_script));
+  const auto lock_result = processor.Run(locking_script);
+  ASSERT_TRUE(lock_result);
+  EXPECT_FALSE(*lock_result);
+}
+
+TEST(SigOpsTest, CheckMultiSigReturnsFalseForInvalidPublicKey) {
+  const std::array pubkeys = {std::vector<uint8_t>{0x01}};
+  const auto locking_script = MakeCheckMultiSigLockingScript(1, pubkeys);
+
+  Transaction tx = MakeLegacyCheckSigSpendTx();
+  script::SpendContext spend{tx, 0, script::SpendPath::LegacyDirect};
+  const std::array signatures = {MakeLegacySignature(spend, locking_script, secp256k1::Wide{1}, secp256k1::Wide{1})};
+  const auto unlocking_script = MakeCheckMultiSigUnlockingScript(signatures);
+  tx.SetSignatureScript(0, unlocking_script);
+
+  auto processor = MakeLegacyProcessor(spend);
+  ASSERT_TRUE(*processor.Run(unlocking_script));
+  const auto lock_result = processor.Run(locking_script);
+  ASSERT_TRUE(lock_result);
+  EXPECT_FALSE(*lock_result);
+}
+
+TEST(SigOpsTest, CheckMultiSigRejectsMalformedDerWhenStrictDEREnabled) {
+  const auto key = MakeTestKey(1);
+  const std::array pubkeys = {key.public_key};
+  const auto locking_script = MakeCheckMultiSigLockingScript(1, pubkeys);
+  const std::array signatures = {std::vector<uint8_t>{0x01}};
+
+  Transaction tx = MakeLegacyCheckSigSpendTx();
+  script::SpendContext spend{tx, 0, script::SpendPath::LegacyDirect};
+  const auto unlocking_script = MakeCheckMultiSigUnlockingScript(signatures);
+  tx.SetSignatureScript(0, unlocking_script);
+
+  auto processor = MakeLegacyProcessor(spend, true);
+  ASSERT_TRUE(*processor.Run(unlocking_script));
+  EXPECT_EQ(processor.Run(locking_script), lang::Error::InvalidDERSignature);
+}
+
+TEST(SigOpsTest, CheckMultiSigTreatsMalformedDerAsFalseWhenStrictDERDisabled) {
+  const auto key = MakeTestKey(1);
+  const std::array pubkeys = {key.public_key};
+  const auto locking_script = MakeCheckMultiSigLockingScript(1, pubkeys);
+  const std::array signatures = {std::vector<uint8_t>{0x01}};
+
+  Transaction tx = MakeLegacyCheckSigSpendTx();
+  script::SpendContext spend{tx, 0, script::SpendPath::LegacyDirect};
+  const auto unlocking_script = MakeCheckMultiSigUnlockingScript(signatures);
+  tx.SetSignatureScript(0, unlocking_script);
+
+  auto processor = MakeLegacyProcessor(spend, false);
+  ASSERT_TRUE(*processor.Run(unlocking_script));
+  const auto lock_result = processor.Run(locking_script);
+  ASSERT_TRUE(lock_result);
+  EXPECT_FALSE(*lock_result);
+}
+
+TEST(SigOpsTest, CheckMultiSigRejectsNonNullDummyWhenEnabled) {
+  const auto key = MakeTestKey(1);
+  const std::array pubkeys = {key.public_key};
+  const auto locking_script = MakeCheckMultiSigLockingScript(1, pubkeys);
+
+  Transaction tx = MakeLegacyCheckSigSpendTx();
+  script::SpendContext spend{tx, 0, script::SpendPath::LegacyDirect};
+  const std::array signatures = {MakeLegacySignature(spend, locking_script, key.private_key, secp256k1::Wide{1})};
+  const auto unlocking_script = MakeCheckMultiSigUnlockingScript(signatures, std::array<uint8_t, 1>{0x01});
+  tx.SetSignatureScript(0, unlocking_script);
+
+  auto processor = MakeLegacyProcessor(spend, false, true);
+  ASSERT_TRUE(*processor.Run(unlocking_script));
+  EXPECT_EQ(processor.Run(locking_script), lang::Error::SigNullDummy);
+}
+
+TEST(SigOpsTest, CheckMultiSigAllowsNonNullDummyWhenDisabled) {
+  const auto key = MakeTestKey(1);
+  const std::array pubkeys = {key.public_key};
+  const auto locking_script = MakeCheckMultiSigLockingScript(1, pubkeys);
+
+  Transaction tx = MakeLegacyCheckSigSpendTx();
+  script::SpendContext spend{tx, 0, script::SpendPath::LegacyDirect};
+  const std::array signatures = {MakeLegacySignature(spend, locking_script, key.private_key, secp256k1::Wide{1})};
+  const auto unlocking_script = MakeCheckMultiSigUnlockingScript(signatures, std::array<uint8_t, 1>{0x01});
+  tx.SetSignatureScript(0, unlocking_script);
+
+  auto processor = MakeLegacyProcessor(spend, false, false);
+  ASSERT_TRUE(*processor.Run(unlocking_script));
+  const auto lock_result = processor.Run(locking_script);
+  ASSERT_TRUE(lock_result);
+  EXPECT_TRUE(*lock_result);
+}
+
+TEST(SigOpsTest, CheckMultiSigAcceptsZeroOfOneSpend) {
+  const auto key = MakeTestKey(1);
+  const std::array pubkeys = {key.public_key};
+  const auto locking_script = MakeCheckMultiSigLockingScript(0, pubkeys);
+  const std::span<const std::vector<uint8_t>> signatures;
+
+  Transaction tx = MakeLegacyCheckSigSpendTx();
+  script::SpendContext spend{tx, 0, script::SpendPath::LegacyDirect};
+  const auto unlocking_script = MakeCheckMultiSigUnlockingScript(signatures);
+  tx.SetSignatureScript(0, unlocking_script);
+
+  auto processor = MakeLegacyProcessor(spend);
+  ASSERT_TRUE(processor.Run(unlocking_script));
+  const auto lock_result = processor.Run(locking_script);
+  ASSERT_TRUE(lock_result);
+  EXPECT_TRUE(*lock_result);
+}
+
+TEST(SigOpsTest, CheckMultiSigRejectsTooManyPubKeys) {
+  const auto script = Writer{}.PushInt(21).Then(Op::CheckMultiSig).Release();
+
+  script::Processor processor{MakeLegacyPolicy()};
+  EXPECT_EQ(processor.Run(script), lang::Error::MultiSigKeyCount);
+}
+
+TEST(SigOpsTest, CheckMultiSigRejectsMoreSignaturesThanPubKeys) {
+  const auto script = Writer{}
+                          .PushInt(0)
+                          .PushInt(1)
+                          .PushInt(1)
+                          .PushInt(2)
+                          .PushInt(1)
+                          .PushInt(1)
+                          .Then(Op::CheckMultiSig)
+                          .Release();
+
+  script::Processor processor{MakeLegacyPolicy()};
+  EXPECT_EQ(processor.Run(script), lang::Error::MultiSigSigCount);
 }
 
 }  // namespace

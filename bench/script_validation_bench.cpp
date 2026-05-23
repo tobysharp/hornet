@@ -16,6 +16,7 @@
 #include "hornetlib/crypto/signature.h"
 #include "hornetlib/protocol/script/lang/op.h"
 #include "hornetlib/protocol/script/runtime/signing.h"
+#include "hornetlib/protocol/script/satisfy.h"
 #include "hornetlib/protocol/script/spend.h"
 #include "hornetlib/protocol/script/writer.h"
 #include "hornetlib/protocol/transaction.h"
@@ -139,9 +140,10 @@ struct BenchSpend {
   protocol::Transaction tx;
   std::vector<uint8_t> locking_script;
   SpendRecord spend;
+  protocol::script::FeatureFlags flags;
   int height = 2;
 
-  [[nodiscard]] InputSpendContext Context() const { return {tx, spend, height}; }
+  [[nodiscard]] InputSpendContext Context() const { return {tx, spend, height, flags}; }
 };
 
 const secp256k1::Point& PublicKeyPoint(const secp256k1::PublicKey& public_key) {
@@ -173,7 +175,7 @@ struct CheckSigBenchCase {
 };
 
 BenchSpend MakeP2PKBenchSpend() {
-  BenchSpend bench_spend{MakeLegacySpendTx(), {}, {}, 2};
+  BenchSpend bench_spend{MakeLegacySpendTx(), {}, {}, {}, 2};
   bench_spend.locking_script = MakeP2PKLockingScript(kCompressedPubkey);
 
   const SpendContext spend_context{bench_spend.tx, 0, SpendPath::LegacyDirect};
@@ -184,7 +186,7 @@ BenchSpend MakeP2PKBenchSpend() {
 }
 
 BenchSpend MakeP2PKHBenchSpend() {
-  BenchSpend bench_spend{MakeLegacySpendTx(), {}, {}, 2};
+  BenchSpend bench_spend{MakeLegacySpendTx(), {}, {}, {}, 2};
   bench_spend.locking_script = MakeP2PKHLockingScript(kCompressedPubkeyHash);
 
   const SpendContext spend_context{bench_spend.tx, 0, SpendPath::LegacyDirect};

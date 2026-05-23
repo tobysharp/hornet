@@ -107,7 +107,7 @@ inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transacti
 
 // A pre-SegWit block MUST NOT contain any witness data.
 [[nodiscard]] inline Result ValidateNoWitnessPreSegwit(const BlockEnvironmentContext& context) {
-  if (!IsBIPActiveAtHeight(BIP::SegWit, context.height)) {
+  if (!IsBIPActiveAtHeight(BIP::SegWitV0, context.height)) {
     for (const auto& tx : context.block.Transactions()) {
       if (tx.IsWitness()) return Error::Structure_WitnessDataPreSegwit;
     }

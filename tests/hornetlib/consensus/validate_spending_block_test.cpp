@@ -91,7 +91,7 @@ TEST(ValidateSpendingBlockTest, ValidateBlockSubsidySucceedsWhenJoinedSpendsUnav
   StubHeaderAncestryView ancestry;
   NullSpendsUnspentOutputsView unspent;
 
-  EXPECT_EQ(ValidateBlockSubsidy({candidate, ancestry, unspent, 1, 0}), Result{});
+  EXPECT_EQ(ValidateBlockSubsidy({candidate, ancestry, unspent, 1}), Result{});
 }
 
 TEST(ValidateSpendingBlockTest, RejectsDuplicateOutPoint) {

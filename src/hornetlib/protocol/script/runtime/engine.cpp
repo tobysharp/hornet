@@ -48,14 +48,6 @@ Handler GetHandler(Version version, lang::Op opcode) {
   return kDispatchTable[uint8_t(version)][opcode];
 }
 
-// Returns the maximum permitted number of non-push operations during a script, depending on script
-// version.
-inline static int MaxNonPushOps(Version version) {
-  static constexpr int kMaxNonPushOps = 201;
-  return version == Version::Legacy || version == Version::SegwitV0
-             ? kMaxNonPushOps
-             : std::numeric_limits<int>::max();
-}
 }  // namespace detail
 
 void ExecuteHandler(lang::Op op, const Context& context) {
@@ -65,13 +57,7 @@ void ExecuteHandler(lang::Op op, const Context& context) {
 
 void StepExecution(const Context& context) {
   // Validate the number of script operations executed.
-  if (!IsPush(context.Op())) {
-    const int max_non_push_ops = detail::MaxNonPushOps(context.Version());
-    if (context.machine.non_push_op_count >= max_non_push_ops)
-      runtime::Throw(lang::Error::OpCountExcessive, "Hit the limit of ", max_non_push_ops,
-                     "non-push operations per script.");
-    ++context.machine.non_push_op_count;               
-  }
+  if (!IsPush(context.Op())) context.machine.IncNonPushOps();
 
   ExecuteHandler(context.Op(), context);
 }

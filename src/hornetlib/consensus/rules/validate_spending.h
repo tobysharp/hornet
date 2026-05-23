@@ -35,7 +35,7 @@ namespace hornet::consensus::rules {
                   .funding_height = context.spend.funding_height,
                   .is_coinbase = context.spend.IsCoinbase()},
   };
-  const auto result = protocol::script::SatisfiesLockingScript(data);
+  const auto result = protocol::script::SatisfiesLockingScript(data, context.script_flags);
   if (!result || !*result) return Error::Spending_ScriptLocked;
 
   return {};
@@ -120,14 +120,26 @@ namespace hornet::consensus::rules {
 // Spending validation rules per block
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-inline uint64_t GetScriptVerifyFlags(const BlockValidationContext& rhs) {
-  using namespace scripts;
+inline protocol::script::FeatureFlags GetScriptFeatureFlags(const BlockValidationContext& rhs) {
+  using namespace protocol::script;
+  const int height = rhs.view.Length();
   const auto exception_hash = "00000000000002dc756eebf4f49723ed8d30cc28a5f108eb94b1ba88ac4f9c22"_sha256;
-  return rhs.block.Header().ComputeHash() == exception_hash ? 0 : CombineFlags({VerifyFlag::P2SH, VerifyFlag::Witness});
+  
+  FeatureFlags flags;
+  if (rhs.block.Header().ComputeHash() != exception_hash) flags = Feature::P2SH;
+  constexpr std::pair<Feature, BIP> kTable[] = {
+    { Feature::CheckLockTimeVerify, BIP::CheckLockTimeVerify },
+    { Feature::CheckSequenceVerify, BIP::CheckSequenceVerify },
+    { Feature::NullDummy,           BIP::NullDummy },
+    { Feature::StrictDER,           BIP::StrictDERSignatures },
+    { Feature::Witness,             BIP::SegWitV0 }
+  };
+  for (auto [feature, bip] : kTable) if (IsBIPActiveAtHeight(bip, height)) flags |= feature;
+  return flags;
 }
 
 inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs) {
-  return {rhs.block, rhs.view, rhs.unspent, rhs.view.Length(), GetScriptVerifyFlags(rhs)};
+  return {rhs.block, rhs.view, rhs.unspent, rhs.view.Length(), GetScriptFeatureFlags(rhs)};
 }
 
 // A transaction input MUST reference a previous transaction output that remains unspent.

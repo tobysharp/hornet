@@ -36,7 +36,7 @@ using hornet::protocol::Transaction;
 using hornet::test::StubHeaderAncestryView;
 using test::RoundTrip;
 
-constexpr int kSegWitHeight = GetSoftForkActivationHeight(BIP::SegWit);
+constexpr int kSegWitHeight = GetSoftForkActivationHeight(BIP::SegWitV0);
 constexpr int kWitnessCommitmentOutputIndex = 1;
 
 Transaction MakeCoinbaseTransaction() {

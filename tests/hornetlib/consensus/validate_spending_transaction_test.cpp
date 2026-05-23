@@ -242,7 +242,7 @@ TEST(ValidateSpendingTransactionTest, AcceptsCoreValidBlockDespiteAccumulatorOve
   ASSERT_EQ(safe_inputs_total, safe_outputs_total);
 
   const test::StubHeaderAncestryView ancestry;
-  EXPECT_EQ(ValidateBlockSubsidy({block, ancestry, unspent, kHeight, 0}), Result{});
+  EXPECT_EQ(ValidateBlockSubsidy({block, ancestry, unspent, kHeight}), Result{});
 }
 
 TEST(ValidateSpendingTransactionTest, AcceptsExactReferenceRewardDespiteAccumulatorOverflowRisk) {
@@ -273,7 +273,7 @@ TEST(ValidateSpendingTransactionTest, AcceptsExactReferenceRewardDespiteAccumula
   ASSERT_EQ(safe_inputs_total - safe_outputs_total, static_cast<__int128>(1));
 
   const test::StubHeaderAncestryView ancestry;
-  EXPECT_EQ(ValidateBlockSubsidy({block, ancestry, unspent, kHeight, 0}), Result{});
+  EXPECT_EQ(ValidateBlockSubsidy({block, ancestry, unspent, kHeight}), Result{});
 }
 
 TEST(ValidateSpendingTransactionTest, RejectsCoinbaseAboveReferenceRewardDespiteAccumulatorOverflowRisk) {
@@ -304,7 +304,7 @@ TEST(ValidateSpendingTransactionTest, RejectsCoinbaseAboveReferenceRewardDespite
   ASSERT_EQ(safe_inputs_total - safe_outputs_total, static_cast<__int128>(1));
 
   const test::StubHeaderAncestryView ancestry;
-  EXPECT_EQ(ValidateBlockSubsidy({block, ancestry, unspent, kHeight, 0}),
+  EXPECT_EQ(ValidateBlockSubsidy({block, ancestry, unspent, kHeight}),
             Error::Spending_CoinbaseAmountExceedsBlockReward);
 }
 

@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <tuple>
 #include <utility>
 
 namespace hornet::crypto::ecdsa {
