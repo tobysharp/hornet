@@ -10,6 +10,7 @@ add_library(hornetlib STATIC
    protocol/script/runtime/ops/bitwise.cpp
    protocol/script/runtime/ops/control.cpp
    protocol/script/runtime/ops/crypto.cpp
+   protocol/script/runtime/ops/lock.cpp
    protocol/script/runtime/ops/sig.cpp
    protocol/script/runtime/ops/stack.cpp
    protocol/script/runtime/signing.cpp

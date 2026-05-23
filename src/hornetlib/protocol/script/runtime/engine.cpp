@@ -14,6 +14,7 @@ void RegisterArithmeticHandlers(Dispatcher& table);  // In ops/arithmetic.cpp
 void RegisterBitwiseHandlers(Dispatcher& table);     // In ops/bitwise.cpp
 void RegisterControlHandlers(Dispatcher& table);     // In ops/control.cpp
 void RegisterCryptoHandlers(Dispatcher& table);      // In ops/crypto.cpp
+void RegisterLockHandlers(Dispatcher& table);        // In ops/lock.cpp
 void RegisterSigHandlers(Dispatcher& table);         // In ops/sig.cpp
 void RegisterStackHandlers(Dispatcher& table);       // In ops/stack.cpp
 
@@ -28,9 +29,9 @@ void RegisterAllHandlers(Version, Dispatcher& handlers) {
   RegisterBitwiseHandlers(handlers);
   RegisterControlHandlers(handlers);
   RegisterCryptoHandlers(handlers);
+  RegisterLockHandlers(handlers);
   RegisterSigHandlers(handlers);
   RegisterStackHandlers(handlers);
-  // TODO: Fill in other handler entries, depending on version.
 }
 
 Handler GetHandler(Version version, lang::Op opcode) {

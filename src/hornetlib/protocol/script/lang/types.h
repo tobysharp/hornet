@@ -43,6 +43,8 @@ enum class Error {
   InvalidDERSignature,  // A DER signature could not be parsed.
   InvalidPublicKey,     // A public key could not be parsed or validated.
   SigNullDummy,         // The dummy element in a CheckMultiSig opcode was not empty.
+  LockTimeInvalid,      // The argument of CheckLockTimeVerify was negative.
+  LockTimeUnsatisfied,  // The transaction's locktime did not satisfy the CheckLockTimeVerify condition.
 };
 
 // Returns false for empty, zero, and negative zero.

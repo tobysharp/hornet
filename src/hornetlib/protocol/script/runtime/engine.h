@@ -75,6 +75,7 @@ struct Context {
   bool RequiresMinimal() const { return machine.policy.require_minimal; }
   bool IsStrictDER() const { return machine.policy.features.Has(Feature::StrictDER); }
   bool IsNullDummy() const { return machine.policy.features.Has(Feature::NullDummy); }
+  bool IsCheckLockTimeVerify() const { return machine.policy.features.Has(Feature::CheckLockTimeVerify); }
 
   Stack& Stack() const { return machine.stack; }
   Version Version() const { return env.version; }

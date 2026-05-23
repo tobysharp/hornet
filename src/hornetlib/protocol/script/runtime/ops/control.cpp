@@ -14,16 +14,18 @@ using namespace lang;
 
 // Op::Verify
 static void OnVerify(const Context& context) {
-  context.Call([&](Bytes input) { if (!AsBool(input)) Throw(Error::OpVerify); });
+  context.Call([&](Bytes input) {
+    if (!AsBool(input)) Throw(Error::OpVerify);
+  });
 }
 
 // Op::Nop
-static void OnNop(const Context&) {
-}
+static void OnNop(const Context&) {}
 
 // Register handlers
 void RegisterControlHandlers(Dispatcher& table) {
-  table[Op::Nop] = &OnNop;
+  table[Op::Nop] = table[Op::Nop1] = table[Op::Nop4] = table[Op::Nop5] = table[Op::Nop6] = table[Op::Nop7] =
+      table[Op::Nop8] = table[Op::Nop9] = table[Op::Nop10] = &OnNop;
   table[Op::Verify] = &OnVerify;
 }
 

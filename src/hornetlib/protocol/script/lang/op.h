@@ -59,12 +59,25 @@ enum class Op : uint8_t {
   SHA256 = 0xa8,
   Hash160 = 0xa9,
   CodeSeparator = 0xab,
-
-  // Check signature opcodes.
   CheckSig = 0xac,
   CheckSigVerify = 0xad,
   CheckMultiSig = 0xae,
-  CheckMultiSigVerify = 0xaf
+  CheckMultiSigVerify = 0xaf,
+
+  // Later operations.
+  CheckLockTimeVerify = 0xb1,
+  CheckSequenceVerify = 0xb2,
+  CheckSigAdd = 0xba,
+
+  // Upgradeable operations
+  Nop1 = 0xb0,
+  Nop4 = 0xb3,
+  Nop5 = 0xb4,
+  Nop6 = 0xb5,
+  Nop7 = 0xb6,
+  Nop8 = 0xb7,
+  Nop9 = 0xb8,
+  Nop10 = 0xb9
 };
 
 inline constexpr int OpCount = 256;
