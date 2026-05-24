@@ -10,12 +10,12 @@
 
 namespace hornet::protocol::script::runtime {
 
+namespace {
+
 using namespace lang;
 
-
-
 template <bool kNegate>
-static void OnIf(const Context& context) {
+void OnIf(const Context& context) {
   // <expression> if [statements] [else [statements]] endif
   auto& conditions = context.Conditions();
   bool value = false;
@@ -28,24 +28,31 @@ static void OnIf(const Context& context) {
 }
 
 // Op::Else
-static void OnElse(const Context& context) {
+void OnElse(const Context& context) {
   context.Conditions().Toggle();
 }
 
 // Op::EndIf
-static void OnEndIf(const Context& context) {
+void OnEndIf(const Context& context) {
   context.Conditions().Pop();
 }
 
+// Op::Nop
+void OnNop(const Context&) {}
+
+// Op::Return
+void OnReturn(const Context&) {
+  Throw(Error::OpReturn);
+}
+
 // Op::Verify
-static void OnVerify(const Context& context) {
+void OnVerify(const Context& context) {
   context.Call([&](Bytes input) {
     if (!AsBool(input)) Throw(Error::OpVerify);
   });
 }
 
-// Op::Nop
-static void OnNop(const Context&) {}
+}  // namespace
 
 // Register handlers
 void RegisterControlHandlers(Dispatcher& table) {
@@ -55,6 +62,7 @@ void RegisterControlHandlers(Dispatcher& table) {
   table[Op::Nop] = table[Op::Nop1] = table[Op::Nop4] = table[Op::Nop5] = table[Op::Nop6] = table[Op::Nop7] =
       table[Op::Nop8] = table[Op::Nop9] = table[Op::Nop10] = &OnNop;
   table[Op::NotIf] = &OnIf<true>;
+  table[Op::Return] = &OnReturn;
   table[Op::Verify] = &OnVerify;
 }
 

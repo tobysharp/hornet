@@ -47,6 +47,7 @@ enum class Error {
   LockTimeUnsatisfied,  // The transaction's locktime did not satisfy the CheckLockTimeVerify condition.
   UnbalancedCondition,  // There was an unbalanced If/NotIf/Else/Endif instruction.
   NumEqualVerify,       // An Op::NumEqualVerify opcode failed.
+  OpReturn,             // Tried to execute an Op::Return instruction.
 };
 
 // Returns false for empty, zero, and negative zero.

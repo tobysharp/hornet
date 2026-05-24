@@ -198,5 +198,24 @@ TEST(ControlOpsTest, VerifyRequiresOneOperand) {
   EXPECT_EQ(processor.Run(script), lang::Error::StackUnderflow);
 }
 
+TEST(ControlOpsTest, ReturnFailsImmediately) {
+  const auto script = Writer{}.PushInt(7).Then(Op::Return).Release();
+
+  Processor processor;
+  EXPECT_EQ(processor.Run(script), lang::Error::OpReturn);
+  ExpectTopInt(processor, 7);
+}
+
+TEST(ControlOpsTest, ReturnInInactiveBranchIsSkipped) {
+  const auto script = Writer{}.PushInt(0).Then(Op::If).Then(Op::Return).Then(Op::EndIf).PushInt(9).Release();
+
+  Processor processor;
+  const auto result = processor.Run(script);
+
+  ASSERT_TRUE(result);
+  EXPECT_TRUE(*result);
+  ExpectTopInt(processor, 9);
+}
+
 }  // namespace
 }  // namespace hornet::protocol::script::runtime::ops
