@@ -58,6 +58,18 @@ enum class Op : uint8_t {
 
   // Arithmetic operations.
   Add = 0x93,
+  Subtract = 0x94,
+  BooleanAnd = 0x9a,
+  BooleanOr = 0x9b,
+  NumEqual = 0x9c,
+  NumEqualVerify = 0x9d,
+  NumNotEqual = 0x9e,
+  LessThan = 0x9f,
+  GreaterThan = 0xa0,
+  LessThanOrEqual = 0xa1,
+  GreaterThanOrEqual = 0xa2,
+  Min = 0xa3,
+  Max = 0xa4,
 
   // Cryptographic operations.
   SHA256 = 0xa8,
