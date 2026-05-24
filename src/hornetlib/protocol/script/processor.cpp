@@ -30,6 +30,7 @@ Processor::Processor(const runtime::Policy& policy /* = {} */,
     : policy_{policy},
       env_{/*height, */ runtime::Version::Legacy, std::move(spend)},
       machine_(runtime::Machine{.stack = stack_,
+                                .conditions = conditions_,
                                 .max_non_push_ops = MaxNonPushOps(env_.version),
                                 .script = parser_.Script(),
                                 .policy = policy_}) {}
@@ -49,7 +50,12 @@ util::Expected<bool, lang::Error> Processor::Step() {
 
   try {
     if (const auto instruction = parser_.Next()) Execute(*instruction);
-    return !IsFinished();
+    bool more_instructions = parser_.Peek().has_value();
+    if (!more_instructions) {
+      if (!parser_.IsEof()) return lang::Error::MalformedScript;
+      if (!conditions_.Empty()) return lang::Error::UnbalancedCondition;
+    }
+    return more_instructions;
   } catch (const runtime::Exception& e) {
     error_ = e.GetError();
     LogWarn() << "Script execution error code " << int(*error_) << ": " << e.what();
@@ -60,8 +66,12 @@ util::Expected<bool, lang::Error> Processor::Step() {
 void Processor::Reset(std::span<const uint8_t> script) {
   parser_.Reset(script);
   error_.reset();
-  machine_.emplace(runtime::Machine{
-      .stack = stack_, .max_non_push_ops = MaxNonPushOps(env_.version), .script = script, .policy = policy_});
+  conditions_ = {};
+  machine_.emplace(runtime::Machine{.stack = stack_,
+                                    .conditions = conditions_,
+                                    .max_non_push_ops = MaxNonPushOps(env_.version),
+                                    .script = script,
+                                    .policy = policy_});
 }
 
 // Run the script to the end and return its Boolean result.
@@ -71,6 +81,7 @@ util::Expected<bool, lang::Error> Processor::Run() {
   try {
     while (const auto instruction = parser_.Next()) Execute(*instruction);
     if (!parser_.IsEof()) return lang::Error::MalformedScript;
+    if (!conditions_.Empty()) return lang::Error::UnbalancedCondition;
   } catch (const runtime::Exception& e) {
     error_ = e.GetError();
     LogWarn() << "Script execution error code " << int(*error_) << ": " << e.what();

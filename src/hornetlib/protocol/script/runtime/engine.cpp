@@ -41,7 +41,7 @@ Handler GetHandler(Version version, lang::Op opcode) {
       std::fill(handlers.begin(), handlers.end(), &OnUnknown);
       RegisterAllHandlers(version, handlers);
       return handlers;
-    };    
+    };
     std::array<Dispatcher, Version::Count> table;
     for (int i = 0; i < int{Version::Count}; ++i) table[i] = BuildDispatcher(Version(i));
     return table;
@@ -60,7 +60,8 @@ void StepExecution(const Context& context) {
   // Validate the number of script operations executed.
   if (!IsPush(context.Op())) context.machine.IncNonPushOps();
 
-  ExecuteHandler(context.Op(), context);
+  // If we're in an actively executing scope (or at a condition), dispatch the handler.
+  if (context.Conditions() || IsConditional(context.Op())) ExecuteHandler(context.Op(), context);
 }
 
 }  // namespace hornet::protocol::script::runtime

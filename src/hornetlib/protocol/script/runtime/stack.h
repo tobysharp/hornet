@@ -132,4 +132,30 @@ inline void Stack::Call(Fn&& fn) {
   }
 }
 
+class ConditionStack {
+ public:
+  operator bool() const { return first_false_ < 0; }
+  bool Empty() const { return size_ < 1; }
+  void Toggle() { 
+    if (size_ < 1) Throw(lang::Error::UnbalancedCondition);
+    if (first_false_ < 0)
+      first_false_ = size_ - 1;
+    else if (first_false_ == size_ - 1)
+      first_false_ = -1;
+  }
+  void Push(bool value) {
+    ++size_;
+    if (first_false_ < 0 && !value) first_false_ = size_ - 1;
+  }
+  void Pop() {
+    if (size_ < 1) Throw(lang::Error::UnbalancedCondition);
+    --size_;
+    if (first_false_ >= size_) first_false_ = -1;
+  }
+
+ private:
+  int size_ = 0;
+  int first_false_ = -1;
+};
+
 }  // namespace hornet::protocol::script::runtime

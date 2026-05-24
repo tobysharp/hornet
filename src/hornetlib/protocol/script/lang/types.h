@@ -45,6 +45,7 @@ enum class Error {
   SigNullDummy,         // The dummy element in a CheckMultiSig opcode was not empty.
   LockTimeInvalid,      // The argument of CheckLockTimeVerify was negative.
   LockTimeUnsatisfied,  // The transaction's locktime did not satisfy the CheckLockTimeVerify condition.
+  UnbalancedCondition,  // There was an unbalanced If/NotIf/Else/Endif instruction.
 };
 
 // Returns false for empty, zero, and negative zero.

@@ -35,6 +35,7 @@ struct Policy {
 struct Machine {
   // Mutable machine state.
   runtime::Stack& stack;
+  runtime::ConditionStack& conditions;
   int non_push_op_count = 0;
   const int max_non_push_ops = 201;
 
@@ -78,6 +79,7 @@ struct Context {
   bool IsCheckLockTimeVerify() const { return machine.policy.features.Has(Feature::CheckLockTimeVerify); }
 
   Stack& Stack() const { return machine.stack; }
+  ConditionStack& Conditions() const { return machine.conditions; }
   Version Version() const { return env.version; }
   lang::Op Op() const { return instruction.opcode; }
   const SpendContext& Spend() const {

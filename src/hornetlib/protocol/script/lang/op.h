@@ -40,6 +40,10 @@ enum class Op : uint8_t {
 
   // Control operations.
   Nop = 0x61,
+  If = 0x63,
+  NotIf = 0x64,
+  Else = 0x67,
+  EndIf = 0x68,
   Verify = 0x69,
   Return = 0x6a,
   
@@ -138,6 +142,10 @@ inline constexpr bool IsDirectPush(Op opcode) {
 inline constexpr int DirectPushSize(Op opcode) {
   Assert(IsDirectPush(opcode));
   return +opcode;
+}
+
+inline constexpr bool IsConditional(Op opcode) {
+  return opcode >= Op::If && opcode <= Op::EndIf;
 }
 
 }  // namespace hornet::protocol::script::lang
