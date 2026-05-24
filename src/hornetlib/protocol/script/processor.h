@@ -61,6 +61,8 @@ class Processor {
   runtime::Policy policy_;
   runtime::Environment env_;
   runtime::Stack stack_;
+  runtime::Stack altstack_;
+  
   runtime::ConditionStack conditions_;
   std::optional<runtime::Machine> machine_;
   std::optional<lang::Error> error_;

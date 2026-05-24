@@ -62,6 +62,9 @@ void StepExecution(const Context& context) {
 
   // If we're in an actively executing scope (or at a condition), dispatch the handler.
   if (context.Conditions() || IsConditional(context.Op())) ExecuteHandler(context.Op(), context);
+
+  // Validate the total size across both stacks
+  if (context.Stack().Size() + context.AltStack().Size() > Stack::kMaxItems) Throw(lang::Error::StackOverflow);
 }
 
 }  // namespace hornet::protocol::script::runtime

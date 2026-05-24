@@ -35,6 +35,7 @@ struct Policy {
 struct Machine {
   // Mutable machine state.
   runtime::Stack& stack;
+  runtime::Stack& altstack;
   runtime::ConditionStack& conditions;
   int non_push_op_count = 0;
   const int max_non_push_ops = 201;
@@ -79,6 +80,7 @@ struct Context {
   bool IsCheckLockTimeVerify() const { return machine.policy.features.Has(Feature::CheckLockTimeVerify); }
   bool IsCheckSequenceVerify() const { return machine.policy.features.Has(Feature::CheckSequenceVerify); }
 
+  Stack& AltStack() const { return machine.altstack; }
   Stack& Stack() const { return machine.stack; }
   ConditionStack& Conditions() const { return machine.conditions; }
   Version Version() const { return env.version; }
@@ -95,7 +97,7 @@ struct Context {
     machine.stack.Call(std::forward<Fn>(fn));
   }
   lang::Bytes ScriptCode() const { return machine.ScriptCode(); }
-  int32_t Int32(int pos) const { return Stack().Int32(pos, RequiresMinimal()); }
+  int32_t Int32(int pos = 0) const { return Stack().Int32(pos, RequiresMinimal()); }
   template <std::integral T, int kBytes>
   T DecodeTop() const { return Decode<T, kBytes>(Stack().Top(), RequiresMinimal()); }
 };

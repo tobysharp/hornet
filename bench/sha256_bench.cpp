@@ -52,7 +52,7 @@ static void BM_SHA256_SHANI(benchmark::State& state) {
 static void BM_DoubleSHA256_Scalar(benchmark::State& state) {
   auto data = GenerateTestData(state.range(0));
   for (auto _ : state) {
-    auto hash = DoubleSha256(data.begin(), data.end());
+    auto hash = Hash256(data);
     benchmark::DoNotOptimize(hash);
   }
   state.SetBytesProcessed(state.iterations() * state.range(0));
@@ -90,7 +90,7 @@ static void BM_DoubleSHA256Batch_Scalar(benchmark::State& state) {
   }
 
   for (auto _ : state) {
-    DoubleSha256Batch(input_data.data(), input_size, input_size,
+    Hash256Batch(input_data.data(), input_size, input_size,
                       batch_size, output_data.data(), 32);
     benchmark::DoNotOptimize(output_data.data());
   }

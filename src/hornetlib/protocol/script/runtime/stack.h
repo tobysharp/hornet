@@ -21,6 +21,8 @@ namespace hornet::protocol::script::runtime {
 
 class Stack {
  public:
+  static constexpr int kMaxItems = 1'000;
+
   Stack() = default;
 
   bool Empty() const { return items_.empty(); }
@@ -65,28 +67,31 @@ class Stack {
   }
 
   // Interpret the top-of-stack as a Boolean. Throws if stack is empty.
-  bool TopAsBool() const {
-    return lang::AsBool(Top());
-  }
+  bool TopAsBool() const { return lang::AsBool(Top()); }
 
   // Interpret the stack item at the given position as a 32-bit integer.
   int32_t Int32(int position = 0, bool require_minimal = true) const {
-    if (position >= Size()) Throw(lang::Error::StackUnderflow, "Int32 of invalid stack position.");
+    if (position < 0 || position >= Size()) Throw(lang::Error::StackUnderflow, "Int32 of invalid stack position.");
     return DecodeInt32(Peek(position), require_minimal);
   }
 
   // Retrieve the stack item at the given position.
   std::span<const uint8_t> Peek(int position) const {
-    if (position >= Size()) Throw(lang::Error::StackUnderflow, "Accessed an invalid stack position.");
-    int index = std::ssize(items_) - 1 - position;
-    return items_[index].Span(data_);
+    if (position < 0 || position >= Size()) Throw(lang::Error::StackUnderflow, "Accessed an invalid stack position.");
+    return items_.rbegin()[position].Span(data_);
   }
 
   template <typename Fn>
   void Call(Fn&& fn);
 
+  template <int kPopCount, auto kIndices>
+  void ModifyTop();
+  template <auto kIndices>
+  void CopyToTop();
+  void MoveToTop(int position);
+  void CopyToTop(int position) { Push(Peek(position)); }
+
  protected:
-  static constexpr int kMaxItems = 1'000;
   static constexpr int kMaxItemSize = 520;
   using Item = util::SubArray<uint8_t, int16_t>;
   std::vector<Item> items_;
@@ -132,16 +137,71 @@ inline void Stack::Call(Fn&& fn) {
   }
 }
 
+template <auto kIndices>
+inline void Stack::CopyToTop() {
+  constexpr int kAppendCount = std::ssize(kIndices);
+  for (int i = 0; i < kAppendCount; ++i) Push(Peek(kIndices[kAppendCount - 1 - i] + i));
+}
+
+template <int kPopCount, auto kIndices>
+inline void Stack::ModifyTop() {
+  using T = std::remove_cvref_t<decltype(kIndices)>;
+  static_assert(std::is_same_v<T, std::array<int, std::tuple_size_v<T>>>);
+  static_assert([] {
+    for (int index : kIndices)
+      if (index < 0 || index >= kPopCount) return false;
+    return true;
+  }());
+  constexpr int kPushCount = std::ssize(kIndices);
+  constexpr auto kRequired = [] {
+    std::array<bool, kPopCount> required = {};
+    for (int index : kIndices) required[index] = true;
+    return required;
+  }();
+  std::array<Item, kPopCount> tmp_items;
+  std::vector<uint8_t> tmp_data;
+
+  int size_bytes = 0;
+  for (int i = 0; i < kPopCount; ++i)
+    if (kRequired[i]) size_bytes += std::ssize(Peek(i));
+  tmp_data.reserve(size_bytes);
+
+  for (int i = 0; i < kPopCount; ++i) {
+    if (!kRequired[i]) continue;
+    const auto peek = Peek(i);
+    tmp_items[i] = {static_cast<int>(std::ssize(tmp_data)), static_cast<int16_t>(std::ssize(peek))};
+    tmp_data.insert_range(tmp_data.end(), peek);
+  }
+
+  Pop(kPopCount);
+
+  for (int i = kPushCount - 1; i >= 0; --i) Push(tmp_items[kIndices[i]].Span(tmp_data));
+}
+
+inline void Stack::MoveToTop(int position) {
+  if (position < 0 || position >= Size()) Throw(lang::Error::StackUnderflow);
+
+  const int source_index = Size() - 1 - position;
+  const auto src = items_[source_index];
+  const int item_size = src.Size();
+  const int data_size = std::ssize(data_);
+
+  std::rotate(data_.begin() + src.StartIndex(), data_.begin() + src.EndIndex(), data_.end());
+  std::rotate(items_.begin() + source_index, items_.begin() + source_index + 1, items_.end());
+
+  for (int i = source_index; i < Size() - 1; ++i) items_[i].Offset(-item_size);
+
+  items_.back() = {data_size - item_size, static_cast<int16_t>(item_size)};
+}
+
 class ConditionStack {
  public:
   operator bool() const { return first_false_ < 0; }
   bool Empty() const { return size_ < 1; }
-  void Toggle() { 
+  void Toggle() {
     if (size_ < 1) Throw(lang::Error::UnbalancedCondition);
-    if (first_false_ < 0)
-      first_false_ = size_ - 1;
-    else if (first_false_ == size_ - 1)
-      first_false_ = -1;
+    if (first_false_ < 0) first_false_ = size_ - 1;
+    else if (first_false_ == size_ - 1) first_false_ = -1;
   }
   void Push(bool value) {
     ++size_;

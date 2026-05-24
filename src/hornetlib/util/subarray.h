@@ -40,6 +40,10 @@ class SubArray {
     count_ = count;
   }
 
+  void Offset(int offset) {
+    start_ += offset;
+  }
+
   std::span<T> Span(const std::span<T>& data) {
     return data.subspan(start_, count_);
   }

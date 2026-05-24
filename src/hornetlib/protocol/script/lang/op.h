@@ -48,9 +48,26 @@ enum class Op : uint8_t {
   Return = 0x6a,
   
   // Stack operations.
+  ToAltStack = 0x6b,
+  FromAltStack = 0x6c,
+  Drop2 = 0x6d,
+  Duplicate2 = 0x6e,
+  Duplicate3 = 0x6f,
+  Over2 = 0x70,
+  Rotate2 = 0x71,
+  Swap2 = 0x72,
+  IfDup = 0x73,
+  Depth = 0x74,
   Drop = 0x75,
   Pop = Drop,
   Duplicate = 0x76,
+  Nip = 0x77,
+  Over = 0x78,
+  Pick = 0x79,
+  Roll = 0x7a,
+  Rotate = 0x7b,
+  Swap = 0x7c,
+  Tuck = 0x7d,
 
   // Bitwise operations.
   Equal = 0x87,

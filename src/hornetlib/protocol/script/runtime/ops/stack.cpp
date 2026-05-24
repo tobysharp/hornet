@@ -10,9 +10,10 @@
 
 namespace hornet::protocol::script::runtime {
 
+namespace {
+using lang::Bytes;
 using lang::Op;
 
-namespace detail {
 inline static void VerifyMinimal(const lang::Instruction& instruction) {
   const Op minimal_op = [](lang::Bytes data) {
     if (lang::IsEncodedZero(data))
@@ -34,44 +35,116 @@ inline static void VerifyMinimal(const lang::Instruction& instruction) {
     Throw(lang::Error::NonMinimalPush, "Opcode ", int(instruction.opcode),
           " was not the minimal encoding.");
 }
-}  // namespace detail
 
-// Op::PushEmpty
-static void OnPushEmpty(const Context& context) {
-  if (context.RequiresMinimal()) detail::VerifyMinimal(context.instruction);
-  context.Stack().Push(lang::Bytes{});
+template <auto kIndices>
+consteval int MaxElement() {
+  return *std::max_element(std::begin(kIndices), std::end(kIndices));
 }
 
-// Op::PushSize1 ... Op::PushData4
-static void OnPushData(const Context& context) {
-  if (context.RequiresMinimal()) detail::VerifyMinimal(context.instruction);
-  context.Stack().Push(context.instruction.data);
+template <auto kIndices, int kPopCount = MaxElement<kIndices>() + 1>
+void OnModify(const Context& context) {
+  context.Stack().ModifyTop<kPopCount, kIndices>();
+}
+
+template <auto kIndices>
+void OnCopy(const Context& context) {
+  context.Stack().CopyToTop<kIndices>();
+}
+
+// Modify schedules
+constexpr std::array<int, 0> kDrop = {};
+constexpr std::array kRotate = { 2, 0, 1 };
+constexpr std::array kRotate2 = { 4, 5, 0, 1, 2, 3 };
+constexpr std::array kSwap = { 1, 0 };
+constexpr std::array kSwap2 = { 2, 3, 0, 1 };
+constexpr std::array kTuck = { 0, 1, 0 };
+
+// Copy schedules
+constexpr std::array kDuplicate = { 0 };
+constexpr std::array kDuplicate2 = { 0, 1 };
+constexpr std::array kDuplicate3 = { 0, 1, 2 };
+constexpr std::array kOver = { 1 };
+constexpr std::array kOver2 = { 2, 3 };
+
+// Op::Depth
+void OnDepth(const Context& context) {
+  context.Stack().Push(context.Stack().Size());
+}
+
+// Op::FromAltStack
+void OnFromAltStack(const Context& context) {
+  context.AltStack().Call([&](Bytes arg) { context.Stack().Push(arg); });
+}
+
+// Op::IfDup
+void OnIfDup(const Context& context) {
+  if (context.Stack().TopAsBool()) context.Stack().CopyToTop(0);
+}
+
+// Op::Pick
+void OnPick(const Context& context) {
+  const int position = context.Int32();
+  context.Stack().Pop().CopyToTop(position);
+}
+
+// Op::Roll
+void OnRoll(const Context& context) {
+  const int position = context.Int32();
+  context.Stack().Pop().MoveToTop(position);
 }
 
 // Op::PushConstNegative1 ... Op::PushConst16
 template <int8_t N>
-static void OnPushConst(const Context& context) {
+void OnPushConst(const Context& context) {
   const uint8_t byte = lang::EncodeMinimalConst<N>();
   context.Stack().Push({&byte, 1});
 }
 
-// Op::Duplicate
-static void OnDuplicate(const Context& context) {
-  context.Stack().Push(context.Stack().Top());
+// Op::PushEmpty
+void OnPushEmpty(const Context& context) {
+  if (context.RequiresMinimal()) VerifyMinimal(context.instruction);
+  context.Stack().Push(Bytes{});
 }
 
-// Op::Drop
-static void OnDrop(const Context& context) {
-  context.Stack().Pop();
+// Op::PushSize1 ... Op::PushData4
+void OnPushData(const Context& context) {
+  if (context.RequiresMinimal()) VerifyMinimal(context.instruction);
+  context.Stack().Push(context.instruction.data);
 }
+
+// Op::ToAltStack
+void OnToAltStack(const Context& context) {
+  context.Call([&](Bytes arg) { context.AltStack().Push(arg); });
+}
+
+}  // namespace
 
 void RegisterStackHandlers(Dispatcher& table) {
-  table[Op::PushEmpty] = &OnPushEmpty;
-  for (auto op = Op::PushSize1; op <= Op::PushData4; ++op) table[op] = &OnPushData;
-  table[Op::PushConstNegative1] = &OnPushConst<-1>;
+  table[Op::Depth] = &OnDepth;
+  table[Op::Drop] = &OnModify<kDrop, 1>;
+  table[Op::Drop2] = &OnModify<kDrop, 2>;
+  table[Op::Duplicate] = &OnCopy<kDuplicate>;
+  table[Op::Duplicate2] = &OnCopy<kDuplicate2>;
+  table[Op::Duplicate3] = &OnCopy<kDuplicate3>;
+  table[Op::FromAltStack] = &OnFromAltStack;
+  table[Op::IfDup] = &OnIfDup;
+  table[Op::Nip] = &OnModify<kDuplicate, 2>;
+  table[Op::Over] = &OnCopy<kOver>;
+  table[Op::Over2] = &OnCopy<kOver2>;
+  table[Op::Pick] = &OnPick;
   util::UnrollRange<1, 16 + 1>([&](auto i) { table[lang::ConstantToOp(i)] = &OnPushConst<i>; });
-  table[Op::Duplicate] = &OnDuplicate;
-  table[Op::Drop] = &OnDrop;
+  table[Op::PushConstNegative1] = &OnPushConst<-1>;
+  for (auto op = Op::PushSize1; op <= Op::PushData4; ++op) table[op] = &OnPushData;
+  table[Op::PushEmpty] = &OnPushEmpty;
+  table[Op::Roll] = &OnRoll;
+  table[Op::Rotate] = &OnModify<kRotate>;
+  table[Op::Rotate2] = &OnModify<kRotate2>;
+  table[Op::Swap] = &OnModify<kSwap>;
+  table[Op::Swap2] = &OnModify<kSwap2>;
+  table[Op::Tuck] = &OnModify<kTuck>;
+  table[Op::ToAltStack] = &OnToAltStack;
 }
 
 }  // namespace hornet::protocol::script::runtime
+
+  // Depth = 0x74,

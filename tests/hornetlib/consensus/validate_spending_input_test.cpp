@@ -190,6 +190,15 @@ TEST(ValidateSpendingInputTest, RejectsP2PKHSpendWhenSignatureDoesNotValidate) {
   EXPECT_EQ(ValidateScripts(InputSpendContext{tx, spend, 2}), Error::Spending_ScriptLocked);
 }
 
+TEST(ValidateSpendingInputTest, LegacyLockScriptCannotReadAltStackFromUnlockingScript) {
+  const auto locking_script = Writer{}.Then(Op::FromAltStack).Release();
+  protocol::Transaction tx = MakeLegacySpendTx();
+  tx.SetSignatureScript(0, Writer{}.PushInt(1).Then(Op::ToAltStack).Release());
+
+  const SpendRecord spend = MakeSpendRecord(locking_script);
+  EXPECT_EQ(ValidateScripts(InputSpendContext{tx, spend, 2}), Error::Spending_ScriptLocked);
+}
+
 TEST(ValidateSpendingInputTest, CheckMultiSigEnforcesStrictDERWhenFeatureEnabled) {
   const auto locking_script = MakeCheckMultiSigLockingScript(1, kCompressedPubkey);
   protocol::Transaction tx = MakeLegacySpendTx();

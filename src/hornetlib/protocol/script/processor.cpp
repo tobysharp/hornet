@@ -30,6 +30,7 @@ Processor::Processor(const runtime::Policy& policy /* = {} */,
     : policy_{policy},
       env_{/*height, */ runtime::Version::Legacy, std::move(spend)},
       machine_(runtime::Machine{.stack = stack_,
+                                .altstack = altstack_,
                                 .conditions = conditions_,
                                 .max_non_push_ops = MaxNonPushOps(env_.version),
                                 .script = parser_.Script(),
@@ -64,10 +65,12 @@ util::Expected<bool, lang::Error> Processor::Step() {
 }
 
 void Processor::Reset(std::span<const uint8_t> script) {
-  parser_.Reset(script);
-  error_.reset();
+  parser_ = {script};
+  error_ = {};
   conditions_ = {};
+  altstack_ = {};
   machine_.emplace(runtime::Machine{.stack = stack_,
+                                    .altstack = altstack_,
                                     .conditions = conditions_,
                                     .max_non_push_ops = MaxNonPushOps(env_.version),
                                     .script = script,
