@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include "hornetlib/crypto/hash.h"
 #include "hornetlib/protocol/script/lang/op.h"
 #include "hornetlib/protocol/script/processor.h"
 #include "hornetlib/protocol/script/writer.h"
@@ -11,6 +12,12 @@ namespace hornet::protocol::script::runtime::ops {
 namespace {
 
 using lang::Op;
+
+void ExpectTopBytes(const Processor& processor, std::span<const uint8_t> expected) {
+  const auto top = processor.TryPeek();
+  ASSERT_TRUE(top.has_value());
+  EXPECT_EQ(std::vector<uint8_t>(top->begin(), top->end()), std::vector<uint8_t>(expected.begin(), expected.end()));
+}
 
 TEST(CryptoOpsTest, Hash160MatchesKnownVectorForHello) {
   static constexpr auto expected = "b6a9c8c230722b7c748331a8b450f05566dc7d0f"_bytes;
@@ -88,6 +95,79 @@ TEST(CryptoOpsTest, Sha256RequiresOneOperand) {
 
   Processor processor;
   EXPECT_EQ(processor.Run(script), lang::Error::StackUnderflow);
+}
+
+TEST(CryptoOpsTest, Hash256MatchesDoubleSha256ForHello) {
+  const std::vector<uint8_t> input = {'h', 'e', 'l', 'l', 'o'};
+  const auto script = Writer{}.PushData(input).Then(Op::Hash256).Release();
+
+  Processor processor;
+  const auto result = processor.Run(script);
+
+  ASSERT_TRUE(result);
+  ExpectTopBytes(processor, crypto::Hash256(input));
+}
+
+TEST(CryptoOpsTest, Hash256MatchesDoubleSha256ForEmptyInput) {
+  const std::vector<uint8_t> input;
+  const auto script = Writer{}.PushData({}).Then(Op::Hash256).Release();
+
+  Processor processor;
+  const auto result = processor.Run(script);
+
+  ASSERT_TRUE(result);
+  ExpectTopBytes(processor, crypto::Hash256(input));
+}
+
+TEST(CryptoOpsTest, Hash256RequiresOneOperand) {
+  const auto script = Writer{}.Then(Op::Hash256).Release();
+
+  Processor processor;
+  EXPECT_EQ(processor.Run(script), lang::Error::StackUnderflow);
+}
+
+TEST(CryptoOpsTest, Ripemd160MatchesKnownVectorForHello) {
+  static constexpr auto expected = "108f07b8382412612c048d07d13f814118445acd"_bytes;
+  const std::vector<uint8_t> input = {'h', 'e', 'l', 'l', 'o'};
+  const auto script = Writer{}.PushData(input).Then(Op::RIPEMD160).Release();
+
+  Processor processor;
+  const auto result = processor.Run(script);
+
+  ASSERT_TRUE(result);
+  ExpectTopBytes(processor, expected);
+}
+
+TEST(CryptoOpsTest, Ripemd160MatchesKnownVectorForEmptyInput) {
+  static constexpr auto expected = "9c1185a5c5e9fc54612808977ee8f548b2258d31"_bytes;
+  const auto script = Writer{}.PushData({}).Then(Op::RIPEMD160).Release();
+
+  Processor processor;
+  const auto result = processor.Run(script);
+
+  ASSERT_TRUE(result);
+  ExpectTopBytes(processor, expected);
+}
+
+TEST(CryptoOpsTest, Ripemd160RequiresOneOperand) {
+  const auto script = Writer{}.Then(Op::RIPEMD160).Release();
+
+  Processor processor;
+  EXPECT_EQ(processor.Run(script), lang::Error::StackUnderflow);
+}
+
+TEST(CryptoOpsTest, CodeSeparatorHasNoStackEffect) {
+  const auto script = Writer{}.PushInt(7).Then(Op::CodeSeparator).Release();
+
+  Processor processor;
+  const auto result = processor.Run(script);
+
+  ASSERT_TRUE(result);
+  EXPECT_TRUE(*result);
+
+  const auto top = processor.TryPeekInt();
+  ASSERT_TRUE(top.has_value());
+  EXPECT_EQ(*top, 7);
 }
 
 }  // namespace

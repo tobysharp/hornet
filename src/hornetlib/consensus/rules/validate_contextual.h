@@ -96,7 +96,7 @@ inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transacti
 
     // The commitment value is the double-SHA256 of the concatenated witness-enabled Merkle root,
     // and the arbitrary 32-byte salt from the witness nonce.
-    const auto hash_witness = crypto::DoubleSha256<64>(ComputeWitnessMerkleRoot(context.block).hash, *nonce);
+    const auto hash_witness = crypto::Hash256Concat<64>(ComputeWitnessMerkleRoot(context.block).hash, *nonce);
 
     // Finally, this is compared against the commitment in the appropriate coinbase pubkey script.
     if (!std::ranges::equal(*context.commitment, hash_witness)) return Error::Structure_BadWitnessMerkle;

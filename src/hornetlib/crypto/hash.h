@@ -6,7 +6,6 @@
 
 #include <array>
 #include <cstdint>
-#include <cstring>
 #include <iomanip>
 #include <ostream>
 #include <span>
@@ -17,100 +16,64 @@
 #include "hornetlib/crypto/sha256_ni.h"
 #include "hornetlib/util/as_span.h"
 #include "hornetlib/util/throw.h"
-
 namespace hornet::crypto {
 
 using bytes20_t = std::array<uint8_t, 20>;
 using bytes32_t = std::array<uint8_t, 32>;
 
-template <typename T>
-inline constexpr bool always_false_v = false;
-
-// Iterator-based overload (useful for containers)
-template <typename Iter>
-bytes32_t Sha256(Iter begin, Iter end) {
-  using T = std::remove_reference_t<decltype(*begin)>;
-  static_assert(std::is_trivially_copyable_v<T>,
-                "Sha256: iterator value type must be trivially copyable.");
-  const size_t count = static_cast<size_t>(end - begin);
-  const auto span = util::AsByteSpan<T>({count > 0 ? &*begin : nullptr, count});
+inline bytes32_t Sha256(std::span<const uint8_t> bytes) {
 #if defined(HORNET_HAS_SHA_NI)
   if (HasSHAExtensions())
-    return SHA256::Hash_SHANI(span);
+    return SHA256::Hash_SHANI(bytes);
 #endif
-  return SHA256::Hash(span);
+  return SHA256::Hash(bytes);
 }
 
-// Overload for trivially copyable types, spans, and ranges.
-// Hashes trivially copyable objects or range-like containers by treating
-// their contents as raw bytes. Not suitable for types with internal pointers or
-// padding.
-template <typename T>
-inline bytes32_t Sha256(const T &value) {
-  if constexpr (requires {
-                  value.begin();
-                  value.end();
-                }) {
-    return Sha256(value.begin(), value.end());
-  } else if constexpr (std::is_trivially_copyable_v<T>) {
-    return Sha256(util::AsByteSpan<T>({&value, 1}));
-  } else {
-    static_assert(always_false_v<T>, "Unsupported type passed to Sha256.");
-  }
+inline bytes32_t Hash256(std::span<const uint8_t> bytes) {
+  const auto sha = Sha256(bytes);
+  return Sha256(sha);
 }
 
-template <typename Iter>
-bytes32_t DoubleSha256(Iter begin, Iter end) {
-  return Sha256(Sha256(begin, end));
+inline bytes20_t Ripemd160(std::span<const uint8_t> bytes) {
+  return RIPEMD160::Hash(bytes.begin(), bytes.end());
 }
 
-// Overload for trivially copyable types, spans, and ranges
-template <typename T>
-inline bytes32_t DoubleSha256(const T &value) {
-  return Sha256(Sha256(value));
+inline bytes20_t Hash160(std::span<const uint8_t> bytes) {
+  const auto sha = Sha256(bytes);
+  return RIPEMD160::Hash(sha.begin(), sha.end());
 }
 
-// Computes a batch of same-sized double-SHA256 hashes using vectorization.
-inline void DoubleSha256Batch(const uint8_t* input,
-                              int buffer_length_bytes,
-                              int input_stride_bytes,
-                              const int buffer_count,
-                              uint8_t* output,
-                              int output_stride_bytes = 32) {
-  // Use SHA-NI for batch operations
-  for (int i = 0; i < buffer_count; ++i) {
-    const uint8_t* buffer = input + i * input_stride_bytes;
-    const auto hash = DoubleSha256(std::span<const uint8_t>(buffer, buffer_length_bytes));
-    *reinterpret_cast<bytes32_t*>(output + i * output_stride_bytes) = hash;
-  }
-}
-
-// Computes the double-SHA256 hash of the concatenation of arguments.
+// Computes the hash256 of the concatenation of arguments.
 // The caller guarantees that N bytes is enough to store the concatenated arguments.
 template <std::size_t N, typename... Args>
-bytes32_t DoubleSha256(const Args&... args) {
+bytes32_t Hash256Concat(const Args&... args) {
   std::array<uint8_t, N> buffer;
   uint8_t* dst = buffer.data();
   const uint8_t* end = buffer.end();
 
   const auto append_arg = [&](const auto& x) {
     const auto bytes = util::AsByteSpan(x);
-    if (dst + bytes.size() > end) util::ThrowOutOfRange("DoubleSha256 buffer overrun");
+    if (dst + bytes.size() > end) util::ThrowOutOfRange("Hash256Concat buffer overrun");
     dst = std::copy(bytes.begin(), bytes.end(), dst);
   };
 
   (append_arg(args), ...);
-  return DoubleSha256(buffer.data(), dst);
+  return Hash256(buffer);
 }
 
-template <typename Iter>
-inline bytes20_t ComputeHash160(Iter begin, Iter end) {
-  const auto sha = Sha256(begin, end);
-  return RIPEMD160::Hash(sha.begin(), sha.end());
-}
-
-inline bytes20_t ComputeHash160(std::span<const uint8_t> bytes) {
-  return ComputeHash160(bytes.begin(), bytes.end());
+// Computes a batch of same-sized hash256 values using vectorization.
+inline void Hash256Batch(const uint8_t* input,
+                         int buffer_length_bytes,
+                         int input_stride_bytes,
+                         const int buffer_count,
+                         uint8_t* output,
+                         int output_stride_bytes = 32) {
+  // Use SHA-NI for batch operations
+  for (int i = 0; i < buffer_count; ++i) {
+    const uint8_t* buffer = input + i * input_stride_bytes;
+    const auto hash = Hash256({buffer, static_cast<size_t>(buffer_length_bytes)});
+    *reinterpret_cast<bytes32_t*>(output + i * output_stride_bytes) = hash;
+  }
 }
 
 // Writes the uint256_t as a 64-character hex string to an output stream,

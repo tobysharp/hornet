@@ -35,6 +35,7 @@ struct SpendContext {
   int input_index;                           // The index of the spending input.
   SpendPath path = SpendPath::LegacyDirect;  // The spend path of the input.
   // Maybe: amount, locking script, funding height, flags, etc.
+  const Input& Input() const { return tx.Input(input_index); }
 };
 
 inline constexpr SpendValidationMode GetSpendValidationMode(SpendPath path) {

@@ -4,6 +4,8 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
+#include <span>
+
 #include "hornetlib/crypto/hash.h"
 #include "hornetlib/encoding/writer.h"
 #include "hornetlib/protocol/transaction.h"
@@ -17,7 +19,7 @@ inline protocol::Hash ComputeTxid(const TransactionDetail& detail, const Transac
   encoding::Writer writer;
   detail.Serialize(writer, data, include_witness);
   const auto& buffer = writer.Buffer();
-  return crypto::DoubleSha256(buffer.begin(), buffer.end());
+  return crypto::Hash256(buffer);
 }
 
 }  // namespace hornet::protocol

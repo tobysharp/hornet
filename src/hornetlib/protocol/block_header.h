@@ -5,6 +5,7 @@
 #pragma once
 
 #include <optional>
+#include <span>
 
 #include "hornetlib/crypto/hash.h"
 #include "hornetlib/encoding/endian.h"
@@ -15,6 +16,7 @@
 #include "hornetlib/protocol/constants.h"
 #include "hornetlib/protocol/target.h"
 #include "hornetlib/protocol/work.h"
+#include "hornetlib/util/as_span.h"
 #include "hornetlib/util/big_uint.h"
 #include "hornetlib/util/throw.h"
 
@@ -82,8 +84,7 @@ class BlockHeader {
     static constexpr size_t kHashedSize = 80;
     static_assert(sizeof(*this) == kHashedSize);
     static_assert(encoding::IsLittleEndian());
-    const uint8_t* bytes = reinterpret_cast<const uint8_t*>(this);
-    return crypto::DoubleSha256(bytes, bytes + kHashedSize);
+    return crypto::Hash256(util::AsByteSpan(*this));
   }
 
  private:

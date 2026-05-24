@@ -77,6 +77,7 @@ struct Context {
   bool IsStrictDER() const { return machine.policy.features.Has(Feature::StrictDER); }
   bool IsNullDummy() const { return machine.policy.features.Has(Feature::NullDummy); }
   bool IsCheckLockTimeVerify() const { return machine.policy.features.Has(Feature::CheckLockTimeVerify); }
+  bool IsCheckSequenceVerify() const { return machine.policy.features.Has(Feature::CheckSequenceVerify); }
 
   Stack& Stack() const { return machine.stack; }
   ConditionStack& Conditions() const { return machine.conditions; }
@@ -95,6 +96,8 @@ struct Context {
   }
   lang::Bytes ScriptCode() const { return machine.ScriptCode(); }
   int32_t Int32(int pos) const { return Stack().Int32(pos, RequiresMinimal()); }
+  template <std::integral T, int kBytes>
+  T DecodeTop() const { return Decode<T, kBytes>(Stack().Top(), RequiresMinimal()); }
 };
 
 using Handler = void (*)(const Context&);

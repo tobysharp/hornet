@@ -72,8 +72,11 @@ enum class Op : uint8_t {
   Max = 0xa4,
 
   // Cryptographic operations.
+  RIPEMD160 = 0xa6,
+  SHA1 = 0xa7,
   SHA256 = 0xa8,
   Hash160 = 0xa9,
+  Hash256 = 0xaa,
   CodeSeparator = 0xab,
   CheckSig = 0xac,
   CheckSigVerify = 0xad,

@@ -10,28 +10,30 @@
 
 namespace hornet::protocol::script::runtime {
 
-using namespace lang;
+namespace {
+
+using lang::Bytes;
 
 // Op::CodeSeparator = 0xab
-static void OnCodeSeparator(const Context& context) {
+void OnCodeSeparator(const Context& context) {
   context.machine.SetCodeSeparator(context.instruction);
 }
 
-// Op::Hash160 = 0xa9
-static void OnHash160(const Context& context) {
-  context.Call([&](Bytes arg) { return crypto::ComputeHash160(arg); });
+template <auto Fn>
+void OnHash(const Context& context) {
+  context.Call([&](Bytes arg) { return Fn(arg); });
 }
 
-// Op::SHA256 = 0xa8
-static void OnSHA256(const Context& context) {
-  context.Call([&](Bytes arg) { return crypto::Sha256(arg); });
-}
+}  // namespace
 
 // Register handlers
 void RegisterCryptoHandlers(Dispatcher& table) {
+  using lang::Op;
   table[Op::CodeSeparator] = &OnCodeSeparator;
-  table[Op::Hash160] = &OnHash160;
-  table[Op::SHA256] = &OnSHA256;
+  table[Op::Hash160]   = &OnHash<crypto::Hash160>;
+  table[Op::Hash256]   = &OnHash<crypto::Hash256>;
+  table[Op::RIPEMD160] = &OnHash<crypto::Ripemd160>;
+  table[Op::SHA256]    = &OnHash<crypto::Sha256>;
 }
 
 }  // namespace hornet::protocol::script::runtime

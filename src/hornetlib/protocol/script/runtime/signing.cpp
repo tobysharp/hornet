@@ -159,7 +159,7 @@ Hash BuildSpendDigest<SpendValidationMode::Legacy>(const SpendContext& spend, co
   const std::vector<uint8_t> serialized = LegacyCommitSerializer{}(spend, commit, code);
 
   // Hash the serialized bytes.
-  return crypto::DoubleSha256(serialized);
+  return crypto::Hash256(serialized);
 }
 
 }  // namespace
