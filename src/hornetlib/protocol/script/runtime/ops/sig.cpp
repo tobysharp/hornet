@@ -47,6 +47,7 @@ static std::vector<uint8_t> PrepareScriptCode(Bytes script_code, std::span<const
 }
 
 // Op::CheckMultiSig
+template <bool kVerify = false>
 static void OnCheckMultiSig(const Context& context) {
   // ([sig ...] num_of_signatures [pubkey ...] num_of_pubkeys -- bool)
   context.Call([&] -> bool {
@@ -105,9 +106,11 @@ static void OnCheckMultiSig(const Context& context) {
     // All signatures were verified if we reached the end of the signature array.
     return sig_pos == sig_count;
   });
+  if constexpr (kVerify) context.Verify(Error::CheckMultiSigVerify);
 }
 
 // Op::CheckSig
+template <bool kVerify = false>
 static void OnCheckSig(const Context& context) {
   // sig pubkey -- bool
   context.Stack().Call([&](Bytes sigblob, Bytes pkblob) -> bool {
@@ -135,11 +138,14 @@ static void OnCheckSig(const Context& context) {
     // Verify that the spend digest was signed by the private key corresponding to this public key.
     return (pubkey && signature) ? secp256k1::VerifySignature(*pubkey, *signature, digest) : false;
   });
+  if constexpr (kVerify) context.Verify(Error::CheckSigVerify);
 }
 
 void RegisterSigHandlers(Dispatcher& table) {
   table[Op::CheckMultiSig] = &OnCheckMultiSig;
+  table[Op::CheckMultiSigVerify] = &OnCheckMultiSig<true>;
   table[Op::CheckSig] = &OnCheckSig;
+  table[Op::CheckSigVerify] = &OnCheckSig<true>;
 }
 
 }  // namespace hornet::protocol::script::runtime

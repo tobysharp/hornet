@@ -92,16 +92,18 @@ struct Context {
   crypto::ecdsa::DERParseType DERParsing() const {
     return IsStrictDER() ? crypto::ecdsa::DERParseType::Strict : crypto::ecdsa::DERParseType::Lax;
   }
-  template <typename Fn>
-  void Call(Fn&& fn) const;
+  template <typename Fn> void Call(Fn&& fn) const;
   lang::Bytes ScriptCode() const { return machine.ScriptCode(); }
   int32_t Int32(int pos = 0) const { return Stack().Int32(pos, RequiresMinimal()); }
-  template <std::integral T, int kBytes>
-  T DecodeTop() const { return Decode<T, kBytes>(Stack().Top(), RequiresMinimal()); }
+  template <std::integral T, int kBytes> T DecodeTop() const {
+    return Decode<T, kBytes>(Stack().Top(), RequiresMinimal());
+  }
+  void Verify(lang::Error err) const {
+    Call([&](lang::Bytes arg) { if (!lang::AsBool(arg)) Throw(err); });
+  }
 };
 
-template <typename Fn>
-inline void Context::Call(Fn&& fn) const {
+template <typename Fn> inline void Context::Call(Fn&& fn) const {
   auto read_arg = [this]<typename T>(std::type_identity<T>, int position) -> T {
     if constexpr (std::same_as<T, lang::Bytes>) return Stack().Peek(position);
     else if constexpr (std::same_as<T, int32_t>) return machine.DecodeInt32(Stack().Peek(position));

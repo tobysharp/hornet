@@ -48,6 +48,8 @@ enum class Error {
   UnbalancedCondition,  // There was an unbalanced If/NotIf/Else/Endif instruction.
   NumEqualVerify,       // An Op::NumEqualVerify opcode failed.
   OpReturn,             // Tried to execute an Op::Return instruction.
+  CheckSigVerify,       // An Op::CheckSigVerify opcode failed.
+  CheckMultiSigVerify,  // An Op::CheckMultiSigVerify opcode failed.
 };
 
 // Returns false for empty, zero, and negative zero.

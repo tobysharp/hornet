@@ -34,8 +34,9 @@ constexpr int64_t Max(int64_t a, int64_t b) { return std::max(a, b); }
 
 void OnNumEqualVerify(const Context& context) {
   context.Call([&](int32_t lhs, int32_t rhs) {
-    if (lhs != rhs) Throw(lang::Error::NumEqualVerify);
+    return lhs == rhs;
   });
+  context.Verify(lang::Error::NumEqualVerify);
 }
 
 void OnWithin(const Context& context) {

@@ -47,9 +47,7 @@ void OnReturn(const Context&) {
 
 // Op::Verify
 void OnVerify(const Context& context) {
-  context.Call([&](Bytes input) {
-    if (!AsBool(input)) Throw(Error::OpVerify);
-  });
+  context.Verify(Error::OpVerify);
 }
 
 }  // namespace

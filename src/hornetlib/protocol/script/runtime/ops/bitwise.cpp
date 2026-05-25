@@ -21,7 +21,7 @@ static void OnEqual(const Context& context) {
 // Op::EqualVerify
 static void OnEqualVerify(const Context& context) {
   context.Call([](Bytes a, Bytes b) { return std::ranges::equal(a, b); });
-  context.Call([](Bytes a) { if (!AsBool(a)) Throw(Error::OpEqualVerify); });
+  context.Verify(Error::OpEqualVerify);
 }
 
 // Register handlers

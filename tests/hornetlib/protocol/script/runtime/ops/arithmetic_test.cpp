@@ -314,12 +314,15 @@ TEST(ArithmeticOpsTest, NumEqualVerifyConsumesMatchingOperands) {
   ExpectTopInt(processor, 99);
 }
 
-TEST(ArithmeticOpsTest, NumEqualVerifyFailsWithoutConsumingOperands) {
+TEST(ArithmeticOpsTest, NumEqualVerifyFailsAndLeavesFalseOnStack) {
   const auto script = Writer{}.PushInt(99).PushInt(3).PushInt(4).Then(Op::NumEqualVerify).Release();
 
   Processor processor;
   EXPECT_EQ(processor.Run(script), Error::NumEqualVerify);
-  ExpectTopInt(processor, 4);
+
+  const auto top = processor.TryPeek();
+  ASSERT_TRUE(top.has_value());
+  EXPECT_TRUE(top->empty());
 }
 
 TEST(ArithmeticOpsTest, BinaryOpsRequireTwoOperands) {
