@@ -93,6 +93,7 @@ enum class Op : uint8_t {
   GreaterThanOrEqual = 0xa2,
   Min = 0xa3,
   Max = 0xa4,
+  Within = 0xa5,
 
   // Cryptographic operations.
   RIPEMD160 = 0xa6,

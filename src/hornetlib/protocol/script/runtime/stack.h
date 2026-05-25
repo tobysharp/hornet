@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <span>
 #include <tuple>
 #include <type_traits>
@@ -113,28 +114,44 @@ struct function_traits<ReturnType (ClassType::*)(Args...) const> {
   using args_tuple = std::tuple<Args...>;
   using result_type = ReturnType;
 };
-}  // namespace detail
 
-template <typename Fn>
-inline void Stack::Call(Fn&& fn) {
+template <typename T>
+inline constexpr bool kIsRawCallArg = std::same_as<std::remove_cvref_t<T>, lang::Bytes>;
+
+template <typename Reader, typename Fn>
+void ApplyCall(Stack& stack, Reader&& read_arg, Fn&& fn) {
   using FnType = std::decay_t<Fn>;
-  using Traits = detail::function_traits<FnType>;
+  using Traits = function_traits<FnType>;
   using ArgsTuple = typename Traits::args_tuple;
-  constexpr size_t N = std::tuple_size_v<ArgsTuple>;
   using Result = typename Traits::result_type;
+  constexpr size_t N = std::tuple_size_v<ArgsTuple>;
 
   auto args = [&]<size_t... I>(std::index_sequence<I...>) {
-    return std::make_tuple(Peek(N - 1 - I)...);
+    return std::tuple{
+      std::invoke(read_arg, 
+        std::type_identity<std::remove_cvref_t<std::tuple_element_t<I, ArgsTuple>>>{},
+        N - 1 - I)...};
   }(std::make_index_sequence<N>{});
 
   if constexpr (std::is_void_v<Result>) {
     std::apply(std::forward<Fn>(fn), args);
-    Pop(N);
+    stack.Pop(N);
   } else {
     auto result = std::apply(std::forward<Fn>(fn), args);
-    Pop(N);
-    Push(result);
+    stack.Pop(N);
+    stack.Push(result);
   }
+}
+
+}  // namespace detail
+
+template <typename Fn>
+inline void Stack::Call(Fn&& fn) {
+  auto read_arg = [this]<typename T>(std::type_identity<T>, int position) -> T {
+    static_assert(std::same_as<T, lang::Bytes>);
+    return Peek(position);
+  };
+  detail::ApplyCall(*this, read_arg, std::forward<Fn>(fn));
 }
 
 template <auto kIndices>

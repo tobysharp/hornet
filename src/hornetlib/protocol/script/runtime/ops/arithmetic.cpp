@@ -2,6 +2,10 @@
 //
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
+
+#include <cstdint>
+#include <functional>
+
 #include "hornetlib/protocol/script/lang/op.h"
 #include "hornetlib/protocol/script/lang/types.h"
 #include "hornetlib/protocol/script/runtime/engine.h"
@@ -9,40 +13,37 @@
 namespace hornet::protocol::script::runtime {
 namespace {
 
-using lang::Bytes;
-
-template <auto Fn, typename T = int64_t> auto BinaryInt32(const Machine& machine, Bytes lhs, Bytes rhs) {
-  const T a = static_cast<T>(machine.DecodeInt32(lhs));
-  const T b = static_cast<T>(machine.DecodeInt32(rhs));
-  return Fn(a, b);
-}
-
 template <auto Fn, typename T> void CallUnary(const Context& context) {
-  context.Call([&](Bytes arg) { return Fn(static_cast<T>(context.machine.DecodeInt32(arg))); });
+  context.Call([&](int32_t arg) { return Fn(static_cast<T>(arg)); });
 }
 
 template <auto Fn, typename T> void CallBinary(const Context& context) {
-  context.Call([&](Bytes lhs, Bytes rhs) { return BinaryInt32<Fn, T>(context.machine, lhs, rhs); });
+  context.Call([&](int32_t lhs, int32_t rhs) { return Fn(static_cast<T>(lhs), static_cast<T>(rhs)); });
 }
 
-template <auto Fn> constexpr auto OnUnaryInt = &CallUnary<Fn, int64_t>;
 template <auto Fn> constexpr auto OnUnaryBool = &CallUnary<Fn, bool>;
+template <auto Fn> constexpr auto OnUnaryInt = &CallUnary<Fn, int64_t>;
 template <auto Fn> constexpr auto OnBinaryBool = &CallBinary<Fn, bool>;
 template <auto Fn> constexpr auto OnBinaryInt = &CallBinary<Fn, int64_t>;
 
 constexpr int64_t Abs(int64_t a) { return std::abs(a); }
 constexpr int64_t Increment(int64_t a) { return ++a; }
 constexpr int64_t Decrement(int64_t a) { return --a; }
-
 constexpr int64_t Min(int64_t a, int64_t b) { return std::min(a, b); }
 constexpr int64_t Max(int64_t a, int64_t b) { return std::max(a, b); }
 
 void OnNumEqualVerify(const Context& context) {
-  context.Call([&](Bytes lhs, Bytes rhs) {
-    if (!BinaryInt32<std::equal_to{}>(context.machine, lhs, rhs)) Throw(lang::Error::NumEqualVerify);
+  context.Call([&](int32_t lhs, int32_t rhs) {
+    if (lhs != rhs) Throw(lang::Error::NumEqualVerify);
   });
 }
- 
+
+void OnWithin(const Context& context) {
+  context.Call([&](int32_t x, int32_t xmin, int32_t xmax) {
+    return xmin <= x && x < xmax;
+  });
+}
+
 }  // namespace
 
 // Register handlers
@@ -68,6 +69,7 @@ void RegisterArithmeticHandlers(Dispatcher& table) {
   table[Op::NumEqualVerify]     = &OnNumEqualVerify;
   table[Op::NumNotEqual]        = OnBinaryInt <std::not_equal_to{}>;
   table[Op::Subtract]           = OnBinaryInt <std::minus{}>;
+  table[Op::Within]             = &OnWithin;
 }  // clang-format on
 
 }  // namespace hornet::protocol::script::runtime
