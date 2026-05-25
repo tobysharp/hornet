@@ -68,6 +68,7 @@ enum class Op : uint8_t {
   Rotate = 0x7b,
   Swap = 0x7c,
   Tuck = 0x7d,
+  Size = 0x82,
 
   // Bitwise operations.
   Equal = 0x87,

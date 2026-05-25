@@ -112,6 +112,11 @@ void OnPushData(const Context& context) {
   context.Stack().Push(context.instruction.data);
 }
 
+// Op::Size
+void OnSize(const Context& context) {
+  context.Stack().Push(std::ssize(context.Stack().Top()));
+}
+
 // Op::ToAltStack
 void OnToAltStack(const Context& context) {
   context.Call([&](Bytes arg) { context.AltStack().Push(arg); });
@@ -139,6 +144,7 @@ void RegisterStackHandlers(Dispatcher& table) {
   table[Op::Roll] = &OnRoll;
   table[Op::Rotate] = &OnModify<kRotate>;
   table[Op::Rotate2] = &OnModify<kRotate2>;
+  table[Op::Size] = &OnSize;
   table[Op::Swap] = &OnModify<kSwap>;
   table[Op::Swap2] = &OnModify<kSwap2>;
   table[Op::Tuck] = &OnModify<kTuck>;

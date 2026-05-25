@@ -56,6 +56,25 @@ TEST(StackOpsTest, DepthPushesZeroForEmptyStack) {
   EXPECT_TRUE(top->empty());
 }
 
+TEST(StackOpsTest, SizePushesTopItemByteLengthAndPreservesItem) {
+  const std::vector<uint8_t> data = {0x11, 0x22, 0x33};
+  const auto script = Writer{}.PushData(data).Then(Op::Size).PushInt(3).Then(Op::EqualVerify).PushData(data).Then(Op::Equal).Release();
+
+  Processor processor;
+  const auto result = processor.Run(script);
+
+  ASSERT_TRUE(result);
+  EXPECT_TRUE(*result);
+  ExpectTopInt(processor, 1);
+}
+
+TEST(StackOpsTest, SizeRequiresOneOperand) {
+  const auto script = Writer{}.Then(Op::Size).Release();
+
+  Processor processor;
+  EXPECT_EQ(processor.Run(script), lang::Error::StackUnderflow);
+}
+
 TEST(StackOpsTest, Drop2RemovesTopTwoItems) {
   ExpectStackAfterRun(Writer{}.PushInt(1).PushInt(2).PushInt(3).Then(Op::Drop2).Release(), {1});
 }
