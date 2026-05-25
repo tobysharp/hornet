@@ -25,6 +25,13 @@ TEST(HashTest, Sha256HashOfKnownString) {
   EXPECT_EQ(oss.str(), expected);
 }
 
+TEST(HashTest, Sha1HashOfKnownString) {
+  constexpr auto expected = "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"_bytes;
+  const std::string input = "hello";
+
+  EXPECT_EQ(Sha1(util::AsByteSpan(std::span{input})), expected);
+}
+
 TEST(HashTest, DoubleSha256HashOfKnownString) {
   const std::string input = "hello";
   const std::string expected = "9595c9df90075148eb06860365df33584b75bff782a510c6cd4883a419833d50";

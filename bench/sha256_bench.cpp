@@ -25,7 +25,7 @@ static std::vector<uint8_t> GenerateTestData(size_t size) {
 static void BM_SHA256_Scalar(benchmark::State& state) {
   auto data = GenerateTestData(state.range(0));
   for (auto _ : state) {
-    auto hash = SHA256::Hash(data);
+    auto hash = sha::ComputeSHA256(data);
     benchmark::DoNotOptimize(hash);
   }
   state.SetBytesProcessed(state.iterations() * state.range(0));

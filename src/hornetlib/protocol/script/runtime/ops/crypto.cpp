@@ -33,6 +33,7 @@ void RegisterCryptoHandlers(Dispatcher& table) {
   table[Op::Hash160]   = &OnHash<crypto::Hash160>;
   table[Op::Hash256]   = &OnHash<crypto::Hash256>;
   table[Op::RIPEMD160] = &OnHash<crypto::Ripemd160>;
+  table[Op::SHA1]      = &OnHash<crypto::Sha1>;
   table[Op::SHA256]    = &OnHash<crypto::Sha256>;
 }
 

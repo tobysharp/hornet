@@ -12,6 +12,7 @@
 
 #include "hornetlib/crypto/cpuinfo.h"
 #include "hornetlib/crypto/ripemd160.h"
+#include "hornetlib/crypto/sha1.h"
 #include "hornetlib/crypto/sha256.h"
 #include "hornetlib/crypto/sha256_ni.h"
 #include "hornetlib/util/as_span.h"
@@ -26,12 +27,16 @@ inline bytes32_t Sha256(std::span<const uint8_t> bytes) {
   if (HasSHAExtensions())
     return SHA256::Hash_SHANI(bytes);
 #endif
-  return SHA256::Hash(bytes);
+  return sha::ComputeSHA256(bytes);
 }
 
 inline bytes32_t Hash256(std::span<const uint8_t> bytes) {
   const auto sha = Sha256(bytes);
   return Sha256(sha);
+}
+
+inline bytes20_t Sha1(std::span<const uint8_t> bytes) {
+  return sha::ComputeSHA1(bytes);
 }
 
 inline bytes20_t Ripemd160(std::span<const uint8_t> bytes) {

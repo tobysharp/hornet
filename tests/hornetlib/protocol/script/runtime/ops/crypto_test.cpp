@@ -97,6 +97,36 @@ TEST(CryptoOpsTest, Sha256RequiresOneOperand) {
   EXPECT_EQ(processor.Run(script), lang::Error::StackUnderflow);
 }
 
+TEST(CryptoOpsTest, Sha1MatchesKnownVectorForHello) {
+  static constexpr auto expected = "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"_bytes;
+  const std::vector<uint8_t> input = {'h', 'e', 'l', 'l', 'o'};
+  const auto script = Writer{}.PushData(input).Then(Op::SHA1).Release();
+
+  Processor processor;
+  const auto result = processor.Run(script);
+
+  ASSERT_TRUE(result);
+  ExpectTopBytes(processor, expected);
+}
+
+TEST(CryptoOpsTest, Sha1MatchesKnownVectorForEmptyInput) {
+  static constexpr auto expected = "da39a3ee5e6b4b0d3255bfef95601890afd80709"_bytes;
+  const auto script = Writer{}.PushData({}).Then(Op::SHA1).Release();
+
+  Processor processor;
+  const auto result = processor.Run(script);
+
+  ASSERT_TRUE(result);
+  ExpectTopBytes(processor, expected);
+}
+
+TEST(CryptoOpsTest, Sha1RequiresOneOperand) {
+  const auto script = Writer{}.Then(Op::SHA1).Release();
+
+  Processor processor;
+  EXPECT_EQ(processor.Run(script), lang::Error::StackUnderflow);
+}
+
 TEST(CryptoOpsTest, Hash256MatchesDoubleSha256ForHello) {
   const std::vector<uint8_t> input = {'h', 'e', 'l', 'l', 'o'};
   const auto script = Writer{}.PushData(input).Then(Op::Hash256).Release();
