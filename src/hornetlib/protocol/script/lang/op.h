@@ -74,6 +74,12 @@ enum class Op : uint8_t {
   EqualVerify = 0x88,
 
   // Arithmetic operations.
+  Increment = 0x8b,
+  Decrement = 0x8c,
+  Negate =  0x8f,
+  Abs = 0x90,
+  IsZero = 0x91,
+  IsNonZero = 0x92,
   Add = 0x93,
   Subtract = 0x94,
   BooleanAnd = 0x9a,

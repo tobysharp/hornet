@@ -84,6 +84,76 @@ TEST(ArithmeticOpsTest, AddSupportsResultsBeyondInt32Range) {
   ExpectTopBytes(processor, lang::EncodeMinimalInt(expected));
 }
 
+TEST(ArithmeticOpsTest, UnaryIntOpsProduceExpectedResults) {
+  struct Case {
+    const char* name;
+    Op op;
+    int32_t input;
+    int32_t expected;
+  };
+
+  constexpr std::array cases = {
+      Case{"increment", Op::Increment, 7, 8},
+      Case{"decrement", Op::Decrement, 7, 6},
+      Case{"negate", Op::Negate, 7, -7},
+      Case{"abs_negative", Op::Abs, -7, 7},
+      Case{"abs_non_negative", Op::Abs, 7, 7},
+  };
+
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(test_case.name);
+
+    const auto script = Writer{}.PushInt(test_case.input).Then(test_case.op).Release();
+
+    Processor processor;
+    const auto result = processor.Run(script);
+
+    ASSERT_TRUE(result);
+    EXPECT_EQ(*result, test_case.expected != 0);
+    ExpectTopInt(processor, test_case.expected);
+  }
+}
+
+TEST(ArithmeticOpsTest, UnaryIntOpsEncodeZeroAsEmptyVector) {
+  const auto script = Writer{}.PushInt(0).Then(Op::Negate).Release();
+
+  Processor processor;
+  const auto result = processor.Run(script);
+
+  ASSERT_TRUE(result);
+  EXPECT_FALSE(*result);
+
+  const auto top = processor.TryPeek();
+  ASSERT_TRUE(top.has_value());
+  EXPECT_TRUE(top->empty());
+}
+
+TEST(ArithmeticOpsTest, UnaryIntOpsSupportResultsBeyondInt32Range) {
+  {
+    const int64_t expected = int64_t(std::numeric_limits<int32_t>::max()) + 1;
+    const auto script = Writer{}.PushInt(std::numeric_limits<int32_t>::max()).Then(Op::Increment).Release();
+
+    Processor processor;
+    const auto result = processor.Run(script);
+
+    ASSERT_TRUE(result);
+    EXPECT_TRUE(*result);
+    ExpectTopBytes(processor, lang::EncodeMinimalInt(expected));
+  }
+
+  {
+    const int64_t expected = int64_t(kMinScriptInt32) - 1;
+    const auto script = Writer{}.PushInt(kMinScriptInt32).Then(Op::Decrement).Release();
+
+    Processor processor;
+    const auto result = processor.Run(script);
+
+    ASSERT_TRUE(result);
+    EXPECT_TRUE(*result);
+    ExpectTopBytes(processor, lang::EncodeMinimalInt(expected));
+  }
+}
+
 TEST(ArithmeticOpsTest, SubtractSupportsResultsBeyondInt32Range) {
   const int64_t expected = int64_t(kMinScriptInt32) - 2;
   const auto script = Writer{}.PushInt(kMinScriptInt32).PushInt(2).Then(Op::Subtract).Release();
@@ -116,6 +186,35 @@ TEST(ArithmeticOpsTest, BooleanOpsUseZeroAndNonZeroTruthiness) {
     SCOPED_TRACE(test_case.name);
 
     const auto script = Writer{}.PushInt(test_case.lhs).PushInt(test_case.rhs).Then(test_case.op).Release();
+
+    Processor processor;
+    const auto result = processor.Run(script);
+
+    ASSERT_TRUE(result);
+    EXPECT_EQ(*result, test_case.expected != 0);
+    ExpectTopInt(processor, test_case.expected);
+  }
+}
+
+TEST(ArithmeticOpsTest, UnaryBoolOpsMatchCoreLegacySemantics) {
+  struct Case {
+    const char* name;
+    Op op;
+    int32_t input;
+    int32_t expected;
+  };
+
+  constexpr std::array cases = {
+      Case{"is_zero_true", Op::IsZero, 0, 1},
+      Case{"is_zero_false", Op::IsZero, 9, 0},
+      Case{"is_non_zero_true", Op::IsNonZero, -3, 1},
+      Case{"is_non_zero_false", Op::IsNonZero, 0, 0},
+  };
+
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(test_case.name);
+
+    const auto script = Writer{}.PushInt(test_case.input).Then(test_case.op).Release();
 
     Processor processor;
     const auto result = processor.Run(script);
@@ -231,6 +330,19 @@ TEST(ArithmeticOpsTest, BinaryOpsRequireTwoOperands) {
   ExpectTopInt(processor, 1);
 }
 
+TEST(ArithmeticOpsTest, UnaryOpsRequireOneOperand) {
+  constexpr std::array ops = {Op::Negate, Op::IsZero};
+
+  for (const auto op : ops) {
+    SCOPED_TRACE(int(op));
+
+    const auto script = Writer{}.Then(op).Release();
+
+    Processor processor;
+    EXPECT_EQ(processor.Run(script), Error::StackUnderflow);
+  }
+}
+
 TEST(ArithmeticOpsTest, NumEqualVerifyRequiresTwoOperands) {
   const auto script = Writer{}.PushInt(1).Then(Op::NumEqualVerify).Release();
 
@@ -247,9 +359,25 @@ TEST(ArithmeticOpsTest, BinaryIntRejectsNonMinimalNumbers) {
   EXPECT_EQ(processor.Run(script), Error::NonMinimalNumber);
 }
 
+TEST(ArithmeticOpsTest, UnaryIntRejectsNonMinimalNumbers) {
+  constexpr std::array<uint8_t, 2> kNonMinimalOne = {0x01, 0x00};
+  const auto script = Writer{}.PushData(kNonMinimalOne).Then(Op::Negate).Release();
+
+  Processor processor;
+  EXPECT_EQ(processor.Run(script), Error::NonMinimalNumber);
+}
+
 TEST(ArithmeticOpsTest, BinaryIntRejectsOversizedNumbers) {
   constexpr std::array<uint8_t, 5> kOverflowNumber = {0x01, 0x00, 0x00, 0x00, 0x00};
   const auto script = Writer{}.PushData(kOverflowNumber).PushInt(1).Then(Op::Add).Release();
+
+  Processor processor;
+  EXPECT_EQ(processor.Run(script), Error::NumberOverflow);
+}
+
+TEST(ArithmeticOpsTest, UnaryBoolRejectsOversizedNumbers) {
+  constexpr std::array<uint8_t, 5> kOverflowNumber = {0x01, 0x00, 0x00, 0x00, 0x00};
+  const auto script = Writer{}.PushData(kOverflowNumber).Then(Op::IsZero).Release();
 
   Processor processor;
   EXPECT_EQ(processor.Run(script), Error::NumberOverflow);
