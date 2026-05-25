@@ -199,6 +199,30 @@ TEST(ValidateSpendingInputTest, LegacyLockScriptCannotReadAltStackFromUnlockingS
   EXPECT_EQ(ValidateScripts(InputSpendContext{tx, spend, 2}), Error::Spending_ScriptLocked);
 }
 
+TEST(ValidateSpendingInputTest, RejectsDisabledOpcodeInUnexecutedBranch) {
+  const std::vector<uint8_t> locking_script = {
+      ToByte(Op::PushEmpty),
+      ToByte(Op::If),
+      0x7e,  // OP_CAT
+      ToByte(Op::EndIf),
+      ToByte(Op::PushConst1),
+  };
+  protocol::Transaction tx = MakeLegacySpendTx();
+
+  const SpendRecord spend = MakeSpendRecord(locking_script);
+  EXPECT_EQ(ValidateScripts(InputSpendContext{tx, spend, 2}), Error::Spending_ScriptLocked);
+}
+
+TEST(ValidateSpendingInputTest, RejectsExecutedReservedOpcode) {
+  const std::vector<uint8_t> locking_script = {
+      0x50,  // OP_RESERVED
+  };
+  protocol::Transaction tx = MakeLegacySpendTx();
+
+  const SpendRecord spend = MakeSpendRecord(locking_script);
+  EXPECT_EQ(ValidateScripts(InputSpendContext{tx, spend, 2}), Error::Spending_ScriptLocked);
+}
+
 TEST(ValidateSpendingInputTest, CheckMultiSigEnforcesStrictDERWhenFeatureEnabled) {
   const auto locking_script = MakeCheckMultiSigLockingScript(1, kCompressedPubkey);
   protocol::Transaction tx = MakeLegacySpendTx();

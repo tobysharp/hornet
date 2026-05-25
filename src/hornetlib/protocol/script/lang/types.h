@@ -34,6 +34,8 @@ enum class Error {
   StackOverflow,        // Too many items were pushed to the stack.
   StackUnderflow,       // An empty stack was popped.
   OpCountExcessive,     // Too many non-push operations were encountered in the script.
+  DisabledOpcode,       // Encountered an opcode that is disabled by consensus.
+  BadOpcode,            // Encountered an unknown or reserved opcode.
   InvalidSpendContext,  // Tried to access the spending context, but it doesn't exist.
   MalformedScript,      // Script not parseable as well-formed.
   OpVerify,             // An Op::Verify opcode failed.

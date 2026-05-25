@@ -21,7 +21,7 @@ void RegisterStackHandlers(Dispatcher& table);       // In ops/stack.cpp
 namespace detail {
 // A placeholder handler for opcodes that haven't yet been implemented.
 [[noreturn]] static void OnUnknown(const Context& context) {
-  util::ThrowLogicError("Opcode ", int(context.instruction.opcode), " not yet implemented.");
+  Throw(lang::Error::BadOpcode, "Opcode ", int(context.instruction.opcode), " is not defined for this interpreter.");
 }
 
 void RegisterAllHandlers(Version, Dispatcher& handlers) {
@@ -59,6 +59,9 @@ void ExecuteHandler(lang::Op op, const Context& context) {
 void StepExecution(const Context& context) {
   // Validate the number of script operations executed.
   if (!IsPush(context.Op())) context.machine.IncNonPushOps();
+
+  // Disabled opcodes fail even when they appear in unexecuted branches.
+  if (IsDisabled(context.Op())) Throw(lang::Error::DisabledOpcode, "Opcode ", int(context.Op()), " is disabled.");
 
   // If we're in an actively executing scope (or at a condition), dispatch the handler.
   if (context.Conditions() || IsConditional(context.Op())) ExecuteHandler(context.Op(), context);

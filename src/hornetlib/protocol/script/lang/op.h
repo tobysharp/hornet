@@ -4,9 +4,9 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
+#include <array>
 #include <compare>
 #include <cstdint>
-#include <optional>
 
 #include "hornetlib/util/assert.h"
 
@@ -186,6 +186,19 @@ inline constexpr int DirectPushSize(Op opcode) {
 
 inline constexpr bool IsConditional(Op opcode) {
   return opcode >= Op::If && opcode <= Op::EndIf;
+}
+
+inline constexpr bool IsDisabled(Op opcode) {
+  static constexpr auto kDisabledTable = [] {
+    static constexpr uint8_t kDisabledOps[] = {
+        0x7e, 0x7f, 0x80, 0x81, 0x83, 0x84, 0x85, 0x86,
+        0x8d, 0x8e, 0x95, 0x96, 0x97, 0x98, 0x99,
+    };
+    std::array<bool, OpCount> disabled{};
+    for (uint8_t op : kDisabledOps) disabled[op] = true;
+    return disabled;
+  }();
+  return kDisabledTable[+opcode];
 }
 
 }  // namespace hornet::protocol::script::lang
