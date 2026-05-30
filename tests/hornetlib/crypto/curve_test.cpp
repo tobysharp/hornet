@@ -104,8 +104,7 @@ std::optional<typename CurveType::PublicKey> ParsePublicKey(const typename Curve
 
 template <typename CurveType>
 void ExpectPublicKeyPointEq(const typename CurveType::PublicKey& actual, const typename CurveType::Point& expected) {
-	const auto& actual_point = static_cast<const typename CurveType::Point&>(actual);
-	const typename CurveType::Affine actual_affine = actual_point;
+	const typename CurveType::Affine& actual_affine = actual;
 	const typename CurveType::Affine expected_affine = expected;
 	EXPECT_EQ(actual_affine.x, expected_affine.x);
 	EXPECT_EQ(actual_affine.y, expected_affine.y);
@@ -162,9 +161,11 @@ TEST(CurveTest, PointAdditionCoversInfinityDistinctInverseAndDoublingBranches) {
 	const ToyCurve::Point generator = ToyCurve::G;
 	const ToyCurve::Point two_g = MakeToyPoint(5, 7);
 	const ToyCurve::Point three_g = MakeToyPoint(16, 6);
+	const ToyCurve::Affine affine_generator = generator;
 
 	ExpectToyPointEq(infinity + generator, generator);
 	ExpectToyPointEq(generator + infinity, generator);
+	ExpectToyPointEq(affine_generator + two_g, three_g);
 	ExpectToyPointEq(generator + two_g, three_g);
 	EXPECT_TRUE((generator + (-generator)).IsInfinity());
 	ExpectToyPointEq(generator + generator, two_g);
@@ -174,11 +175,15 @@ TEST(CurveTest, PointAddAssignAndScalarMultiplicationMatchKnownMultiples) {
 	const ToyCurve::Point generator = ToyCurve::G;
 	const ToyCurve::Point three_g = MakeToyPoint(16, 6);
 	const ToyCurve::Point subgroup_public_key = MakeToyPoint(16, 6);
+	const ToyCurve::Affine affine_generator = generator;
 
 	ToyCurve::Point accumulated = generator;
 	accumulated += MakeToyPoint(5, 7);
+	ToyCurve::Point mixed_accumulated = MakeToyPoint(5, 7);
+	mixed_accumulated += affine_generator;
 
 	ExpectToyPointEq(accumulated, three_g);
+	ExpectToyPointEq(mixed_accumulated, three_g);
 	ExpectToyPointEq(ToyCurve::Wide{3} * generator, three_g);
 	ExpectToyPointEq(ToyCurve::Mod_n{3}.x * generator, three_g);
 	EXPECT_TRUE((ToyCurve::Wide{7} * generator).IsInfinity());
@@ -230,6 +235,14 @@ TEST(CurveTest, VerifySignatureAcceptsKnownValidToyExample) {
 
 	ASSERT_TRUE(public_key.has_value());
 	EXPECT_TRUE(ToyCurve::VerifySignature(*public_key, signature, MakeToyDigest(1)));
+}
+
+TEST(CurveTest, VerifySignatureAcceptsToyExampleWithZeroBitStepInLinearCombination) {
+	const auto public_key = ParsePublicKey<ToyCurve>(MakeToyPoint(16, 6));
+	const ToyCurve::Signature signature{Uint64{2}, Uint64{1}};
+
+	ASSERT_TRUE(public_key.has_value());
+	EXPECT_TRUE(ToyCurve::VerifySignature(*public_key, signature, MakeToyDigest(4)));
 }
 
 TEST(CurveTest, VerifySignatureReducesResultXCoordinateModuloOrder) {
