@@ -144,7 +144,8 @@
     "chat.tools.terminal.autoApprove": {
         "./build/clang20-debug/hornetlib_tests": true,
         "./build/clang20-release/hornetlib_tests": true,
-        "/usr/bin/clang-format-20": true
+        "/usr/bin/clang-format-20": true,
+        "perf": true
     },
     "cSpell.words": [
         "malleation",

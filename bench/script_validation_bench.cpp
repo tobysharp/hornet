@@ -118,7 +118,7 @@ SignedDigest MakeSignature(const SpendContext& spend, std::span<const uint8_t> l
   const secp256k1::Wide private_key{1};
   const secp256k1::Wide nonce{1};
   const secp256k1::Point nonce_point = nonce * secp256k1::G;
-  const secp256k1::Mod_n r{nonce_point.x.x.Modulo(crypto::ecdsa::constants::n)};
+  const secp256k1::Mod_n r{nonce_point.NormalizedX().x.Modulo(crypto::ecdsa::constants::n)};
   const secp256k1::Mod_n z{secp256k1::Wide::FromBigEndianBytes(digest)};
   const secp256k1::Mod_n d{private_key};
   const secp256k1::Mod_n s = (z + r * d) / secp256k1::Mod_n{nonce};
@@ -332,12 +332,12 @@ static void BM_PublicKeyFromSEC1_Compressed(benchmark::State& state) {
     state.SkipWithError("failed to build valid SEC1 pubkey input");
     return;
   }
-  auto pubkey_sink = PublicKeyPoint(*pubkey).x.x.Words()[0];
+  auto pubkey_sink = PublicKeyPoint(*pubkey).NormalizedX().x.Words()[0];
   benchmark::DoNotOptimize(std::move(pubkey_sink));
 
   for (auto _ : state) {
     const auto loop_pubkey = secp256k1::PublicKeyFromSEC1(kCompressedPubkey);
-    auto loop_pubkey_sink = PublicKeyPoint(*loop_pubkey).x.x.Words()[0];
+    auto loop_pubkey_sink = PublicKeyPoint(*loop_pubkey).NormalizedX().x.Words()[0];
     benchmark::DoNotOptimize(std::move(loop_pubkey_sink));
   }
 
@@ -370,7 +370,7 @@ static void BM_CheckSigSetup_P2PKH(benchmark::State& state) {
     const auto loop_pubkey = secp256k1::PublicKeyFromSEC1(kCompressedPubkey);
     auto loop_digest_sink = loop_digest.front();
     auto loop_signature_sink = loop_signature->first.Words()[0];
-    auto loop_pubkey_sink = PublicKeyPoint(*loop_pubkey).x.x.Words()[0];
+    auto loop_pubkey_sink = PublicKeyPoint(*loop_pubkey).NormalizedX().x.Words()[0];
     benchmark::DoNotOptimize(std::move(loop_digest_sink));
     benchmark::DoNotOptimize(std::move(loop_signature_sink));
     benchmark::DoNotOptimize(std::move(loop_pubkey_sink));

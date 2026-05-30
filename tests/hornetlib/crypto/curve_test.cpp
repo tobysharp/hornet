@@ -89,8 +89,9 @@ std::array<uint8_t, 1 + 2 * sizeof(typename CurveType::Wide)> EncodeUncompressed
 	constexpr size_t kBytes = sizeof(typename CurveType::Wide);
 	std::array<uint8_t, 1 + 2 * kBytes> bytes{};
 	bytes[0] = 0x04;
-	const auto x_bytes = ToBigEndianBytes<CurveType>(point.x.x);
-	const auto y_bytes = ToBigEndianBytes<CurveType>(point.y.x);
+	const typename CurveType::Affine affine = point;
+	const auto x_bytes = ToBigEndianBytes<CurveType>(affine.x.x);
+	const auto y_bytes = ToBigEndianBytes<CurveType>(affine.y.x);
 	std::copy(x_bytes.begin(), x_bytes.end(), bytes.begin() + 1);
 	std::copy(y_bytes.begin(), y_bytes.end(), bytes.begin() + 1 + kBytes);
 	return bytes;
@@ -104,8 +105,10 @@ std::optional<typename CurveType::PublicKey> ParsePublicKey(const typename Curve
 template <typename CurveType>
 void ExpectPublicKeyPointEq(const typename CurveType::PublicKey& actual, const typename CurveType::Point& expected) {
 	const auto& actual_point = static_cast<const typename CurveType::Point&>(actual);
-	EXPECT_EQ(actual_point.x, expected.x);
-	EXPECT_EQ(actual_point.y, expected.y);
+	const typename CurveType::Affine actual_affine = actual_point;
+	const typename CurveType::Affine expected_affine = expected;
+	EXPECT_EQ(actual_affine.x, expected_affine.x);
+	EXPECT_EQ(actual_affine.y, expected_affine.y);
 }
 
 ToyCurve::Point MakeToyPoint(uint64_t x, uint64_t y) {
@@ -119,8 +122,10 @@ std::array<uint8_t, 8> MakeToyDigest(uint64_t value) {
 }
 
 void ExpectToyPointEq(const ToyCurve::Point& actual, const ToyCurve::Point& expected) {
-	EXPECT_EQ(actual.x, expected.x);
-	EXPECT_EQ(actual.y, expected.y);
+	const ToyCurve::Affine actual_affine = actual;
+	const ToyCurve::Affine expected_affine = expected;
+	EXPECT_EQ(actual_affine.x, expected_affine.x);
+	EXPECT_EQ(actual_affine.y, expected_affine.y);
 }
 
 TEST(CurveTest, PointConstructionCopyMoveAndAssignmentPreserveCoordinates) {
@@ -175,7 +180,7 @@ TEST(CurveTest, PointAddAssignAndScalarMultiplicationMatchKnownMultiples) {
 
 	ExpectToyPointEq(accumulated, three_g);
 	ExpectToyPointEq(ToyCurve::Wide{3} * generator, three_g);
-	ExpectToyPointEq(ToyCurve::Mod_n{3} * generator, three_g);
+	ExpectToyPointEq(ToyCurve::Mod_n{3}.x * generator, three_g);
 	EXPECT_TRUE((ToyCurve::Wide{7} * generator).IsInfinity());
 	EXPECT_TRUE((kToyOrder * subgroup_public_key).IsInfinity());
 }
@@ -231,7 +236,7 @@ TEST(CurveTest, VerifySignatureReducesResultXCoordinateModuloOrder) {
 	const auto public_key = ParsePublicKey<ToyCurve>(ToyCurve::G);
 	const ToyCurve::Signature signature{Uint64{2}, Uint64{3}};
 
-	ASSERT_GT((ToyCurve::Wide{3} * ToyCurve::G).x.x, kToyOrder);
+	ASSERT_GT((ToyCurve::Wide{3} * ToyCurve::G).NormalizedX().x, kToyOrder);
 	ASSERT_TRUE(public_key.has_value());
 	EXPECT_TRUE(ToyCurve::VerifySignature(*public_key, signature, MakeToyDigest(0)));
 }
@@ -281,11 +286,12 @@ TEST(CurveTest, Secp256k1PublicKeyFromSEC1ParsesCompressedKeysWithEitherParity) 
 
 	const auto even_public_key = secp256k1::PublicKeyFromSEC1(even_generator);
 	const auto odd_public_key = secp256k1::PublicKeyFromSEC1(odd_generator);
+	const secp256k1::Affine generator_affine = secp256k1::G;
 
 	ASSERT_TRUE(even_public_key.has_value());
 	ASSERT_TRUE(odd_public_key.has_value());
 	ExpectPublicKeyPointEq<secp256k1>(*even_public_key, secp256k1::G);
-	ExpectPublicKeyPointEq<secp256k1>(*odd_public_key, {secp256k1::G.x, -secp256k1::G.y});
+	ExpectPublicKeyPointEq<secp256k1>(*odd_public_key, {generator_affine.x, -generator_affine.y});
 
 	const std::array<uint8_t, 33> invalid_x = {
 			0x02,

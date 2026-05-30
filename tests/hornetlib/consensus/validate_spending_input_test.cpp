@@ -97,7 +97,7 @@ std::vector<uint8_t> MakeP2PKHSignature(const protocol::script::SpendContext& sp
   const secp256k1::Wide private_key{1};
   const secp256k1::Wide nonce{1};
   const secp256k1::Point nonce_point = nonce * secp256k1::G;
-  const secp256k1::Mod_n r{nonce_point.x.x.Modulo(crypto::ecdsa::constants::n)};
+  const secp256k1::Mod_n r{nonce_point.NormalizedX().x.Modulo(crypto::ecdsa::constants::n)};
   const secp256k1::Mod_n z{secp256k1::Wide::FromBigEndianBytes(digest)};
   const secp256k1::Mod_n d{private_key};
   const secp256k1::Mod_n s = (z + r * d) / secp256k1::Mod_n{nonce};

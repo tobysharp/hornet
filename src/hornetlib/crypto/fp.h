@@ -2,6 +2,7 @@
 
 #include <optional>
 
+#include "hornetlib/crypto/reduce.h"
 #include "hornetlib/util/big_uint.h"
 #include "hornetlib/util/throw.h"
 
@@ -26,8 +27,18 @@ constexpr UIntW<kBits> HalfModuloOdd(const UIntW<kBits>& x) {
   return sum;
 }
 
+template <int kXBits, int kMBits, const UIntW<kMBits>& p>
+constexpr UIntW<kMBits> ReduceModuloM(const UIntW<kXBits>& x) {
+  static_assert(kXBits >= kMBits);
+  if constexpr (kMBits == 256)
+    if constexpr (p == constants::p) return ReduceModuloP(x);
+  return x.Modulo(p);
+}
+
 template <int kBits, const UIntW<kBits>& p>
 constexpr UIntW<kBits> MultiplyModuloM(const UIntW<kBits>& x, const UIntW<kBits>& y) {
+  if constexpr (kBits == 256)
+    if constexpr (p == constants::p) return ReduceModuloP(x, y);
   return x.MultiplyWide(y).Modulo(p);
 }
 
@@ -100,6 +111,19 @@ struct Fp {
     // have a valid square root.
     if (result.Squared() != *this) return std::nullopt;
     return result;
+  }
+
+  template <int k> Fp Times() const {
+    if constexpr (k < 0) return -Times<-k>();
+    if constexpr (k == 0) return {};
+    if constexpr (k == 1) return *this;
+    if constexpr (k == 2) return (*this + *this);
+    if constexpr (util::IsPowerOf2(k)) {
+      auto ext = x.template ZeroExtend<kBits + sizeof(typename Type::Word) * 8>();
+      auto mul = ext << util::Log2(k);
+      return detail::ReduceModuloM<mul.Bits(), kBits, p>(mul);
+    }
+    return *this * static_cast<typename Type::Word>(k);    
   }
 
   constexpr const Type* operator->() const { return &x; }

@@ -20,6 +20,18 @@
 
 namespace hornet::util {
 
+template <std::integral T>
+inline consteval T Log2(T x)
+{
+  if (x == 0) return false;
+  return static_cast<T>(std::bit_width(static_cast<std::make_unsigned_t<T>>(x)) - 1);
+}
+
+template <std::integral T>
+inline consteval bool IsPowerOf2(T x) {
+  return std::has_single_bit(static_cast<std::make_unsigned_t<T>>(x));
+}
+
 // Reperesents a multi-word unsigned integer, stored in little-endian order.
 template <int kBits, std::unsigned_integral T = uint64_t>
 class BigUint {
@@ -28,6 +40,7 @@ class BigUint {
   static constexpr int kBitsPerWord = sizeof(T) * 8;
   static constexpr int kWords = kBits / kBitsPerWord;
   static_assert(kBits > 0 && kWords > 0);
+  static consteval int Bits() { return kBits; }
 
   constexpr BigUint() = default;  // Uninitialized
 
@@ -86,18 +99,28 @@ class BigUint {
     return result;
   }
 
-  [[nodiscard]] constexpr std::pair<BigUint, bool> AddWithCarry(const BigUint& rhs, bool carry_in = false) const noexcept {
-    BigUint result;
+  template <int kRBits>
+  [[nodiscard]] constexpr std::pair<BigUint<std::max(kBits, kRBits), T>, bool> AddWithCarry(const BigUint<kRBits, T>& rhs, bool carry_in = false) const noexcept {
+    BigUint<std::max(kBits, kRBits), T> result;
     T carry = carry_in ? 1 : 0;
-    for (int i = 0; i < kWords; ++i) {
+    constexpr int kOverlap = std::min(kWords, rhs.kWords);
+    for (int i = 0; i < kOverlap; ++i) {
       const T partial = words_[i] + carry;
-      result.words_[i] = partial + rhs.words_[i];
-      carry = (partial < carry) || (result.words_[i] < partial);
+      result.Words()[i] = partial + rhs.Words()[i];
+      carry = (partial < carry) || (result.Words()[i] < partial);
+    }
+    const T* src = kBits > kRBits ? words_.data() : rhs.Words().data();
+    for (int i = kOverlap; i < result.kWords; ++i) {
+      const T sum = src[i] + carry;
+      carry = sum < src[i];
+      result.Words()[i] = sum;
     }
     return {result, carry != 0};
   }
 
-  constexpr BigUint& operator+=(const BigUint& rhs) noexcept {
+  template <int kRBits>
+  constexpr BigUint& operator+=(const BigUint<kRBits, T>& rhs) noexcept {
+    static_assert(kRBits <= kBits);
     return *this = AddWithCarry(rhs).first;
   }
 
@@ -144,7 +167,9 @@ class BigUint {
       }
     };
     for (int i = 0; i < kWords; ++i) {
+      if (words_[i] == 0) continue;
       for (int j = 0; j < kWords; ++j) {
+        if (rhs.words_[j] == 0) continue;
         const auto [lo, hi] = MulWide(words_[i], rhs.words_[j]);
         AddWord(i + j, lo);
         AddWord(i + j + 1, hi);
@@ -241,8 +266,9 @@ class BigUint {
     return BigUint{*this} /= rhs;
   }
 
-  constexpr BigUint operator+(const BigUint& rhs) const {
-    return BigUint{*this} += rhs;
+  template <int kRBits>
+  constexpr BigUint<std::max(kBits, kRBits), T> operator+(const BigUint<kRBits, T>& rhs) const {
+    return AddWithCarry(rhs).first;
   }
 
   constexpr BigUint operator-(const BigUint& rhs) const {
@@ -408,15 +434,6 @@ class BigUint {
 
   static constexpr T Shr(T a, int b) {
     return b >= kBitsPerWord ? 0 : (a >> b);
-  }
-  
-  static consteval int Log2(int x)
-  {
-    // 1 << rv == x
-    int rv = 0;
-    while ((1 << rv) < x)
-        ++rv;
-    return rv;
   }
   
   static constexpr std::pair<T, T> MulWide(T a, T b) noexcept {
