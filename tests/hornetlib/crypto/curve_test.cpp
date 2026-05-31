@@ -156,19 +156,76 @@ TEST(CurveTest, InfinityNegationAndOnCurveBehaveAsExpected) {
 	EXPECT_FALSE(ToyCurve::IsOnCurve(MakeToyPoint(1, 1)));
 }
 
-TEST(CurveTest, PointAdditionCoversInfinityDistinctInverseAndDoublingBranches) {
-	const ToyCurve::Point infinity;
+TEST(CurveTest, AffinePlusAffineDistinctPointsMatchesKnownMultiple) {
+	const ToyCurve::Point generator = ToyCurve::G;
+	const ToyCurve::Point two_g = MakeToyPoint(5, 7);
+	const ToyCurve::Point three_g = MakeToyPoint(16, 6);
+	const ToyCurve::Affine affine_generator = generator;
+	const ToyCurve::Affine affine_two_g = two_g;
+
+	ExpectToyPointEq(ToyCurve::Point{affine_generator + affine_two_g}, three_g);
+}
+
+TEST(CurveTest, AffinePlusAffineSamePointMatchesDoublingResult) {
+	const ToyCurve::Point generator = ToyCurve::G;
+	const ToyCurve::Point two_g = MakeToyPoint(5, 7);
+	const ToyCurve::Affine affine_generator = generator;
+
+	ExpectToyPointEq(ToyCurve::Point{affine_generator + affine_generator}, two_g);
+}
+
+TEST(CurveTest, AffinePlusJacobianDistinctPointsMatchesKnownMultiple) {
 	const ToyCurve::Point generator = ToyCurve::G;
 	const ToyCurve::Point two_g = MakeToyPoint(5, 7);
 	const ToyCurve::Point three_g = MakeToyPoint(16, 6);
 	const ToyCurve::Affine affine_generator = generator;
 
+	ExpectToyPointEq(affine_generator + two_g, three_g);
+}
+
+TEST(CurveTest, AffinePlusJacobianSamePointMatchesDoublingResult) {
+	const ToyCurve::Point generator = ToyCurve::G;
+	const ToyCurve::Point two_g = MakeToyPoint(5, 7);
+	const ToyCurve::Affine affine_generator = generator;
+
+	ExpectToyPointEq(affine_generator + generator, two_g);
+}
+
+TEST(CurveTest, JacobianPlusJacobianDistinctPointsMatchesKnownMultiple) {
+	const ToyCurve::Point generator = ToyCurve::G;
+	const ToyCurve::Point two_g = MakeToyPoint(5, 7);
+	const ToyCurve::Point three_g = MakeToyPoint(16, 6);
+
+	ExpectToyPointEq(generator + two_g, three_g);
+}
+
+TEST(CurveTest, JacobianPlusJacobianSamePointMatchesDoublingResult) {
+	const ToyCurve::Point generator = ToyCurve::G;
+	const ToyCurve::Point two_g = MakeToyPoint(5, 7);
+
+	ExpectToyPointEq(generator + generator, two_g);
+}
+
+TEST(CurveTest, JacobianPointAdditionHandlesInfinityAndInverseInputs) {
+	const ToyCurve::Point infinity;
+	const ToyCurve::Point generator = ToyCurve::G;
+
 	ExpectToyPointEq(infinity + generator, generator);
 	ExpectToyPointEq(generator + infinity, generator);
-	ExpectToyPointEq(affine_generator + two_g, three_g);
-	ExpectToyPointEq(generator + two_g, three_g);
 	EXPECT_TRUE((generator + (-generator)).IsInfinity());
-	ExpectToyPointEq(generator + generator, two_g);
+}
+
+TEST(CurveTest, JacobianDoubleMatchesDoublingResultForFinitePoint) {
+	const ToyCurve::Point generator = ToyCurve::G;
+	const ToyCurve::Point two_g = MakeToyPoint(5, 7);
+
+	ExpectToyPointEq(generator.Double(), two_g);
+}
+
+TEST(CurveTest, JacobianDoublePreservesInfinity) {
+	const ToyCurve::Point infinity;
+
+	EXPECT_TRUE(infinity.Double().IsInfinity());
 }
 
 TEST(CurveTest, PointAddAssignAndScalarMultiplicationMatchKnownMultiples) {

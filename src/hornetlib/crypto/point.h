@@ -135,91 +135,99 @@ class JacobianPoint {
     if (lhs.IsInfinity()) return rhs;
     if (rhs.IsInfinity()) return lhs;
 
+    // 6M, 2S
     const Mod_p lZ2 = lhs.Z.Squared();
     const Mod_p rZ2 = rhs.Z.Squared();
     const Mod_p U_1 = lhs.X * rZ2;
     const Mod_p U_2 = rhs.X * lZ2;
     const Mod_p H = U_2 - U_1;
-
     const Mod_p S_1 = lhs.Y * rZ2 * rhs.Z;
     const Mod_p S_2 = rhs.Y * lZ2 * lhs.Z;
     const Mod_p r = S_2 - S_1;
+
     if (H == 0) {
       if (r == 0) {
+        // a = 0: 2M, 5S
         // Add a (non-infinity) point to itself
         const Mod_p X2 = lhs.X.Squared();
         const Mod_p M = [&] {
           if constexpr (a == 0) {
-            return X2.template Times<3>();
+            return 3_c * X2;
           } else {
             const Mod_p Z4 = lZ2.Squared();
-            return X2.template Times<3>() + a * Z4;
+            return 3_c * X2 + a * Z4;
           }
         }();
         const Mod_p Y2 = lhs.Y.Squared();
-        const Mod_p S = lhs.X * Y2.template Times<4>();
-        const Mod_p X_3 = M.Squared() - S.template Times<2>();
-        const Mod_p Y_3 = M * (S - X_3) - Y2.Squared().template Times<8>();
-        // 2YZ = (Y + Z)^2 - Y^2 - Z^2
+        const Mod_p S = 4_c * lhs.X * Y2;
+        const Mod_p X_3 = M.Squared() - 2_c * S;
+        const Mod_p Y_3 = M * (S - X_3) - 8_c * Y2.Squared();
         const Mod_p Z_3 = (lhs.Y + lhs.Z).Squared() - Y2 - lZ2;
         return {X_3, Y_3, Z_3};
       } 
       else return {};
     }
+
+    // 5M, 3S
     const Mod_p H2 = H.Squared();
     const Mod_p H3 = H2 * H;
     const Mod_p U_1H2 = U_1 * H2;
-    const Mod_p X_3 = r.Squared() - H3 - U_1H2.template Times<2>();
-    const Mod_p Y_3 = r * (U_1H2 - X_3) - S_1 * H3;
-    const Mod_p Z_3 = H * lhs.Z * rhs.Z;
-    // Note that one could use the identity 
-    //  2.Z_1.Z_2 = (Z_1 + Z_2)^2 - Z_1^2 - Z_2^2
-    // to avoid the Z_1*Z_2 multiply here, but scaling through by the factor 2 is then required.
+    const Mod_p X_3 = 4_c * (r.Squared() - H3 - 2_c * U_1H2);
+    const Mod_p Y_3 = r * (8_c * U_1H2 - 2_c * X_3) - 8_c * (S_1 * H3);
+    const Mod_p Z_3 = H * ((lhs.Z + rhs.Z).Squared() - lZ2 - rZ2);
     return {X_3, Y_3, Z_3};
   }
+  // a = 0. Double: 8M, 7S; Add: 11M, 5S.
 
   // Add two Jacobian points on the curve
   friend JacobianPoint operator+(const Affine& lhs, const JacobianPoint& rhs) {
     if (lhs.IsInfinity()) return rhs;
     if (rhs.IsInfinity()) return lhs;
 
+    // 3M, 1S
     const Mod_p rZ2 = rhs.Z.Squared();
     const Mod_p U_1 = lhs.x * rZ2;
     const Mod_p U_2 = rhs.X;
     const Mod_p H = U_2 - U_1;
-
     const Mod_p S_1 = lhs.y * rZ2 * rhs.Z;
     const Mod_p S_2 = rhs.Y;
     const Mod_p r = S_2 - S_1;
+
     if (H == 0) {
       if (r == 0) {
+        // 1M, 5S
         // Add a (non-infinity) point to itself
         const Mod_p X2 = lhs.x.Squared();
         const Mod_p M = [&] {
           if constexpr (a == 0) {
-            return X2.template Times<3>();
+            return 3_c * X2;
           } else {
-            return X2.template Times<3>() + a;
+            return 3_c * X2 + a;
           }
         }();
         const Mod_p Y2 = lhs.y.Squared();
-        const Mod_p S = lhs.x * Y2.template Times<4>();
-        const Mod_p X_3 = M.Squared() - S.template Times<2>();
-        const Mod_p Y_3 = M * (S - X_3) - Y2.Squared().template Times<8>();
-        const Mod_p Z_3 = lhs.y.template Times<2>();
+        const Mod_p Y4 = Y2.Squared();
+        // S = x * 4Y^2 = 2(2xY^2) = 2((x + Y^2)^2 - x^2 - Y^4)
+        const Mod_p S = 2_c * ((lhs.x + Y2).Squared() - X2 - Y4);
+        const Mod_p X_3 = M.Squared() - 2_c * S;
+        const Mod_p Y_3 = M * (S - X_3) - 8_c * Y4;
+        const Mod_p Z_3 = 2_c * lhs.y;
         return {X_3, Y_3, Z_3};
       } 
       else return {};
     }
+
+    // 4M, 3S
     const Mod_p H2 = H.Squared();
     const Mod_p H3 = H2 * H;
     const Mod_p U_1H2 = U_1 * H2;
-    const Mod_p X_3 = r.Squared() - H3 - U_1H2.template Times<2>();
-    const Mod_p Y_3 = r * (U_1H2 - X_3) - S_1 * H3;
-    const Mod_p Z_3 = H * rhs.Z;
+    const Mod_p X_3 = 4_c * (r.Squared() - H3 - 2_c * U_1H2);
+    const Mod_p Y_3 = r * (8_c * U_1H2 - 2_c * X_3) - 8_c * (S_1 * H3);
+    const Mod_p Z_3 = H * ((rhs.Z + 1).Squared() - 1 - rZ2);    
     return {X_3, Y_3, Z_3};
   }
-  
+  // a = 0. Double: 4M, 6S; Add: 7M, 4S.
+
   JacobianPoint Double() const {
     if (IsInfinity()) return {};
 
@@ -235,13 +243,18 @@ class JacobianPoint {
       }
     }();
     const Mod_p Y2 = Y.Squared();
-    const Mod_p S = X * Y2.template Times<4>();
-    const Mod_p X_3 = M.Squared() - S.template Times<2>();
-    const Mod_p Y_3 = M * (S - X_3) - Y2.Squared().template Times<8>();
-    // 2YZ = (Y + Z)^2 - Y^2 - Z^2
+    const Mod_p Y4 = Y2.Squared();
+    const Mod_p S = 2_c * ((X + Y2).Squared() - X2 - Y4);
+    const Mod_p X_3 = M.Squared() - 2_c * S;
+    const Mod_p Y_3 = M * (S - X_3) - 8_c * Y4;
     const Mod_p Z_3 = (Y + Z).Squared() - Y2 - Z2;
     return {X_3, Y_3, Z_3};
   }
+  // a = 0. 1M, 7S
+
+  friend JacobianPoint operator -(const Affine& lhs, const JacobianPoint& rhs);
+  friend JacobianPoint operator -(const JacobianPoint& lhs, const Affine& rhs);
+  friend JacobianPoint operator -(const JacobianPoint& lhs, const JacobianPoint& rhs);
 
   JacobianPoint& operator=(const JacobianPoint& rhs) = default;
   JacobianPoint& operator=(JacobianPoint&& rhs) = default;

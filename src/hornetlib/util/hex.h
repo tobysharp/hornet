@@ -93,6 +93,18 @@ struct HexLiteral {
   }
 };
 
+template <char C>
+consteval void AccumulateDecimalDigit(int& value) {
+  if constexpr (C != '\'') value = value * 10 + HexValue<C>();
+}
+
+template <char... Cs>
+consteval int ParseDecimalLiteral() {
+  int value = 0;
+  (util::AccumulateDecimalDigit<Cs>(value), ...);
+  return value;
+}
+
 }  // namespace util
 
 // _hash: 256-bit, big endian, returns std::array<uint8_t, 32>.
@@ -120,6 +132,16 @@ inline consteval auto operator""_bytes() {
     return util::ApplyToSequence<filtered.size()>(
         [&]<size_t... J>() { return util::DecodeHexString<filtered[J]...>(/*reverse=*/false); });
   });
+}
+
+template <char... Cs>
+consteval auto operator ""_c() {
+  return std::integral_constant<int, util::ParseDecimalLiteral<Cs...>()>{};
+}
+
+template <int k>
+consteval auto operator-(std::integral_constant<int, k>) {
+  return std::integral_constant<int, -k>{};
 }
 
 }  // namespace hornet

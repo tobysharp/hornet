@@ -4,6 +4,7 @@
 
 #include "hornetlib/crypto/reduce.h"
 #include "hornetlib/util/big_uint.h"
+#include "hornetlib/util/hex.h"
 #include "hornetlib/util/throw.h"
 
 namespace hornet::crypto::ecdsa {
@@ -113,17 +114,36 @@ struct Fp {
     return result;
   }
 
-  template <int k> Fp Times() const {
+  template <int k>
+  constexpr Fp LShift() const {
+    constexpr int kResultBits = NextWord<kBits + k>();
+    const auto ext = x.template ZeroExtend<kResultBits>();
+    const auto mul = ext << k;
+    return detail::ReduceModuloM<mul.Bits(), kBits, p>(mul);
+  }
+
+  template <int k> Fp constexpr Times() const {
     if constexpr (k < 0) return -Times<-k>();
     if constexpr (k == 0) return {};
     if constexpr (k == 1) return *this;
     if constexpr (k == 2) return (*this + *this);
-    if constexpr (util::IsPowerOf2(k)) {
-      auto ext = x.template ZeroExtend<kBits + sizeof(typename Type::Word) * 8>();
-      auto mul = ext << util::Log2(k);
-      return detail::ReduceModuloM<mul.Bits(), kBits, p>(mul);
-    }
+    if constexpr (util::IsPowerOf2(k)) return LShift<util::Log2(k)>();
     return *this * static_cast<typename Type::Word>(k);    
+  }
+
+  template <int k>
+  friend constexpr Fp operator *(const Fp& x, std::integral_constant<int, k>) {
+    return x.template Times<k>();
+  }
+
+  template <int k>
+  friend constexpr Fp operator *(std::integral_constant<int, k>, const Fp& x) {
+    return x.template Times<k>();
+  }
+
+  template <int k>
+  friend constexpr Fp operator <<(const Fp& x, std::integral_constant<int, k>) {
+    return x.template LShift<k>();
   }
 
   constexpr const Type* operator->() const { return &x; }
