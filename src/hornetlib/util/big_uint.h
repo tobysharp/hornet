@@ -158,22 +158,26 @@ class BigUint {
   }
 
   [[nodiscard]] constexpr BigUint<kBits * 2, T> MultiplyWide(const BigUint& rhs) const noexcept {
-    BigUint<kBits * 2, T> result = BigUint<kBits * 2, T>::Zero();
-    const auto AddWord = [&](int index, T value) {
-      for (int i = index; value != 0 && i < result.kWords; ++i) {
-        const T sum = result.Words()[i] + value;
-        value = sum < result.Words()[i];
-        result.Words()[i] = sum;
-      }
+    const auto Add = [](T& acc, T value) -> bool {
+      acc += value;
+      return acc < value;
     };
-    for (int i = 0; i < kWords; ++i) {
-      if (words_[i] == 0) continue;
-      for (int j = 0; j < kWords; ++j) {
-        if (rhs.words_[j] == 0) continue;
-        const auto [lo, hi] = MulWide(words_[i], rhs.words_[j]);
-        AddWord(i + j, lo);
-        AddWord(i + j + 1, hi);
+    
+    // Iterate over destination words.
+    T c0 = 0, c1 = 0, c2 = 0;
+    BigUint<kBits * 2, T> result;
+    for (int i = 0; i < kWords * 2; ++i) {
+      const int j_begin = std::max(0, i + 1 - kWords);
+      const int j_end = std::min(i + 1, kWords);
+
+      // Iterate over pairs contributing to column i.
+      for (int j = j_begin; j < j_end; ++j) {
+        int k = i - j;
+        const auto [lo, hi] = MulWide(words_[j], rhs.words_[k]);
+        Add(c2, Add(c1, hi + Add(c0, lo)));
       }
+      result.Words()[i] = c0;
+      c0 = c1; c1 = c2; c2 = 0;
     }
     return result;
   }
