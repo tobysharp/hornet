@@ -3,14 +3,11 @@
 #include <optional>
 
 #include "hornetlib/crypto/reduce.h"
-#include "hornetlib/util/big_uint.h"
+#include "hornetlib/crypto/uintw.h"
 #include "hornetlib/util/hex.h"
 #include "hornetlib/util/throw.h"
 
 namespace hornet::crypto::ecdsa {
-
-template <int kBits>
-using UIntW = util::BigUint<kBits>;
 
 namespace detail {
 

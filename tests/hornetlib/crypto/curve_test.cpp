@@ -247,6 +247,17 @@ TEST(CurveTest, PointAddAssignAndScalarMultiplicationMatchKnownMultiples) {
 	EXPECT_TRUE((kToyOrder * subgroup_public_key).IsInfinity());
 }
 
+TEST(CurveTest, PlainNafRecoderProducesExpectedSignedDigits) {
+	const auto naf = NonAdjacentForm(ToyCurve::Wide{14});
+
+	EXPECT_EQ(naf[0], 0);
+	EXPECT_EQ(naf[1], -1);
+	EXPECT_EQ(naf[2], 0);
+	EXPECT_EQ(naf[3], 0);
+	EXPECT_EQ(naf[4], 1);
+	EXPECT_TRUE(std::all_of(naf.begin() + 5, naf.end(), [](int8_t digit) { return digit == 0; }));
+}
+
 TEST(CurveTest, PublicKeyValidationRejectsInfinityOffCurveOutOfRangeAndWrongSubgroup) {
 	const ToyCurve::Point generator = ToyCurve::G;
 	auto out_of_range_x = EncodeUncompressedPublicKey<ToyCurve>(generator);

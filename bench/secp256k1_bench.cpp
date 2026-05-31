@@ -148,16 +148,38 @@ std::vector<std::pair<UIntW<256>, UIntW<256>>> MakeMultiplyModuloBenchCorpus() {
   return corpus;
 }
 
-std::vector<UIntW<256>> MakeInvertModuloBenchCorpus() {
+std::vector<UIntW<512>> MakeReduceModuloPCorpus() {
+  std::vector<UIntW<512>> corpus;
+  corpus.reserve(kCorpusSize);
+  const auto factors = MakeMultiplyModuloBenchCorpus();
+
+  for (const auto& [x, y] : factors)
+    corpus.push_back(x.MultiplyWide(y));
+
+  return corpus;
+}
+
+std::vector<UIntW<256>> MakeFieldModuloPCorpus() {
   std::vector<UIntW<256>> corpus;
   corpus.reserve(kCorpusSize);
-  uint64_t state = 0x7a5b3c1de490f628ull;
+  uint64_t state = 0x4ea91cb8d6723f05ull;
 
   for (std::size_t i = 0; i < kCorpusSize; ++i) {
     auto x = RandomUInt256(state).Modulo(constants::p);
     if (x == UIntW<256>::Zero()) x = UIntW<256>{1};
     corpus.push_back(x);
   }
+
+  return corpus;
+}
+
+std::vector<UIntW<256>> MakeBigUintBenchCorpus() {
+  std::vector<UIntW<256>> corpus;
+  corpus.reserve(kCorpusSize);
+  uint64_t state = 0x2d4f68a1b9c3e507ull;
+
+  for (std::size_t i = 0; i < kCorpusSize; ++i)
+    corpus.push_back(RandomUInt256(state));
 
   return corpus;
 }
@@ -226,7 +248,7 @@ static void BM_Secp256k1_PointMultiply(benchmark::State& state) {
   SetOpsPerSecondCounter(state);
 }
 
-static void BM_MultiplyModuloM_256_Secp256k1P(benchmark::State& state) {
+static void BM_MultiplyModP_256_Secp256k1P(benchmark::State& state) {
   const auto corpus = MakeMultiplyModuloBenchCorpus();
   std::size_t index = 0;
 
@@ -246,17 +268,49 @@ static void BM_MultiplyModuloM_256_Secp256k1P(benchmark::State& state) {
 }
 
 static void BM_ReduceModuloP_256_Secp256k1P(benchmark::State& state) {
-  const auto corpus = MakeMultiplyModuloBenchCorpus();
+  const auto corpus = MakeReduceModuloPCorpus();
   std::size_t index = 0;
 
   for (auto _ : state) {
-    const auto& [input_x, input_y] = corpus[index];
+    const auto& input = corpus[index];
     index = (index + 1) & (kCorpusSize - 1);
-    auto x = input_x;
-    auto y = input_y;
+    auto x = input;
     benchmark::DoNotOptimize(x);
-    benchmark::DoNotOptimize(y);
-    auto product = ReduceModuloP(x, y);
+    auto reduced = ReduceModuloP(x);
+    benchmark::DoNotOptimize(reduced);
+    benchmark::ClobberMemory();
+  }
+
+  SetOpsPerSecondCounter(state);
+}
+
+static void BM_SquareModP_256_Secp256k1P(benchmark::State& state) {
+  const auto corpus = MakeFieldModuloPCorpus();
+  std::size_t index = 0;
+
+  for (auto _ : state) {
+    const auto& input = corpus[index];
+    index = (index + 1) & (kCorpusSize - 1);
+    auto x = input;
+    benchmark::DoNotOptimize(x);
+    auto squared = detail::SquaredModuloM<256, constants::p>(x);
+    benchmark::DoNotOptimize(squared);
+    benchmark::ClobberMemory();
+  }
+
+  SetOpsPerSecondCounter(state);
+}
+
+static void BM_MultiplySelfModP_256_Secp256k1P(benchmark::State& state) {
+  const auto corpus = MakeFieldModuloPCorpus();
+  std::size_t index = 0;
+
+  for (auto _ : state) {
+    const auto& input = corpus[index];
+    index = (index + 1) & (kCorpusSize - 1);
+    auto x = input;
+    benchmark::DoNotOptimize(x);
+    auto product = detail::MultiplyModuloM<256, constants::p>(x, x);
     benchmark::DoNotOptimize(product);
     benchmark::ClobberMemory();
   }
@@ -265,7 +319,7 @@ static void BM_ReduceModuloP_256_Secp256k1P(benchmark::State& state) {
 }
 
 static void BM_InvertModuloOdd_256_Secp256k1P(benchmark::State& state) {
-  const auto corpus = MakeInvertModuloBenchCorpus();
+  const auto corpus = MakeFieldModuloPCorpus();
   std::size_t index = 0;
 
   for (auto _ : state) {
@@ -281,12 +335,50 @@ static void BM_InvertModuloOdd_256_Secp256k1P(benchmark::State& state) {
   SetOpsPerSecondCounter(state);
 }
 
+static void BM_BigUint256_MultiplyWideSelf(benchmark::State& state) {
+  const auto corpus = MakeBigUintBenchCorpus();
+  std::size_t index = 0;
+
+  for (auto _ : state) {
+    const auto& input = corpus[index];
+    index = (index + 1) & (kCorpusSize - 1);
+    auto x = input;
+    benchmark::DoNotOptimize(x);
+    auto wide = x.MultiplyWide(x);
+    benchmark::DoNotOptimize(wide);
+    benchmark::ClobberMemory();
+  }
+
+  SetOpsPerSecondCounter(state);
+}
+
+static void BM_BigUint256_Squared(benchmark::State& state) {
+  const auto corpus = MakeBigUintBenchCorpus();
+  std::size_t index = 0;
+
+  for (auto _ : state) {
+    const auto& input = corpus[index];
+    index = (index + 1) & (kCorpusSize - 1);
+    auto x = input;
+    benchmark::DoNotOptimize(x);
+    auto squared = x.Squared();
+    benchmark::DoNotOptimize(squared);
+    benchmark::ClobberMemory();
+  }
+
+  SetOpsPerSecondCounter(state);
+}
+
 BENCHMARK(BM_Secp256k1_VerifySignature);
 BENCHMARK(BM_Secp256k1_PointAdd);
 BENCHMARK(BM_Secp256k1_PointMultiply);
-BENCHMARK(BM_MultiplyModuloM_256_Secp256k1P);
+BENCHMARK(BM_MultiplyModP_256_Secp256k1P);
+BENCHMARK(BM_MultiplySelfModP_256_Secp256k1P);
+BENCHMARK(BM_SquareModP_256_Secp256k1P);
 BENCHMARK(BM_ReduceModuloP_256_Secp256k1P);
 BENCHMARK(BM_InvertModuloOdd_256_Secp256k1P);
+BENCHMARK(BM_BigUint256_MultiplyWideSelf);
+BENCHMARK(BM_BigUint256_Squared);
 
 }  // namespace
 }  // namespace hornet::crypto::ecdsa

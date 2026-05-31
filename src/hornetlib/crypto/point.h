@@ -1,6 +1,11 @@
 #pragma once
 
+#include <limits>
+#include <utility>
+
 #include "hornetlib/crypto/fp.h"
+#include "hornetlib/crypto/naf.h"
+#include "hornetlib/crypto/uintw.h"
 
 namespace hornet::crypto::ecdsa {
 
@@ -25,7 +30,7 @@ class AffinePoint {
   }
 
   const Mod_p& NormalizedX() const { return x; }
-  
+
   friend AffinePoint operator-(const AffinePoint& lhs) { return {lhs.x, -lhs.y}; }
 
   // Add two points on the curve
@@ -37,14 +42,19 @@ class AffinePoint {
       const Mod_p y3 = lambda * (lhs.x - x3) - lhs.y;
       return {x3, y3};
     } else if (lhs.y == -rhs.y) return {};
-    else {
-      // Add a (non-infinity) point to itself
-      const Mod_p lambda = (3 * lhs.x.Squared() + a) / (lhs.y + lhs.y);
-      const Mod_p x3 = lambda.Squared() - (lhs.x + lhs.x);
-      const Mod_p y3 = lambda * (lhs.x - x3) - lhs.y;
-      return {x3, y3};
-    }
+    else return lhs.Double();
   }
+
+  AffinePoint Double() const {
+    if (IsInfinity()) return {};
+
+    const Mod_p lambda = (3 * x.Squared() + a) / (y + y);
+    const Mod_p x3 = lambda.Squared() - (x + x);
+    const Mod_p y3 = lambda * (x - x3) - y;
+    return {x3, y3};
+  }
+
+  friend AffinePoint operator-(const AffinePoint& lhs, const AffinePoint& rhs) { return lhs + (-rhs); }
 
   AffinePoint& operator=(const AffinePoint& rhs) {
     x = rhs.x;
@@ -59,19 +69,7 @@ class AffinePoint {
   }
 
   AffinePoint& operator+=(const AffinePoint& rhs) { return *this = *this + rhs; }
-
-  // Scalar multiplication
-  friend AffinePoint operator*(const Wide& scalar, const AffinePoint& pt) {
-    // Scalar multiplication of elliptic curve points can be computed efficiently using the
-    // addition rule together with the double-and-add algorithm
-    AffinePoint sum;
-    AffinePoint power = pt;
-    for (int bitIndex = 0; bitIndex < kBits; ++bitIndex) {
-      if (scalar.GetBit(bitIndex)) sum += power;
-      power += power;
-    }
-    return sum;
-  }
+  AffinePoint& operator-=(const AffinePoint& rhs) { return *this = *this - rhs; }
 
   Mod_p x, y;
 };
@@ -88,10 +86,15 @@ class JacobianPoint {
   constexpr JacobianPoint(JacobianPoint&& rhs) = default;
   constexpr JacobianPoint(const Affine& pt) {
     if (pt.IsInfinity()) return;
-    X = pt.x; Y = pt.y; Z = 1;
+    X = pt.x;
+    Y = pt.y;
+    Z = 1;
   }
   constexpr JacobianPoint(const Mod_p& x, const Mod_p& y) : JacobianPoint(Affine{x, y}) {}
   constexpr JacobianPoint(const Mod_p& X, const Mod_p& Y, const Mod_p& Z) : X(X), Y(Y), Z(Z) {}
+
+  constexpr JacobianPoint& operator=(const JacobianPoint& rhs) = default;
+  constexpr JacobianPoint& operator=(JacobianPoint&& rhs) = default;
 
   constexpr bool IsInfinity() const { return Z == 0; }
 
@@ -121,17 +124,15 @@ class JacobianPoint {
     const auto Zinv = Z.Inverse();
     const auto Zinv2 = Zinv.Squared();
     const auto Zinv3 = Zinv2 * Zinv;
-    return { X * Zinv2, Y * Zinv3 };
+    return {X * Zinv2, Y * Zinv3};
   }
 
-  Mod_p NormalizedX() const {
-    return X * Z.Inverse().Squared();
-  }
+  constexpr Mod_p NormalizedX() const { return X * Z.Inverse().Squared(); }
 
-  friend JacobianPoint operator-(const JacobianPoint& lhs) { return {lhs.X, -lhs.Y, lhs.Z}; }
+  friend constexpr JacobianPoint operator-(const JacobianPoint& lhs) { return {lhs.X, -lhs.Y, lhs.Z}; }
 
   // Add two Jacobian points on the curve
-  friend JacobianPoint operator+(const JacobianPoint& lhs, const JacobianPoint& rhs) {
+  friend constexpr JacobianPoint operator+(const JacobianPoint& lhs, const JacobianPoint& rhs) {
     if (lhs.IsInfinity()) return rhs;
     if (rhs.IsInfinity()) return lhs;
 
@@ -164,8 +165,7 @@ class JacobianPoint {
         const Mod_p Y_3 = M * (S - X_3) - 8_c * Y2.Squared();
         const Mod_p Z_3 = (lhs.Y + lhs.Z).Squared() - Y2 - lZ2;
         return {X_3, Y_3, Z_3};
-      } 
-      else return {};
+      } else return {};
     }
 
     // 5M, 3S
@@ -180,7 +180,7 @@ class JacobianPoint {
   // a = 0. Double: 8M, 7S; Add: 11M, 5S.
 
   // Add two Jacobian points on the curve
-  friend JacobianPoint operator+(const Affine& lhs, const JacobianPoint& rhs) {
+  friend constexpr JacobianPoint operator+(const Affine& lhs, const JacobianPoint& rhs) {
     if (lhs.IsInfinity()) return rhs;
     if (rhs.IsInfinity()) return lhs;
 
@@ -213,8 +213,7 @@ class JacobianPoint {
         const Mod_p Y_3 = M * (S - X_3) - 8_c * Y4;
         const Mod_p Z_3 = 2_c * lhs.y;
         return {X_3, Y_3, Z_3};
-      } 
-      else return {};
+      } else return {};
     }
 
     // 4M, 3S
@@ -223,12 +222,12 @@ class JacobianPoint {
     const Mod_p U_1H2 = U_1 * H2;
     const Mod_p X_3 = 4_c * (r.Squared() - H3 - 2_c * U_1H2);
     const Mod_p Y_3 = r * (8_c * U_1H2 - 2_c * X_3) - 8_c * (S_1 * H3);
-    const Mod_p Z_3 = H * ((rhs.Z + 1).Squared() - 1 - rZ2);    
+    const Mod_p Z_3 = H * ((rhs.Z + 1).Squared() - 1 - rZ2);
     return {X_3, Y_3, Z_3};
   }
   // a = 0. Double: 4M, 6S; Add: 7M, 4S.
 
-  JacobianPoint Double() const {
+  constexpr JacobianPoint Double() const {
     if (IsInfinity()) return {};
 
     // Add a (non-infinity) point to itself
@@ -252,36 +251,77 @@ class JacobianPoint {
   }
   // a = 0. 1M, 7S
 
-  friend JacobianPoint operator -(const Affine& lhs, const JacobianPoint& rhs);
-  friend JacobianPoint operator -(const JacobianPoint& lhs, const Affine& rhs);
-  friend JacobianPoint operator -(const JacobianPoint& lhs, const JacobianPoint& rhs);
+  friend constexpr JacobianPoint operator+(const JacobianPoint& lhs, const Affine& rhs) { return rhs + lhs; }
+  friend constexpr JacobianPoint operator-(const Affine& lhs, const JacobianPoint& rhs) { return lhs + (-rhs); }
+  friend constexpr JacobianPoint operator-(const JacobianPoint& lhs, const Affine& rhs) { return (-rhs) + lhs; }
+  friend constexpr JacobianPoint operator-(const JacobianPoint& lhs, const JacobianPoint& rhs) { return lhs + (-rhs); }
 
-  JacobianPoint& operator=(const JacobianPoint& rhs) = default;
-  JacobianPoint& operator=(JacobianPoint&& rhs) = default;
-
-  JacobianPoint& operator+=(const JacobianPoint& rhs) { return *this = *this + rhs; }
-  JacobianPoint& operator+=(const Affine& rhs) { return *this = rhs + *this; }
-
-  // Scalar multiplication
-  friend JacobianPoint operator*(const Wide& scalar, const JacobianPoint& pt) {
-    // Scalar multiplication of elliptic curve points can be computed efficiently using the
-    // addition rule together with the double-and-add algorithm
-    JacobianPoint sum;
-    JacobianPoint power = pt;
-    int bitIndex = 0;
-    for (; bitIndex < kBits && !scalar.GetBit(bitIndex); ++bitIndex)
-      power = power.Double();
-    if (bitIndex < kBits) {
-      sum = power;
-      for (++bitIndex; bitIndex < kBits; ++bitIndex) {
-        power = power.Double();
-        if (scalar.GetBit(bitIndex)) sum += power;
-      }
-    }
-    return sum;
-  }
+  constexpr JacobianPoint& operator+=(const JacobianPoint& rhs) { return *this = *this + rhs; }
+  constexpr JacobianPoint& operator+=(const Affine& rhs) { return *this = rhs + *this; }
+  constexpr JacobianPoint& operator-=(const Affine& rhs) { return *this = *this - rhs; }
+  constexpr JacobianPoint& operator-=(const JacobianPoint& rhs) { return *this = *this - rhs; }
 
   Mod_p X, Y, Z;
 };
 
-}   // namespace hornet::crypto::ecdsa
+template <class Point>
+constexpr Point Scale(const typename Point::Wide& scalar, const Point& pt) {
+  const auto naf = NonAdjacentForm(scalar);
+  constexpr int kBitCount = std::ssize(naf);
+
+  Point sum;
+  Point power = pt;
+  int bitIndex = 0;
+  for (; bitIndex < kBitCount && naf[bitIndex] == 0; ++bitIndex) {
+    power = power.Double();
+  }
+  if (bitIndex < kBitCount) {
+    sum = naf[bitIndex] > 0 ? power : -power;
+    for (++bitIndex; bitIndex < kBitCount; ++bitIndex) {
+      power = power.Double();
+      if (naf[bitIndex] == 1) sum += power;
+      else if (naf[bitIndex] == -1) sum -= power;
+    }
+  }
+  return sum;
+}
+
+template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a, const UIntW<kBits>& b>
+constexpr AffinePoint<kBits, p, a, b> operator*(const UIntW<kBits>& scalar, const AffinePoint<kBits, p, a, b>& pt) {
+  return Scale(scalar, pt);
+}
+
+template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a, const UIntW<kBits>& b>
+constexpr JacobianPoint<kBits, p, a, b> operator*(const UIntW<kBits>& scalar, const JacobianPoint<kBits, p, a, b>& pt) {
+  return Scale(scalar, pt);
+}
+
+template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a, const UIntW<kBits>& b>
+constexpr JacobianPoint<kBits, p, a, b> LinearCombination(const UIntW<kBits>& u1, const AffinePoint<kBits, p, a, b>& P,
+                                                          const UIntW<kBits>& u2,
+                                                          const AffinePoint<kBits, p, a, b>& Q) {
+  using Affine = AffinePoint<kBits, p, a, b>;
+  using Point = JacobianPoint<kBits, p, a, b>;
+  const auto naf1 = NonAdjacentForm(u1);
+  const auto naf2 = NonAdjacentForm(u2);
+  constexpr int kBitCount = std::ssize(naf1);
+
+  const Point P_plus_Q = Point{P} + Q;
+  const Point P_minus_Q = Point{P} - Q;
+  const int add_kind[9] = {2, 1, 2, 1, 0, 1, 2, 1, 2};
+  const Affine affine_addends[4] = {-P, -Q, Q, P};
+  const Point jacobian_addends[5] = {-P_plus_Q, -P_minus_Q, {}, P_minus_Q, P_plus_Q};
+
+  Point sum;
+  for (int bitIndex = kBitCount - 1; bitIndex >= 0; --bitIndex) {
+    sum = sum.Double();
+    const int8_t digit1 = naf1[bitIndex];
+    const int8_t digit2 = naf2[bitIndex];
+    const int8_t index = 3 * (digit1 + 1) + (digit2 + 1);
+    if (add_kind[index] == 1) sum += affine_addends[index >> 1];
+    else if (add_kind[index] == 2) sum += jacobian_addends[index >> 1];
+  }
+  return sum;
+}
+
+}  // namespace hornet::crypto::ecdsa

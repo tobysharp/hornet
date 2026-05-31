@@ -392,6 +392,10 @@ class BigUint {
     return BigUint{*this} >>= rshift;
   }
 
+  constexpr T operator&(T x) const {
+    return words_[0] & x;
+  }
+
   constexpr unsigned int SignificantBits() const {
     for (int i = kWords - 1; i >= 0; --i) {
       const T word = words_[i];

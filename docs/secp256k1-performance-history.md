@@ -18,8 +18,10 @@ The core microbenchmarks to track are:
 - `BM_Secp256k1_VerifySignature`
 - `BM_Secp256k1_PointAdd`
 - `BM_Secp256k1_PointMultiply`
-- `BM_MultiplyModuloM_256_Secp256k1P`
+- `BM_MultiplyModP_256_Secp256k1P`
+- `BM_MultiplySelfModP_256_Secp256k1P`
 - `BM_ReduceModuloP_256_Secp256k1P`
+- `BM_SquareModP_256_Secp256k1P`
 - `BM_InvertModuloOdd_256_Secp256k1P`
 
 These are the key command patterns to reuse when adding later entries:
@@ -33,7 +35,7 @@ For a narrower run:
 
 ```bash
 build/clang20-release/secp256k1_bench \
-  --benchmark_filter='BM_Secp256k1_(VerifySignature|PointAdd|PointMultiply)|BM_(MultiplyModuloM|ReduceModuloP|InvertModuloOdd)_256_Secp256k1P' \
+  --benchmark_filter='BM_Secp256k1_(VerifySignature|PointAdd|PointMultiply)|BM_(MultiplyModP|MultiplySelfModP|ReduceModuloP|SquareModP|InvertModuloOdd)_256_Secp256k1P' \
   --benchmark_min_time=1s
 ```
 
@@ -42,6 +44,10 @@ build/clang20-release/secp256k1_bench \
 - Use the release build.
 - These numbers are intended to be compared only against other release measurements from the same machine class.
 - The benchmark corpus was changed from fixed inputs to deterministic mixed corpora so that the reported throughput is more representative and less vulnerable to constant folding or pathological best cases.
+- Starting on 2026-05-30, the benchmark formerly labeled `ReduceModuloP(x, y)` was renamed to `Multiply mod p`, because that path performs a wide multiply and then reduction.
+- `Multiply mod p` is the representative mixed-operand field-multiply benchmark.
+- `Multiply self mod p` shares the same one-input field corpus as `Square mod p` and is the correct comparison baseline when evaluating whether squaring is cheaper than multiplication.
+- `Reduce mod p` is a pure reducer benchmark over precomputed wide products; it is diagnostic rather than a direct end-to-end field operation.
 - `VerifySignature` is not expected to track `PointAdd`. It contains scalar multiplication work and normalization costs, and historically was much closer to the scalar-multiply cost model than to point addition.
 - After the fast reduction landed, field multiplication ceased to be the dominant end-to-end cost. Field inversion and point-formula structure remained important.
 - After Jacobian points landed, point multiplication improved substantially because many inversions were removed from the inner loop.
@@ -51,18 +57,21 @@ build/clang20-release/secp256k1_bench \
 
 This is the single canonical progression table for this file. Append new entries here. Numbers are approximate where they were discussed qualitatively or rounded in bench output.
 
-| When | Commit / branch note | Change | Verify sig | Point add | Point multiply | Multiply mod p | Reduce mod p | Invert mod p | Notes |
-|---|---|---|---:|---:|---:|---:|---:|---:|---|
-| Early microbenchmark cut | n/a | Fixed-input focused benchmark added | ~135/s | ~118k/s | not yet tracked | ~626k/s | n/a | n/a | Early numbers; fixed inputs were later judged too synthetic |
-| Mixed corpus baseline | n/a | Switched to deterministic mixed corpora | ~138/s | ~120.8k/s | ~278.2/s | ~699.8k/s | n/a | n/a | First directly useful baseline set |
-| Pre-reduction comparison | n/a | Added dedicated reducer benchmark before major optimization | n/a | n/a | n/a | ~694k/s | ~703k/s | n/a | Specialized reducer existed but had not yet materially separated from the generic path |
-| Fast reduction landed | n/a | Optimized `ReduceModuloP` for secp256k1 pseudo-Mersenne structure | n/a | n/a | n/a | old path ~707k/s equivalent | ~38.7M/s | n/a | Local reducer speedup on the order of 55x |
-| Post-reduction snapshot | n/a | Fast reduction wired into field multiplication | ~346.6/s | ~274.4k/s | ~691.5/s | ~38.6M/s | ~38.6M/s | ~311k/s | End-to-end speedup was real but bounded by inversion and point formulas |
-| 2026-05-29 | `tsharp/feature/public-key-type` | `Curve::Point` moved to Jacobian representation with affine conversion boundary | ~2.10k/s | ~1.10M/s | ~3.58k/s | ~38.03M/s | ~38.06M/s | ~305k/s | Full-suite Jacobian snapshot |
-| 2026-05-29 | `tsharp/feature/public-key-type` | `VerifySignature` switched to shared multi-scalar accumulation for `u1 * G + u2 * Q` | ~3.18k/s | ~1.13M/s | ~3.68k/s | ~38.63M/s | ~38.73M/s | ~295k/s | Filtered-suite Strauss-Shamir snapshot with `--benchmark_min_time=1s`; single run with CPU scaling warning present |
-| 2026-05-30 | `tsharp/feature/secp256k1-opt` | Replaced field multiplies with squares and adds inside point addition | ~2.95k/s | n/a | n/a | n/a | n/a | n/a | Verify-only methodology cross-check on local worktree using `taskset -c 0` under governor `powersave` and AMD `balance_performance` |
-| 2026-05-30 | `tsharp/feature/secp256k1-opt` | Switched `BigUint::MultiplyWide` to Comba accumulation | ~9.49k/s | ~3.92M/s | ~12.82k/s | ~81.69M/s | ~81.62M/s | ~310k/s | Filtered suite run with `--benchmark_min_time=1s` from `build/clang20-release/secp256k1_bench`; governor `powersave`, affinity `0-31`, benchmark reported CPU scaling warning |
-| 2026-05-30 | `tsharp/feature/secp256k1-opt` | `BigUint::Squared` kept generic `Unroll` structure and switched off-diagonal terms from duplicated accumulation to one doubled 128-bit add | ~9.78k/s | ~4.05M/s | ~13.28k/s | ~81.85M/s | ~81.87M/s | ~311k/s | Filtered suite run with `--benchmark_min_time=1s` from `build/clang20-release/secp256k1_bench`; governor `powersave`, affinity `0-31`, benchmark reported CPU scaling warning |
+| When | Commit / branch note | Change | Verify sig | Point add | Point multiply | Multiply mod p | Multiply self mod p | Square mod p | Pure reduce mod p | Invert mod p | Notes |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| Early microbenchmark cut | n/a | Fixed-input focused benchmark added | ~135/s | ~118k/s | not yet tracked | ~626k/s | n/a | n/a | n/a | n/a | Early numbers; fixed inputs were later judged too synthetic |
+| Mixed corpus baseline | n/a | Switched to deterministic mixed corpora | ~138/s | ~120.8k/s | ~278.2/s | ~699.8k/s | n/a | n/a | n/a | n/a | First directly useful baseline set |
+| Pre-reduction comparison | n/a | Added dedicated reducer benchmark before major optimization | n/a | n/a | n/a | ~694k/s | n/a | n/a | ~703k/s | n/a | Specialized reducer existed but had not yet materially separated from the generic path |
+| Fast reduction landed | n/a | Optimized `ReduceModuloP` for secp256k1 pseudo-Mersenne structure | n/a | n/a | n/a | old path ~707k/s equivalent | n/a | n/a | ~38.7M/s | n/a | Local reducer speedup on the order of 55x |
+| Post-reduction snapshot | n/a | Fast reduction wired into field multiplication | ~346.6/s | ~274.4k/s | ~691.5/s | ~38.6M/s | n/a | n/a | n/a | ~311k/s | Historical row retained under `Multiply mod p`; the old benchmark label still said `ReduceModuloP` but this path already included multiplication |
+| 2026-05-29 | `tsharp/feature/public-key-type` | `Curve::Point` moved to Jacobian representation with affine conversion boundary | ~2.10k/s | ~1.10M/s | ~3.58k/s | ~38.03M/s | n/a | n/a | n/a | ~305k/s | Full-suite Jacobian snapshot; `Multiply mod p` keeps the historical result from the pre-rename benchmark |
+| 2026-05-29 | `tsharp/feature/public-key-type` | `VerifySignature` switched to shared multi-scalar accumulation for `u1 * G + u2 * Q` | ~3.18k/s | ~1.13M/s | ~3.68k/s | ~38.63M/s | n/a | n/a | n/a | ~295k/s | Filtered-suite Strauss-Shamir snapshot with `--benchmark_min_time=1s`; single run with CPU scaling warning present |
+| 2026-05-30 | `tsharp/feature/secp256k1-opt` | Replaced field multiplies with squares and adds inside point addition | ~2.95k/s | n/a | n/a | n/a | n/a | n/a | n/a | n/a | Verify-only methodology cross-check on local worktree using `taskset -c 0` under governor `powersave` and AMD `balance_performance` |
+| 2026-05-30 | `tsharp/feature/secp256k1-opt` | Switched `BigUint::MultiplyWide` to Comba accumulation | ~9.49k/s | ~3.92M/s | ~12.82k/s | ~81.69M/s | n/a | n/a | n/a | ~310k/s | Filtered suite run with `--benchmark_min_time=1s` from `build/clang20-release/secp256k1_bench`; governor `powersave`, affinity `0-31`, benchmark reported CPU scaling warning |
+| 2026-05-30 | `tsharp/feature/secp256k1-opt` | `BigUint::Squared` kept generic `Unroll` structure and switched off-diagonal terms from duplicated accumulation to one doubled 128-bit add | ~9.78k/s | ~4.05M/s | ~13.28k/s | ~81.85M/s | n/a | n/a | n/a | ~311k/s | Filtered suite run with `--benchmark_min_time=1s` from `build/clang20-release/secp256k1_bench`; governor `powersave`, affinity `0-31`, benchmark reported CPU scaling warning |
+| 2026-05-30 | `tsharp/feature/secp256k1-opt` | Renamed the old `ReduceModuloP(x, y)` benchmark to `Multiply mod p`, and added separate pure `ReduceModuloP(UIntW<512>)` and `Square mod p` benchmarks | n/a | n/a | n/a | ~81.69M/s | n/a | ~92.86M/s | ~159.95M/s | n/a | Exploratory mod-p-only run with `--benchmark_filter='BM_(MultiplyModP|ReduceModuloP|SquareModP)_256_Secp256k1P' --benchmark_min_time=0.2s`; retained for chronology, not the preferred ratio row |
+| 2026-05-30 | `tsharp/feature/secp256k1-opt` | Standardized the mod-p microbenchmarks around representative mixed multiply, matched self-multiply vs square, and a diagnostic pure reducer | n/a | n/a | n/a | ~82.46M/s | ~82.98M/s | ~92.81M/s | ~160.13M/s | n/a | One-second mod-p run with `--benchmark_filter='BM_(MultiplyModP|MultiplySelfModP|ReduceModuloP|SquareModP)_256_Secp256k1P' --benchmark_min_time=1s`; shared one-input corpus for `Multiply self mod p`, `Square mod p`, and `Invert`; benchmark reported CPU scaling warning |
+| 2026-05-31 | `tsharp/feature/secp256k1-opt` | Reworked verification linear combination onto NAF-based Strauss-Shamir with mixed affine/Jacobian dispatch and signed lookup tables | ~15.61k/s | n/a | n/a | n/a | n/a | n/a | n/a | n/a | Verify-only run with `build/clang20-release/secp256k1_bench --benchmark_filter=BM_Secp256k1_VerifySignature --benchmark_min_time=1s --benchmark_repetitions=5`; mean CPU time ~64.07 us, benchmark reported CPU scaling warning |
 
 ## Interpretation
 
@@ -74,7 +83,11 @@ The first benchmark cut was useful for rough orientation, but fixed inputs under
 
 ### 2. Fast field reduction was a major local win
 
-The secp256k1-specific `ReduceModuloP` optimization moved reduction from roughly the sub-mega-op/s range into the high tens of millions of ops per second. That eliminated generic reduction as the dominant cost in raw field multiplication.
+The secp256k1-specific `ReduceModuloP` optimization moved pure reduction from roughly the sub-mega-op/s range into the high tens of millions of ops per second. That eliminated generic reduction as the dominant cost in raw field multiplication.
+
+After the later benchmark split, the current pure reducer microbenchmark is substantially faster again, at about ~160.13M/s on this machine, while `Multiply mod p` remains lower because it still includes wide multiplication.
+
+The matched one-input measurements also show that `Square mod p` is genuinely cheaper than `Multiply self mod p` in the current implementation, rather than that gap being caused by benchmark harness asymmetry.
 
 ### 3. Projective/Jacobian formulas enabled the next major step
 
@@ -99,7 +112,8 @@ In practical terms, the ratios to watch are:
 
 - `VerifySignature / PointMultiply`
 - `PointMultiply / PointAdd`
-- `InvertModuloOdd / MultiplyModuloM`
+- `InvertModuloOdd / Multiply mod p`
+- `Square mod p / Multiply self mod p`
 
 Those ratios help show whether the next bottleneck is inversion, point formulas, or verification overhead outside the scalar-multiply core.
 

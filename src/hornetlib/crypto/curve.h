@@ -9,12 +9,10 @@
 #include "hornetlib/crypto/point.h"
 #include "hornetlib/crypto/fp.h"
 #include "hornetlib/crypto/secp256k1_constants.h"
+#include "hornetlib/crypto/uintw.h"
 #include "hornetlib/util/hex.h"
 
 namespace hornet::crypto::ecdsa {
-
-template <int kBits>
-using UIntW = util::BigUint<kBits>;
 
 template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a, const UIntW<kBits>& b, const UIntW<kBits>& Gx,
           const UIntW<kBits>& Gy, const UIntW<kBits>& n>
@@ -37,7 +35,7 @@ class Curve {
     Affine point_; 
   };
 
-  static constexpr Point G = Affine{Mod_p{Gx}, Mod_p{Gy}};
+  static constexpr Affine G = {Mod_p{Gx}, Mod_p{Gy}};
 
   inline static constexpr bool IsOnCurve(const Point& point) {
     return point.IsOnCurve();
@@ -94,37 +92,6 @@ class Curve {
     if (!(n * publicKey).IsInfinity()) return false;
     return true;
   }
-  
-  // Returns u1 * G + u2 * publicKey
-  inline static Point LinearCombination(const Wide& u1, const Wide& u2, const Affine& Q) {
-    Point sum;
-    int bitIndex = kBits - 1;
-    bool u1_bit, u2_bit;
-    Point GQ = Point{G} + Point{Q};
-  
-    // Search to highest non-zero bit.
-    for (; bitIndex >= 0; --bitIndex) {
-      u1_bit = u1.GetBit(bitIndex);
-      u2_bit = u2.GetBit(bitIndex);
-      if (u1_bit || u2_bit) break;
-    }
-    if (bitIndex < 0) return {};
-
-    // Initialize the accumulator
-    if (u1_bit && u2_bit) sum = GQ;
-    else if (u1_bit) sum = G;
-    else /* (u2_bit) */ sum = Q;
-
-    for (--bitIndex; bitIndex >= 0; --bitIndex) {
-      sum = sum.Double();
-      bool u1_bit = u1.GetBit(bitIndex);
-      bool u2_bit = u2.GetBit(bitIndex);
-      if (u1_bit && u2_bit) sum += GQ;
-      else if (u1_bit) sum += G;
-      else if (u2_bit) sum += Q;
-    }
-    return sum;
-  }
 
   inline static bool VerifySignatureImpl(const Affine& publicKey, const Signature& signature, const Mod_n& e) {
     if (signature.first == 0 || signature.first >= n) return false;
@@ -133,7 +100,7 @@ class Curve {
     const auto sinv = s.Inverse();
     const auto u1 = e * sinv;
     const auto u2 = r * sinv;
-    const Point R = LinearCombination(u1.x, u2.x, publicKey);
+    const Point R = hornet::crypto::ecdsa::LinearCombination(u1.x, G, u2.x, publicKey);
     if (R.IsInfinity()) return false;
     return R.NormalizedX().x.Modulo(n) == r.x;
   }

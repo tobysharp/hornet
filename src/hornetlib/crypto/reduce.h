@@ -1,12 +1,9 @@
 #pragma once
 
 #include "hornetlib/crypto/secp256k1_constants.h"
-#include "hornetlib/util/big_uint.h"
+#include "hornetlib/crypto/uintw.h"
 
 namespace hornet::crypto::ecdsa {
-
-template <int kBits>
-using UIntW = util::BigUint<kBits>;
 
 template <int kBits>
 constexpr std::pair<UIntW<kBits - 256>, UIntW<256>> Partition(const UIntW<kBits>& input) {

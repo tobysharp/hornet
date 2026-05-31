@@ -5,13 +5,10 @@
 
 #pragma once
 
-#include "hornetlib/util/big_uint.h"
+#include "hornetlib/crypto/uintw.h"
 #include "hornetlib/util/hex.h"
 
 namespace hornet::crypto::ecdsa {
-
-template <int kBits>
-using UIntW = util::BigUint<kBits>;
 
 namespace constants {
 // Values copied from p9 of https://www.secg.org/sec2-v2.pdf
