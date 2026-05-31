@@ -44,6 +44,14 @@ constexpr UIntW<kBits> MultiplyModuloM(const UIntW<kBits>& x, const UIntW<kBits>
 }
 
 template <int kBits, const UIntW<kBits>& p>
+constexpr UIntW<kBits> SquaredModuloM(const UIntW<kBits>& x) {
+  const auto sqr = x.Squared();
+  if constexpr (kBits == 256)
+    if constexpr (p == constants::p) return ReduceModuloP(sqr);
+  return sqr.Modulo(p);
+}
+
+template <int kBits, const UIntW<kBits>& p>
 constexpr UIntW<kBits> InvertModuloOdd(const UIntW<kBits>& b) {
   using Type = UIntW<kBits>;
   Type aa = b, uu = 1, bb = p, vv = 0;
@@ -90,7 +98,7 @@ struct Fp {
   constexpr bool operator!=(const Fp& rhs) const { return x != rhs.x; }
   constexpr bool operator==(const Fp& rhs) const { return x == rhs.x; }
 
-  constexpr Fp Squared() const { return detail::MultiplyModuloM<kBits, p>(x, x); }
+  constexpr Fp Squared() const { return detail::SquaredModuloM<kBits, p>(x); }
   constexpr Fp Inverse() const { return detail::InvertModuloOdd<kBits, p>(x); }
 
   constexpr std::optional<Fp> SquareRoot() const {

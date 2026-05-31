@@ -182,6 +182,46 @@ class BigUint {
     return result;
   }
 
+  [[nodiscard]] constexpr BigUint<kBits * 2, T> Squared() const noexcept {
+    struct {
+      const BigUint& self;
+      BigUint<kBits * 2, T> result{};
+      T c0 = 0, c1 = 0, c2 = 0;
+    } capture{*this};
+
+    // Iterate over destination words.
+    Unroll<kWords * 2>([](auto i, auto& c) noexcept {
+      const int j_begin = std::max(0, i + 1 - kWords);
+      const int j_mid = std::min((i + 1) >> 1, kWords);
+
+      // Off-diagonal terms
+      for (int j = j_begin; j < j_mid; ++j) {
+        const int k = i - j;
+        const auto [lo, hi] = MulWide(c.self.words_[j], c.self.words_[k]);
+        const T doubled_lo = lo << 1;
+        const T doubled_hi = (hi << 1) + (lo >> (kBitsPerWord - 1));
+        const T doubled_top = hi >> (kBitsPerWord - 1);
+        Add(c.c2, doubled_top + Add(c.c1, doubled_hi + Add(c.c0, doubled_lo)));
+      }
+
+      // Diagonal term for even columns
+      if constexpr ((i & 1) == 0) {
+        const int j = i >> 1;
+        const auto [lo, hi] = MulWide(c.self.words_[j], c.self.words_[j]);
+        Add(c.c2, Add(c.c1, hi + Add(c.c0, lo)));
+      }      
+
+      c.result.Words()[i] = c.c0;
+      c.c0 = c.c1; c.c1 = c.c2; c.c2 = 0;
+    }, capture);
+    return capture.result;
+  }
+  
+  static constexpr bool Add(T& acc, T value) noexcept {
+    acc += value;
+    return acc < value;
+  };
+
   constexpr BigUint operator*(T rhs) const noexcept {
     if (rhs == 0) return Zero();
     if (rhs == 1) return *this;

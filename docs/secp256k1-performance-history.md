@@ -62,6 +62,7 @@ This is the single canonical progression table for this file. Append new entries
 | 2026-05-29 | `tsharp/feature/public-key-type` | `VerifySignature` switched to shared multi-scalar accumulation for `u1 * G + u2 * Q` | ~3.18k/s | ~1.13M/s | ~3.68k/s | ~38.63M/s | ~38.73M/s | ~295k/s | Filtered-suite Strauss-Shamir snapshot with `--benchmark_min_time=1s`; single run with CPU scaling warning present |
 | 2026-05-30 | `tsharp/feature/secp256k1-opt` | Replaced field multiplies with squares and adds inside point addition | ~2.95k/s | n/a | n/a | n/a | n/a | n/a | Verify-only methodology cross-check on local worktree using `taskset -c 0` under governor `powersave` and AMD `balance_performance` |
 | 2026-05-30 | `tsharp/feature/secp256k1-opt` | Switched `BigUint::MultiplyWide` to Comba accumulation | ~9.49k/s | ~3.92M/s | ~12.82k/s | ~81.69M/s | ~81.62M/s | ~310k/s | Filtered suite run with `--benchmark_min_time=1s` from `build/clang20-release/secp256k1_bench`; governor `powersave`, affinity `0-31`, benchmark reported CPU scaling warning |
+| 2026-05-30 | `tsharp/feature/secp256k1-opt` | `BigUint::Squared` kept generic `Unroll` structure and switched off-diagonal terms from duplicated accumulation to one doubled 128-bit add | ~9.78k/s | ~4.05M/s | ~13.28k/s | ~81.85M/s | ~81.87M/s | ~311k/s | Filtered suite run with `--benchmark_min_time=1s` from `build/clang20-release/secp256k1_bench`; governor `powersave`, affinity `0-31`, benchmark reported CPU scaling warning |
 
 ## Interpretation
 
