@@ -7,6 +7,7 @@
 #include <random>
 
 #include "hornetlib/crypto/point.h"
+#include "hornetlib/crypto/scale.h"
 #include "hornetlib/crypto/fp.h"
 #include "hornetlib/crypto/secp256k1_constants.h"
 #include "hornetlib/crypto/uintw.h"

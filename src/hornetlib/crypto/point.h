@@ -4,10 +4,14 @@
 #include <utility>
 
 #include "hornetlib/crypto/fp.h"
-#include "hornetlib/crypto/naf.h"
 #include "hornetlib/crypto/uintw.h"
 
 namespace hornet::crypto::ecdsa {
+
+// Scalar multiplication of a curve point. Defined in scale.h; forward-declared here so the
+// operator* hidden friends below can delegate to it without point.h depending on scale.h.
+template <class Point>
+constexpr Point Scale(const typename Point::Wide& scalar, const Point& pt);
 
 template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a, const UIntW<kBits>& b>
 class AffinePoint {
@@ -55,6 +59,9 @@ class AffinePoint {
   }
 
   friend AffinePoint operator-(const AffinePoint& lhs, const AffinePoint& rhs) { return lhs + (-rhs); }
+
+  // Scalar multiplication. Implemented by Scale (scale.h).
+  friend AffinePoint operator*(const Wide& scalar, const AffinePoint& pt) { return Scale(scalar, pt); }
 
   AffinePoint& operator=(const AffinePoint& rhs) {
     x = rhs.x;
@@ -256,6 +263,9 @@ class JacobianPoint {
   friend constexpr JacobianPoint operator-(const JacobianPoint& lhs, const Affine& rhs) { return (-rhs) + lhs; }
   friend constexpr JacobianPoint operator-(const JacobianPoint& lhs, const JacobianPoint& rhs) { return lhs + (-rhs); }
 
+  // Scalar multiplication. Implemented by Scale (scale.h).
+  friend constexpr JacobianPoint operator*(const Wide& scalar, const JacobianPoint& pt) { return Scale(scalar, pt); }
+
   constexpr JacobianPoint& operator+=(const JacobianPoint& rhs) { return *this = *this + rhs; }
   constexpr JacobianPoint& operator+=(const Affine& rhs) { return *this = rhs + *this; }
   constexpr JacobianPoint& operator-=(const Affine& rhs) { return *this = *this - rhs; }
@@ -263,65 +273,5 @@ class JacobianPoint {
 
   Mod_p X, Y, Z;
 };
-
-template <class Point>
-constexpr Point Scale(const typename Point::Wide& scalar, const Point& pt) {
-  const auto naf = NonAdjacentForm(scalar);
-  constexpr int kBitCount = std::ssize(naf);
-
-  Point sum;
-  Point power = pt;
-  int bitIndex = 0;
-  for (; bitIndex < kBitCount && naf[bitIndex] == 0; ++bitIndex) {
-    power = power.Double();
-  }
-  if (bitIndex < kBitCount) {
-    sum = naf[bitIndex] > 0 ? power : -power;
-    for (++bitIndex; bitIndex < kBitCount; ++bitIndex) {
-      power = power.Double();
-      if (naf[bitIndex] == 1) sum += power;
-      else if (naf[bitIndex] == -1) sum -= power;
-    }
-  }
-  return sum;
-}
-
-template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a, const UIntW<kBits>& b>
-constexpr AffinePoint<kBits, p, a, b> operator*(const UIntW<kBits>& scalar, const AffinePoint<kBits, p, a, b>& pt) {
-  return Scale(scalar, pt);
-}
-
-template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a, const UIntW<kBits>& b>
-constexpr JacobianPoint<kBits, p, a, b> operator*(const UIntW<kBits>& scalar, const JacobianPoint<kBits, p, a, b>& pt) {
-  return Scale(scalar, pt);
-}
-
-template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a, const UIntW<kBits>& b>
-constexpr JacobianPoint<kBits, p, a, b> LinearCombination(const UIntW<kBits>& u1, const AffinePoint<kBits, p, a, b>& P,
-                                                          const UIntW<kBits>& u2,
-                                                          const AffinePoint<kBits, p, a, b>& Q) {
-  using Affine = AffinePoint<kBits, p, a, b>;
-  using Point = JacobianPoint<kBits, p, a, b>;
-  const auto naf1 = NonAdjacentForm(u1);
-  const auto naf2 = NonAdjacentForm(u2);
-  constexpr int kBitCount = std::ssize(naf1);
-
-  const Point P_plus_Q = Point{P} + Q;
-  const Point P_minus_Q = Point{P} - Q;
-  const int add_kind[9] = {2, 1, 2, 1, 0, 1, 2, 1, 2};
-  const Affine affine_addends[4] = {-P, -Q, Q, P};
-  const Point jacobian_addends[5] = {-P_plus_Q, -P_minus_Q, {}, P_minus_Q, P_plus_Q};
-
-  Point sum;
-  for (int bitIndex = kBitCount - 1; bitIndex >= 0; --bitIndex) {
-    sum = sum.Double();
-    const int8_t digit1 = naf1[bitIndex];
-    const int8_t digit2 = naf2[bitIndex];
-    const int8_t index = 3 * (digit1 + 1) + (digit2 + 1);
-    if (add_kind[index] == 1) sum += affine_addends[index >> 1];
-    else if (add_kind[index] == 2) sum += jacobian_addends[index >> 1];
-  }
-  return sum;
-}
 
 }  // namespace hornet::crypto::ecdsa
