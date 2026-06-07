@@ -153,4 +153,7 @@
         "Segwit",
         "Tapscript"
     ],
+    "markdown.marp.themes": [
+        "docs/marp-hornet.css"
+    ]
 }
