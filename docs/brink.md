@@ -415,21 +415,14 @@ static constexpr auto kConsensusRules = All{
 
 ---
 
-<!-- _class: section -->
+# UTXOs: Resolving spent prevouts
 
-# The UTXO Engine
-
-Validation needs the chain's unspent outputs. This is how Hornet stores and resolves them — and why the specification is what makes the design free.
-
----
-
-# Resolving spent prevouts
-
-## `ChainOutputsView`: the consensus view
+## `ChainOutputsView`
 
 - Consensus resolves a block's spent previous outputs only through `ChainOutputsView`.
-- The interface fixes the spending conditions; it does not constrain their implementation.
-- The four methods are pure and synchronous to the caller; the implementation behind them may be asynchronous, out-of-order, and concurrent.
+- The interface specifies semantic properties, without constraining their implementation.
+- Consensus only sees this pure interface contract, never a database.
+
 
 ```cpp
 class ChainOutputsView {                // Consensus sees only this pure interface.
@@ -437,7 +430,7 @@ class ChainOutputsView {                // Consensus sees only this pure interfa
   virtual bool QueryOutPointsUnique(const Block&) const = 0;        // S01 / BIP30.
   virtual bool QueryPreviousOutputsCreated(const Block&) const = 0; // S02.
   virtual bool QueryPreviousOutputsUnspent(const Block&) const = 0; // S03.
-  virtual std::optional<JoinedSpendRange> Spends(const Block&) const = 0;
+  virtual std::optional<JoinedSpendRange> Spends(const Block&) const = 0;  // S07.
 };
 ```
 
@@ -445,6 +438,35 @@ class ChainOutputsView {                // Consensus sees only this pure interfa
 
 ---
 
+# UTXO(1): A custom UTXO database
+
+> One concrete instance of the interface, in a separate data layer.
+
+```cpp
+namespace hornet::data::utxo {
+  class DatabaseView : public consensus::ChainOutputsView { ... };
+}  // namespace hornet::data::utxo
+```
+
+- **Lock-free** **concurrent** reads; **out-of-order** and **speculative** writes.
+- Cheap **erase** from a given height allows reorgs without undo data.
+- **Single-page** touch per key -- RAM on query, async disk on fetch.
+- **~8 GiB** mainnet RAM footprint.
+- Only **3k lines** of modern C++ and no dependencies.
+- **15 minutes** vs 167 minutes (**11x**) Core v30.0 to reindex mainnet and validate without scripts.$^*$
+
+<!-- Presenter: Clear requirements and compact implementation resolve brittleness and
+unlock engineering improvements.-->
+
+Specification `->` Interface `->` Implementation `->` Testing
+
+<span class="footnote">$^*$Details on delvingbitcoin.org</span>
+
+---
+
+---
+
+---
 # The Custom UTXO Database
 
 3 primary operations designed specifically for the consensus workload, callable <span class="orange">out of order</span>,  <span class="orange">concurrently</span>, and  <span class="orange">lock-free</span>:
@@ -460,7 +482,7 @@ class Database {
 
   QueryResult Query(std::span<const OutPoint> keys, std::span<OutputId> rids, int since, int before) const;
 
-  int Fetch(std::span<const uint64_t> rids, std::span<OutputDetail> outputs, 
+  int Fetch(std::span<const OutputId> rids, std::span<OutputDetail> outputs, 
             std::vector<uint8_t>* scripts) const;
 
   void EraseSince(int height);
@@ -480,7 +502,7 @@ class Database {
 - Adds a block's new outputs and tombstones its consumed outputs.
 - Append-only is cheap and concurrent -- no inserting, sorting, or waiting.
 - Block can be appended **out of order** -- removes sequential constraints.
-- Blocks are added **speculatively** -- unblocking descendant ancestors immediately.
+- Blocks are added **speculatively** -- unblocking descendants immediately.
 - Since entries are height-tagged, invalid branches and reorgs are trivially erased.
 
 ---
@@ -508,7 +530,7 @@ Query keys for a block are first **sorted**.
 
 Then an index of sorted KV entries would enable **doubly-sorted binary search**.
 
-But how can we keep our ~200M index elements sorted when the set is updating after every query?
+But how can we keep our ~200M index elements sorted when the set is updating with each block?
 
 ---
 
@@ -551,7 +573,56 @@ $^*$<span class="footnote">Except in mutable ages.</span>
 
 ---
 
-# The UTXO Table: Disk I/O
+# Fetch 
+
+```cpp
+  int Fetch(std::span<const OutputId> rids, std::span<OutputDetail> outputs, 
+            std::vector<uint8_t>* scripts) const;
+```
+`OutputId` is a packed 64-bit `{offset, length}` logical byte address pair.
+
+The database **table** consists of multiple **disk files** and an **in-memory tail**, storing for each output:
+- amount, coinbase flag, and script bytes.
+
+Data is **appended** to the in-memory tail array, and **flushed** to disk in a background thread.
+
+**Reads** are batched into asynchronous `io_uring` requests at high queue depth, for NVMe parallelism. 
+
+~1 page per I/O request without OS page cache pollution.
+
+---
+
+# Mutable and Immutable Data
+
+TODO 
+
+---
+
+# SingleWriter: Lock-Free Readers and Serialized Writers
+
+## Copy-Mutate-Publish on Write
+
+```cpp
+template <class T> class SingleWriter {
+  // Returns a read-only snapshot of the current state (lock-free).
+  std::shared_ptr<const T> Snapshot() const { return std::atomic_load_explicit(&ptr_, ...); }
+
+  // Returns a mutable copy of the current state (lock-free).
+  [[nodiscard]] std::shared_ptr<T> Copy() const { return std::make_shared<T>(*Snapshot()); }
+
+  // Operates on a read-only snapshot of the current state (lock-free).
+  const T* operator ->() const { return Snapshot().get(); }
+
+  // Atomically publishes a new version, ignoring other writers that may be mutating snapshots (lock-free).
+  void Publish(std::shared_ptr<const T> ptr) { std::atomic_store_explicit(&ptr_, std::move(ptr), ...); }
+
+  // `Writer` holds an exclusive lock, makes a copy, and publishes the mutated object when scope ends.
+  Writer Edit() { return {*this}; }
+
+  mutable std::mutex mutex_;
+  std::shared_ptr<const T> ptr_;
+};
+```
 
 ---
 
@@ -576,6 +647,10 @@ class SpendJoiner {
 
 ---
 
+# `SpendJoiner` State Machine
+
+`SpendJoiner` manages the database operations required for one block.
+
 ![](spendjoiner_state_machine.svg)
 
 <!-- Presenter: walk the spine left to right, then the dashed hold below as the late-ancestor case. -->
@@ -586,7 +661,7 @@ class SpendJoiner {
 
 ## `SpendPipeline`: the worker thread pool
 
-A worker pool driving many joiners at once, min-heap by height (oldest first):
+A worker pool with **ready** and **blocked** job queues, driving many joiners at once:
 
 ```cpp
 void SpendPipeline::WorkerLoop() {
@@ -603,15 +678,30 @@ void SpendPipeline::WorkerLoop() {
 }
 ```
 
-**Speculative append** — a block reaching `Appended` unblocks its children before it is itself validated.
-**Partial resolution** — a block missing a parent parks; it never spins, never restarts.
+---
+
+# UTXO Engine Summary
+
+- Concurrent processing with lock-free Query and Fetch.
+- Out-of-order and speculative append for non-sequential operations.
+- Cache-friendly batched, sorted binary search queries.
+- Single-page per key memory access on `Query`.
+- Single-page per key disk access on `Fetch`.
+- Single contiguous disk write on background table flush.
+- `Erase` / reorg without separate undo data.
+- Mainnet memory usage ~8 GiB.
+- Over 11x performance measured vs Core v30 on `-reindex-chain-state -assumevalid`.
+- Functions as a polymorphic backend to the consensus interface contract.
 
 ---
 
+
+<!-->
+<!--
 ![](spendpipeline.svg)
 
 <!-- Presenter: routing is driven by the returned Action; the amber arc is speculative append releasing parked children. -->
-
+<!--
 ---
 
 # Store, Query, Fetch
@@ -633,13 +723,13 @@ class Database {
 ```
 
 <!-- Presenter: stated here, justified in the next section — the Table and Index internals. -->
-
+<!--
 ---
 
 ---
 
 <!-- _class: section -->
-
+<!--
 # The UTXO Engine
 
 Validation needs the chain's unspent outputs. This is how Hornet stores and resolves them — and why the specification is what makes the design free.
@@ -665,7 +755,7 @@ class ChainOutputsView {                // Consensus sees only this pure interfa
 ```
 
 <!-- Presenter: this interface is the boundary between specification and implementation. The spec fixes the validity conditions; everything below this line is unconstrained — which is what permits the design that follows. -->
-
+<!--
 ---
 
 # Per-block spend resolution
@@ -688,13 +778,13 @@ class SpendJoiner {
 ```
 
 <!-- Presenter: define the four operations clearly — they're not obvious and the rest of the section relies on them. The state machine just sequences them. -->
-
+<!--
 ---
 
 ![](spendjoiner_state_machine.svg)
 
 <!-- Presenter: walk the spine left to right naming each operation, then the dashed hold below as the late-ancestor case — this is where QueriedPart / FetchedPart live. -->
-
+<!--
 ---
 
 # Resolving blocks in parallel and out of order
@@ -721,13 +811,13 @@ void SpendPipeline::WorkerLoop() {
 ```
 
 <!-- Presenter: out-of-order append is the direct answer to the total-ordering objection, if it comes up in Q&A. -->
-
+<!--
 ---
 
 ![](spendpipeline.svg)
 
 <!-- Presenter: routing is driven by the returned Action; the amber arc is speculative append releasing parked blocks. -->
-
+<!--
 ---
 
 # Store, query, fetch
