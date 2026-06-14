@@ -18,11 +18,11 @@ namespace hornet::consensus::rules {
 // ## Header Rules
 static constexpr auto kHeaderRules = All{
   Rule{ValidatePreviousHash},             // A header MUST reference the hash of a valid parent block.
-  Rule{ValidateProofOfWork},              // A header's hash MUST achieve its own proof-of-work target.
+  Rule{ValidateProofOfWork},              // A header's hash MUST NOT exceed its own proof-of-work target.
   Rule{ValidateDifficultyAdjustment},     // A header's proof-of-work target MUST satisfy the difficulty adjustment formula for the timechain.
-  Rule{ValidateMedianTimePast},           // A header timestamp MUST be strictly greater than the median of its 11 ancestors' timestamps.
-  Rule{ValidateTimestampCurrent},         // A header timestamp MUST be less than or equal to network-adjusted time plus 2 hours.
-  Rule{ValidateVersion}                   // A header's version number MUST NOT have been retired by any activated soft fork.
+  Rule{ValidateMedianTimePast},           // A header timestamp MUST be greater than the median of its 11 ancestor blocks' timestamps.
+  Rule{ValidateTimestampCurrent},         // A header timestamp MUST NOT exceed network-adjusted time plus 2 hours.
+  Rule{ValidateVersion}                   // A header's version number MUST NOT have been retired by any activated soft fork. (See Table 1.)
 };
 
 // Transaction Rules
@@ -76,7 +76,7 @@ static constexpr auto kSpendingTransactionRules = All{
 
 // ## Spending Rules
 static constexpr auto kSpendingRules = All{
-  Rule{ValidateOutPointsUnique},          // BIP30: Transaction outputs MUST NOT give rise to outpoints that reference existing unspent outputs, except in blocks listed in BIP30 Exceptions.
+  Rule{ValidateOutPointsUnique},          // BIP30: Transaction outputs MUST NOT give rise to outpoints that reference existing unspent outputs, except in blocks listed in Table 2.
   Rule{ValidateInputPrevoutsCreated},     // A non-coinbase input MUST reference an output created by a preceding transaction.
   Rule{ValidateInputPrevoutsUnspent},     // A non-coinbase input MUST NOT reference an output that was spent in a preceding transaction.
   Rule{ValidateSigOpCosts},               // The total signature-operation cost over all transactions MUST NOT exceed 80,000.

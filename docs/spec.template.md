@@ -54,8 +54,23 @@ Signature Operation|A signature operation is a script accounting unit associated
 BIP34|The coinbase height soft fork is active from block height 227,931.
 BIP68|The sequence locks soft fork is active from block height 419,328.
 BIP141|The SegWit soft fork is active from block height 481,824.
-## BIP30 Exceptions
 
+
+## Table 1. Activated Soft Forks
+| BIP | Description | Activated Height | Versions Retired |
+|--|--|--|--| 
+| BIP34 | Height in coinbase | 227,931 | 0, 1|
+| BIP66 | Strict DER signature encoding | 363,725 | 2
+| BIP68 | Sequence locks |  ^
+| BIP112 | Check sequence verify | ^
+| BIP65 | Check locktime verify | 388,381 | 3
+| BIP113 | Locktime median past | 419,328
+| BIP141 | SegWit v0 | ^
+| BIP143 | SegWit v0 Sighash | ^
+| BIP147 | Null dummy | 481,824
+
+
+## Table 2. BIP30 Exceptions
 | Block Height | Block Hash |
 |-|-|
 91842|00000000000a4d0a398161ffc163c503763b1f4360639393e0e4c8e300e0caec

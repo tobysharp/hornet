@@ -38,11 +38,11 @@ Below is an auto-generated rendering of Hornet’s [declarative specification](.
 ||**Header Rules**
 |
 H01|A header MUST reference the hash of a valid parent block.|[`ValidatePreviousHash`](../src/hornetlib/consensus/rules/validate_header.h#L33)
-H02|A header's hash MUST achieve its own proof-of-work target.|[`ValidateProofOfWork`](../src/hornetlib/consensus/rules/validate_header.h#L39)
+H02|A header's hash MUST NOT exceed its own proof-of-work target.|[`ValidateProofOfWork`](../src/hornetlib/consensus/rules/validate_header.h#L39)
 H03|A header's proof-of-work target MUST satisfy the difficulty adjustment formula for the timechain.|[`ValidateDifficultyAdjustment`](../src/hornetlib/consensus/rules/validate_header.h#L47)
-H04|A header timestamp MUST be strictly greater than the median of its 11 ancestors' timestamps.|[`ValidateMedianTimePast`](../src/hornetlib/consensus/rules/validate_header.h#L54)
-H05|A header timestamp MUST be less than or equal to network-adjusted time plus 2 hours.|[`ValidateTimestampCurrent`](../src/hornetlib/consensus/rules/validate_header.h#L60)
-H06|A header's version number MUST NOT have been retired by any activated soft fork.|[`ValidateVersion`](../src/hornetlib/consensus/rules/validate_header.h#L68)
+H04|A header timestamp MUST be greater than the median of its 11 ancestor blocks' timestamps.|[`ValidateMedianTimePast`](../src/hornetlib/consensus/rules/validate_header.h#L54)
+H05|A header timestamp MUST NOT exceed network-adjusted time plus 2 hours.|[`ValidateTimestampCurrent`](../src/hornetlib/consensus/rules/validate_header.h#L60)
+H06|A header's version number MUST NOT have been retired by any activated soft fork. (See Table 1.)|[`ValidateVersion`](../src/hornetlib/consensus/rules/validate_header.h#L68)
 |
 ||**Local Rules**
 |
@@ -72,9 +72,9 @@ C07|From BIP141: A post-SegWit block containing a witness commitment MUST commit
 |
 ||**Spending Rules**
 |
-S01|BIP30: Transaction outputs MUST NOT give rise to outpoints that reference existing unspent outputs, except in blocks listed in BIP30 Exceptions.|[`ValidateOutPointsUnique`](../src/hornetlib/consensus/rules/validate_spending.h#L119)
-S02|A non-coinbase input MUST reference an output created in a preceding transaction.|[`ValidateInputPrevoutsCreated`](../src/hornetlib/consensus/rules/validate_spending.h#L108)
-S03|A non-coinbase input MUST NOT reference an output that was spent in a preceding transaction.|[`ValidateInputPrevoutsUnspent`](../src/hornetlib/consensus/rules/validate_spending.h#L113)
+S01|BIP30: Transaction outputs MUST NOT give rise to outpoints that reference existing unspent outputs, except in blocks listed in Table 2.|[`ValidateOutPointsUnique`](../src/hornetlib/consensus/rules/validate_spending.h#L109)
+S02|A non-coinbase input MUST reference an output created in a preceding transaction.|[`ValidateInputPrevoutsCreated`](../src/hornetlib/consensus/rules/validate_spending.h#L135)
+S03|A non-coinbase input MUST NOT reference an output that was spent in a preceding transaction.|[`ValidateInputPrevoutsUnspent`](../src/hornetlib/consensus/rules/validate_spending.h#L140)
 S04|The total signature-operation cost over all transactions MUST NOT exceed 80,000.|[`ValidateSigOpCosts`](../src/hornetlib/consensus/rules/validate_spending.h#L145)
 S05|The total amount in coinbase outputs MUST NOT exceed the block reward.|[`ValidateBlockSubsidy`](../src/hornetlib/consensus/rules/validate_spending.h#L159)
 S06|The sum of output values in a transaction MUST NOT exceed the sum of all input values being spent.|[`ValidateOutputsAtMostInputs`](../src/hornetlib/consensus/rules/validate_spending.h#L38)
@@ -93,15 +93,30 @@ Timechain|A *timechain* is a tree of validated blocks.
 Proof of Work|A 256-bit hash must be found that does not exceed a given target value. 
 Preceding Transaction|A preceding transaction is one that appears in an ancestor block or earlier in the current block.
 Outpoint|An outpoint contains a transaction hash and output index. In a transaction input, it references the output of the most recent preceding transaction with the specified hash and index.
-Spent|An output is spent when it is referenced by a transaction input's outpoint.
+Spent|An output is spent when it is referenced by a transaction input.
 Coinbase|A coinbase is a transaction with exactly one input whose outpoint is null.
 Witness|Witness data is segregated transaction input data committed separately under SegWit rules.
 Signature Operation|A signature operation is a script accounting unit associated with signature-checking opcodes.
 BIP34|The coinbase height soft fork is active from block height 227,931.
 BIP68|The sequence locks soft fork is active from block height 419,328.
 BIP141|The SegWit soft fork is active from block height 481,824.
-## BIP30 Exceptions
 
+
+## Table 1. Activated Soft Forks
+| BIP | Description | Activated Height | Versions Retired |
+|--|--|--|--| 
+| BIP34 | Height in coinbase | 227,931 | 0, 1|
+| BIP66 | Strict DER signature encoding | 363,725 | 2
+| BIP68 | Sequence locks |  ^
+| BIP112 | Check sequence verify | ^
+| BIP65 | Check locktime verify | 388,381 | 3
+| BIP113 | Locktime median past | 419,328
+| BIP141 | SegWit v0 | ^
+| BIP143 | SegWit v0 Sighash | ^
+| BIP147 | Null dummy | 481,824
+
+
+## Table 2. BIP30 Exceptions
 | Block Height | Block Hash |
 |-|-|
 91842|00000000000a4d0a398161ffc163c503763b1f4360639393e0e4c8e300e0caec

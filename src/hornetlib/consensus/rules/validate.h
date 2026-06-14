@@ -50,7 +50,7 @@ namespace hornet::consensus::rules {
                                         const int64_t current_time,
                                         const ChainOutputsView& unspent) {
   const BlockValidationContext context{block, parent, view, current_time, unspent};
-  return Validate(kBlockRules, context);
+  return Validate(kConsensusRules, context);
 }
 
 }  // namespace hornet::consensus::rules

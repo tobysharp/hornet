@@ -105,7 +105,7 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
 }
 
 // BIP30: Transaction outputs MUST NOT give rise to outpoints that reference existing unspent outputs, except in blocks
-// listed in BIP30 Exceptions.
+// listed in Table 2.
 [[nodiscard]] inline Result ValidateOutPointsUnique(const BlockSpendContext& context) {
   // Skip this rule for two specific historical blocks that are known to violate it.
   static constexpr auto kKnownExceptions =
