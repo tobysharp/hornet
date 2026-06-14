@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+#
+# Export a Marp slide deck to HTML with Hornet syntax highlighting.
+#
+# Highlighting comes from <repo>/marp.config.js, which Marp-for-VSCode's preview
+# cannot use (no custom-engine support) — so the highlighted deck must be built
+# here with marp-cli, which DOES honour the config's custom engine.
+#
+# HTML only: marp-cli's PDF/PPTX/image export needs a Chromium that can launch
+# headless, and marp-cli (v4) exposes no --no-sandbox flag, so PDF times out in
+# sandboxed environments. For a PDF, open the HTML and print to PDF, or run
+# `--pdf --browser-path <chrome>` where the browser sandbox works.
+#
+# Usage:  tools/docgen/marp-produce [docs/brink.md]
+#
+REPO="$(git rev-parse --show-toplevel)"
+cd "$REPO"
+
+INPUT="${1:-docs/brink.md}"
+BASE="$(basename "$INPUT" .md)"
+OUTDIR="$(dirname "$INPUT")"
+
+npx --yes "@marp-team/marp-cli@^4" --config marp.config.js "$INPUT" -o "$OUTDIR/$BASE.html"
+
+echo "✓ $OUTDIR/$BASE.html"

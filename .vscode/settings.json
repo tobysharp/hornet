@@ -155,5 +155,33 @@
     ],
     "markdown.marp.themes": [
         "docs/marp-hornet.css"
-    ]
+    ],
+    "editor.tokenColorCustomizations": {
+        "textMateRules": [
+            {
+                "scope": "keyword.control.hornetdsl",
+                "settings": { "foreground": "#FF7B72" }
+            },
+            {
+                "scope": "storage.type.hornetdsl",
+                "settings": { "foreground": "#FFA657" }
+            },
+            {
+                "scope": "entity.name.function.hornetdsl",
+                "settings": { "foreground": "#D2A8FF" }
+            },
+            {
+                "scope": "keyword.operator.hornetdsl",
+                "settings": { "foreground": "#79C0FF" }
+            },
+            {
+                "scope": "constant.numeric.hornetdsl",
+                "settings": { "foreground": "#79C0FF" }
+            },
+            {
+                "scope": "comment.line.double-slash.hornetdsl",
+                "settings": { "foreground": "#8B949E", "fontStyle": "italic" }
+            }
+        ]
+    }
 }
