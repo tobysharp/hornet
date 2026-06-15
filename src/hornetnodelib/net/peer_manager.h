@@ -88,13 +88,6 @@ class PeerManager {
     return result;
   }
 
-  // Removes all the peers whose sockets have been closed.
-  void RemoveClosedPeers() {
-    for (const auto& peer : registry_.Snapshot()) {
-      if (!peer->GetConnection().GetSocket().IsOpen()) registry_.UnregisterPeer(peer->GetId());
-    }
-  }
-
  private:
   PeerRegistry registry_;
 };

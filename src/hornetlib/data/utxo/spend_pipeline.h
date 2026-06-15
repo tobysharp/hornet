@@ -59,11 +59,6 @@ class SpendPipeline {
     cv_.notify_all();
   }
 
-  bool IsStalled() const {
-    std::unique_lock lock(mutex_);
-    return ready_queue_.Empty() && !blocked_list_.empty() && busy_workers_ == 0;
-  }
-
   struct Metrics {
     util::Timer advance_;
     SpendJoiner::Metrics joiner_metrics_;
@@ -92,7 +87,6 @@ class SpendPipeline {
         cv_.wait(lock, [&] { return abort_ || !ready_queue_.Empty(); });
         if (abort_) return;
         job = ready_queue_.Pop();
-        ++busy_workers_;
       }
 
       try {
@@ -119,7 +113,6 @@ class SpendPipeline {
       } catch (const SpendJoiner::CancelledException&) {
         // Job was cancelled, ignore.
       }
-      --busy_workers_;
     }
   }
 
@@ -152,7 +145,6 @@ class SpendPipeline {
   mutable std::mutex mutex_;
   std::condition_variable cv_;
   bool abort_ = false;
-  std::atomic<int> busy_workers_ = 0;
   Metrics metrics_;
 };
 

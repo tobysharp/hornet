@@ -203,7 +203,7 @@ TEST(ValidationPipelineTest, ProcessMainnet50Blocks) {
   EXPECT_TRUE(ValidateShuffle(path));
 }
 
-TEST(ValidationPipelineTest, DetectDeadlock) {
+TEST(ValidationPipelineTest, WindowBackPressure) {
   const auto path = test::GetDataPath("ValidationPipelineTest_ProcessBlocks.bin");
   if (!std::filesystem::exists(path)) {
     GTEST_SKIP() << "Test file \"" << path << "\" was missing.";
@@ -212,23 +212,108 @@ TEST(ValidationPipelineTest, DetectDeadlock) {
   // Load the block data.
   const test::Blockchain data{path};
 
-  // Set up the UTXO database and validation pipeline.
+  // Set up the UTXO database and validation pipeline with a window of 5 heights.
+  const test::TempFolder dir;
+  data::utxo::Database db(dir.Path());
+  Completions callback;
+  const auto timechain = BuildHeaderChain(data);
+  ValidationPipeline pipeline(*timechain, db, 4, 5);
+
+  // The frontier starts at height 1 (only genesis is in the database), so the admission window
+  // covers heights [1, 6). Submit blocks 2..5 with block 1 missing: they are admitted but stall in
+  // the spend pipeline waiting for block 1 to append, and the frontier cannot advance.
+  for (int height = 2; height <= 5; ++height) pipeline.Submit(data[height], height, std::ref(callback));
+
+  // Block 6 lies one beyond the window. Submitting it must apply back-pressure (block), not throw.
+  std::atomic<bool> submitted_six = false;
+  std::thread t([&] {
+    pipeline.Submit(data[6], 6, std::ref(callback));
+    submitted_six = true;
+  });
+
+  // While the frontier is stuck at height 1, block 6 stays blocked and nothing retires.
+  std::this_thread::sleep_for(200ms);
+  EXPECT_FALSE(submitted_six.load());
+  EXPECT_EQ(callback.completions.load(), 0);
+
+  // Supplying the missing block 1 advances the frontier, which both drains the stalled blocks and
+  // releases the back-pressured submit of block 6 — no deadlock, no abort.
+  pipeline.Submit(data[1], 1, std::ref(callback));
+  t.join();
+  EXPECT_TRUE(submitted_six.load());
+
+  EXPECT_TRUE(pipeline.Wait(5s));
+  EXPECT_EQ(callback.completions.load(), 6);  // heights 1..6 all validated
+}
+
+TEST(ValidationPipelineTest, FrontierSeededFromDatabase) {
+  const auto path = test::GetDataPath("ValidationPipelineTest_ProcessBlocks.bin");
+  if (!std::filesystem::exists(path)) {
+    GTEST_SKIP() << "Test file \"" << path << "\" was missing.";
+  }
+
+  const test::Blockchain data{path};
+  const test::TempFolder dir;
+  data::utxo::Database db(dir.Path());
+  const auto timechain = BuildHeaderChain(data);
+
+  constexpr int kSeed = 10;     // Validate heights 1..9 to advance the database's contiguous length.
+  constexpr int kWindow = 5;
+
+  // First pipeline: validate the first kSeed - 1 blocks so they append to the database.
+  {
+    Completions callback;
+    ValidationPipeline pipeline(*timechain, db);
+    for (int height = 1; height < kSeed; ++height) pipeline.Submit(data[height], height, std::ref(callback));
+    EXPECT_TRUE(pipeline.Wait(5s));
+    EXPECT_EQ(callback.completions.load(), kSeed - 1);
+  }
+
+  // The database is now contiguous up to kSeed (heights 0..kSeed-1 are present).
+  ASSERT_EQ(db.GetContiguousLength(), kSeed);
+
+  // A fresh pipeline on the same database must seed its retirement frontier from the database rather
+  // than from height 1, so its admission window starts at kSeed.
+  ValidationPipeline resumed(*timechain, db, 4, kWindow);
+  EXPECT_EQ(resumed.GetAdmissibleHeightLimit(), kSeed + kWindow);
+
+  // Consequently it can immediately admit and validate the next block (height kSeed) — which a
+  // frontier wrongly stuck at 1 would have refused, since kSeed >= 1 + kWindow.
+  Completions callback;
+  resumed.Submit(data[kSeed], kSeed, std::ref(callback));
+  EXPECT_TRUE(resumed.Wait(5s));
+  EXPECT_EQ(callback.completions.load(), 1);
+}
+
+TEST(ValidationPipelineTest, AbortReleasesBlockedSubmit) {
+  const auto path = test::GetDataPath("ValidationPipelineTest_ProcessBlocks.bin");
+  if (!std::filesystem::exists(path)) {
+    GTEST_SKIP() << "Test file \"" << path << "\" was missing.";
+  }
+
+  const test::Blockchain data{path};
   const test::TempFolder dir;
   data::utxo::Database db(dir.Path());
   Completions callback;
   const auto timechain = BuildHeaderChain(data);
 
-  // max_active_count = 5
-  ValidationPipeline pipeline(*timechain, db, 4, 5);
+  // window = 1, frontier = 1: only height 1 is admissible. With block 1 never submitted the frontier
+  // can never advance, so submitting any higher block parks in the back-pressure wait indefinitely.
+  ValidationPipeline pipeline(*timechain, db, 4, 1);
 
-  // Submit blocks 2 to 6 (5 blocks). This fills the pipeline.
-  // Block 1 is missing, so they will stall in the spend pipeline.
-  for (int height = 2; height <= 6; ++height) {
-    pipeline.Submit(data[height], height, std::ref(callback));
-  }
+  std::future<void> blocked =
+      std::async(std::launch::async, [&] { pipeline.Submit(data[3], 3, std::ref(callback)); });
 
-  // Submit one more block. This should trigger the deadlock detection.
-  EXPECT_THROW({ pipeline.Submit(data[7], 7, std::ref(callback)); }, std::runtime_error);
+  // Confirm the submit is genuinely blocked, not racing through.
+  EXPECT_EQ(blocked.wait_for(200ms), std::future_status::timeout);
+
+  // Aborting must release the blocked submit promptly rather than leaving it wedged.
+  pipeline.Abort();
+  ASSERT_EQ(blocked.wait_for(2s), std::future_status::ready);
+  blocked.get();  // Propagate any exception; the submit should have returned cleanly.
+
+  // The block was never admitted, so nothing was validated.
+  EXPECT_EQ(callback.completions.load(), 0);
 }
 
 }  // namespace
