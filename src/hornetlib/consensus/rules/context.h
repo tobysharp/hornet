@@ -22,7 +22,7 @@ struct BlockValidationContext {
   const protocol::BlockHeader& parent;
   const HeaderAncestryView& view;
   const int64_t current_time;
-  const UnspentOutputsView& unspent;
+  const ChainOutputsView& unspent;
 };
 
 struct HeaderValidationContext {
@@ -62,7 +62,7 @@ struct WitnessContext {
 struct BlockSpendContext {
   const protocol::Block& block;
   const HeaderAncestryView& ancestry;
-  const UnspentOutputsView& unspent;
+  const ChainOutputsView& unspent;
   const int height;
   const uint64_t script_flags;
 };
