@@ -69,7 +69,7 @@ namespace hornet::consensus::rules {
   return {};
 }
 
-// A coinbase transaction's sig script size MUST be between 2 and 100 bytes inclusive.
+// A coinbase's sig script size MUST be between 2 and 100 bytes inclusive.
 [[nodiscard]] inline Result ValidateCoinbaseSignatureSize(
     const protocol::TransactionConstView transaction) {
   if (transaction.IsCoinBase()) {

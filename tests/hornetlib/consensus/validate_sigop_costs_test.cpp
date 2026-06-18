@@ -31,8 +31,8 @@ using protocol::script::FeatureFlags;
 using protocol::script::Writer;
 using protocol::script::lang::ConstantToOp;
 using protocol::script::lang::Op;
-using hornet::test::NullSpendsUnspentOutputsView;
-using hornet::test::StaticUnspentOutputsView;
+using hornet::test::NullSpendsChainOutputsView;
+using hornet::test::StaticChainOutputsView;
 using hornet::test::StubHeaderAncestryView;
 
 std::vector<uint8_t> MakeScript(std::initializer_list<Op> opcodes) {
@@ -315,7 +315,7 @@ TEST(ValidateSigOpCostsTest, ValidateSigOpCostsAcceptsBlockAtBudget) {
 
   Block block;
   StubHeaderAncestryView ancestry;
-  StaticUnspentOutputsView unspent;
+  StaticChainOutputsView unspent;
   unspent.Add(std::move(tx), {MakeSpend(p2sh_pubkey)});
 
   EXPECT_EQ(ValidateSigOpCosts({block, ancestry, unspent, 1, Feature::P2SH}), Result{});
@@ -337,7 +337,7 @@ TEST(ValidateSigOpCostsTest, ValidateSigOpCostsRejectsBlockAboveBudget) {
 
   Block block;
   StubHeaderAncestryView ancestry;
-  StaticUnspentOutputsView unspent;
+  StaticChainOutputsView unspent;
   unspent.Add(std::move(exact_budget_tx), {MakeSpend(p2sh_pubkey)});
   unspent.Add(std::move(overflow_tx), {MakeSpend(legacy_pubkey)});
   unspent.Add(std::move(unreachable_tx), {MakeSpend(legacy_pubkey)});
@@ -349,7 +349,7 @@ TEST(ValidateSigOpCostsTest, ValidateSigOpCostsRejectsBlockAboveBudget) {
 TEST(ValidateSigOpCostsTest, ValidateSigOpCostsSucceedsWhenJoinedSpendsUnavailable) {
   Block block;
   StubHeaderAncestryView ancestry;
-  NullSpendsUnspentOutputsView unspent;
+  NullSpendsChainOutputsView unspent;
 
   EXPECT_EQ(ValidateSigOpCosts({block, ancestry, unspent, 1, Feature::P2SH}), Result{});
 }

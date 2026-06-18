@@ -37,13 +37,12 @@ class ValidationPipeline {
   // Constructs the validation pipeline.
   // pipeline_depth: The number of blocks that can be processed concurrently.
   // This determines the number of threads in both the validation and spend pipelines.
-  // max_active_count: The maximum number of blocks that can be in the pipeline at once.
-  // If -1, defaults to pipeline_depth * 4.
-  ValidationPipeline(data::Timechain& timechain, data::utxo::Database& db, int pipeline_depth = 8,
-                     int max_active_count = -1)
+  // window: The maximum number of block heights ahead of the retirement frontier that may be admitted at once.
+  ValidationPipeline(data::Timechain& timechain, data::utxo::Database& db, int pipeline_depth = 8, int window = 0)
       : timechain_(timechain),
         spend_pipeline_(db, pipeline_depth),
-        max_active_count_(max_active_count > 0 ? max_active_count : pipeline_depth * 4) {
+        next_complete_height_(db.GetContiguousLength()),
+        window_(window <= 0 ? pipeline_depth * 4 : window) {
     for (int i = 0; i < pipeline_depth; ++i) {
       workers_.emplace_back([this] { WorkerLoop(); });
     }
@@ -59,8 +58,9 @@ class ValidationPipeline {
   void Abort() {
     {
       std::lock_guard lock{wait_mutex_};
-      max_active_count_ = 0;
+      stopping_ = true;
       submit_cv_.notify_all();
+      wait_cv_.notify_all();
     }
     queue_.Stop();
     spend_pipeline_.Abort();
@@ -73,17 +73,14 @@ class ValidationPipeline {
     {
       std::unique_lock lock{wait_mutex_};
 
-      using namespace std::chrono_literals;
-      while (!spend_pipeline_.IsStalled() && !submit_cv_.wait_for(lock, 100ms, [&] {
-        return max_active_count_ == 0 || active_count_ < max_active_count_;
-      })) {
-      }
+      // Admit the block only once its height lies within `window_` of the retirement frontier.
+      // The frontier block is always within the window, so a missing lower block cannot wedge the
+      // pipeline; blocks further ahead wait here, applying back-pressure until earlier blocks retire.
+      // TryRetire advances the frontier and signals submit_cv_ under wait_mutex_, and Abort sets
+      // stopping_ likewise, so this predicate never misses a wakeup.
+      submit_cv_.wait(lock, [&] { return stopping_ || height < GetAdmissibleHeightLimit(); });
 
-      if (active_count_ >= max_active_count_) {
-        lock.unlock();
-        Abort();
-        util::ThrowRuntimeError("ValidationPipeline deadlocked and aborted.");
-      }
+      if (stopping_) return;
       ++active_count_;
     }
     spend_pipeline_.Add(block, height, false,
@@ -95,7 +92,7 @@ class ValidationPipeline {
 
   bool Wait(const util::Timeout& timeout = util::Timeout::Infinite()) {
     std::unique_lock lock{wait_mutex_};
-    auto predicate = [this] { return active_count_ == 0 || max_active_count_ == 0; };
+    auto predicate = [this] { return active_count_ == 0 || stopping_; };
     if (timeout.IsInfinite()) {
       wait_cv_.wait(lock, predicate);
       return true;
@@ -107,6 +104,10 @@ class ValidationPipeline {
   }
 
   const data::utxo::SpendPipeline::Metrics& GetSpendMetrics() const { return spend_pipeline_.GetMetrics(); }
+
+  // The exclusive upper bound on currently-admissible block heights: a block is admitted once its
+  // height is below this (retirement frontier + window).
+  int GetAdmissibleHeightLimit() const { return next_complete_height_ + window_; }
 
  private:
   struct Job {
@@ -174,16 +175,19 @@ class ValidationPipeline {
     std::unique_lock lock{retire_mutex_, std::try_to_lock};
     if (!lock.owns_lock()) return;  // Someone else has the retire lock, leave them to it.
 
-    for (; !completed_.Empty() && completed_.Top().height == next_complete_height_; ++next_complete_height_) {
+    while (!completed_.Empty() && completed_.Top().height == next_complete_height_) {
       const auto item = completed_.Pop();
       lock.unlock();
       if (item.on_complete)
         item.on_complete(item.block, {item.height, item.block->Header().ComputeHash()}, item.result);
       {
+        // Advance the frontier and signal submitters under wait_mutex_, so a Submit that just
+        // evaluated the window predicate cannot sleep through this wakeup.
         std::lock_guard wait_lock{wait_mutex_};
+        next_complete_height_ = item.height + 1;
         if (--active_count_ == 0) wait_cv_.notify_all();
+        submit_cv_.notify_all();
       }
-      submit_cv_.notify_all();
       lock.lock();
     }
   }
@@ -201,14 +205,15 @@ class ValidationPipeline {
   std::vector<std::thread> workers_;
 
   std::mutex retire_mutex_;
-  int next_complete_height_ = 1;  // Genesis is never validated.
+  std::atomic<int> next_complete_height_;  // Next height awaiting retirement (the window's lower bound).
   util::Heap<JobResult> completed_;
-  int max_active_count_;
+  int window_;  // Max heights admissible ahead of next_complete_height_.
   int active_count_ = 0;
   std::atomic<int> validation_pending_ = 0;
   std::mutex wait_mutex_;
   std::condition_variable wait_cv_;
   std::condition_variable submit_cv_;
+  bool stopping_ = false;  // Set by Abort to release blocked Submit/Wait calls during shutdown.
 
   std::atomic<long long> total_validate_time_ns{0};
   std::atomic<long long> total_validate_calls{0};

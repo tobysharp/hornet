@@ -191,7 +191,9 @@ inline BlockSync::RequestState BlockSync::RequestNextBlocks(net::WeakPeer weak) 
   bool requested = false;
   while (next_request_height_ >= 1 && next_request_height_ < headers->ChainLength()) {
     const int buffered_bytes = queue_bytes_ + (std::ssize(pending_) + 1) * kMaxBlockBytes;
-    if (std::ssize(pending_) >= kMaxInFlight || buffered_bytes >= kMaxBufferedBytes)
+    // Don't fetch further ahead of the validation frontier than the pipeline will admit.
+    if (std::ssize(pending_) >= kMaxInFlight || buffered_bytes >= kMaxBufferedBytes ||
+        next_request_height_ >= pipeline_.GetAdmissibleHeightLimit())
       return requested ? RequestState::Active : RequestState::Deferred;
 
     const data::Key key{next_request_height_, headers->GetChainHash(next_request_height_)};
@@ -290,6 +292,11 @@ inline void BlockSync::OnValidateComplete(const std::shared_ptr<const protocol::
 
   handler_.OnBlockValidated(weak, id, block);
   perf_.OnValidate();
+
+  // Retiring this block advanced the validation frontier, which raises the admissible height limit
+  // the downloader is bounded by. Re-attempt requests here, otherwise once the in-flight set and the
+  // queue drain there is no other event to resume fetching, and sync stalls a window past the tip.
+  RequestNextBlocks(weak);
 
   // TODO: Update the current UTXO set and the active chain tip, once all necessary validation is
   // complete. We might choose to do this in a separate thread for increased parallelism.

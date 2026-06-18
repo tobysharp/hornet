@@ -142,12 +142,8 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
   return {rhs.block, rhs.view, rhs.unspent, rhs.view.Length(), GetScriptFeatureFlags(rhs)};
 }
 
-// A transaction input MUST reference a previous transaction output that remains unspent.
-[[nodiscard]] inline Result ValidateInputPrevoutsUnspent(const BlockSpendContext& context) {
-  return context.unspent.QueryPrevoutsUnspent(context.block);
-}
-
-// Transaction outputs MUST NOT give rise to duplicates of existing unspent outpoints (BIP30).
+// BIP30: Transaction outputs MUST NOT give rise to outpoints that reference existing unspent outputs, except in blocks
+// listed in Table 2.
 [[nodiscard]] inline Result ValidateOutPointsUnique(const BlockSpendContext& context) {
   // Skip this rule for two specific historical blocks that are known to violate it.
   static constexpr auto kKnownExceptions =
@@ -170,7 +166,17 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
     return {};
 
   // In all other cases, we must validate that no transaction creates a duplicate UTXO.
-  return context.unspent.QueryOutPointsUnique(context.block);
+  return context.unspent.QueryOutPointsUnique(context.block) ? Result::Ok : Error::Spending_OutPointDuplicate;
+}
+
+// A non-coinbase input MUST reference an output created in a preceding transaction.
+[[nodiscard]] inline Result ValidateInputPrevoutsCreated(const BlockSpendContext& context) {
+  return context.unspent.QueryPreviousOutputsCreated(context.block) ? Result::Ok : Error::Spending_OutPointNotCreated;
+}
+
+// A non-coinbase input MUST NOT reference an output that was spent in a preceding transaction.
+[[nodiscard]] inline Result ValidateInputPrevoutsUnspent(const BlockSpendContext& context) {
+  return context.unspent.QueryPreviousOutputsUnspent(context.block) ? Result::Ok : Error::Spending_OutPointSpent;
 }
 
 // The total signature-operation cost over all transactions MUST NOT exceed 80,000.

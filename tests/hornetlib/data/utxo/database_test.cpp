@@ -18,16 +18,36 @@
 #include "hornetlib/util/log.h"
 #include "testutil/blockchain.h"
 #include "testutil/temp_folder.h"
+#include "testutil/transaction.h"
 
 namespace hornet::data::utxo {
 namespace {
+
+using hornet::test::MakeCoinbaseLikeTransaction;
+using hornet::test::MakeSpendTransaction;
+
+int ParseBlockPrevouts(const protocol::Block& block,
+                                        std::span<InputHeader> inputs, std::span<OutputKey> keys) {
+  int cursor = 0;
+  for (int i = 0; i < block.GetTransactionCount(); ++i) {
+    if (const auto tx = block.Transaction(i); !tx.IsCoinBase()) {
+      for (int j = 0; j < tx.InputCount(); ++j, ++cursor) {
+        const auto& prevout = tx.Input(j).previous_output;
+        Assert(!prevout.IsNull());
+        inputs[cursor] = {i, j};
+        keys[cursor] = prevout;
+      }
+    }
+  }
+  return cursor;
+}
 
 TEST(DatabaseTest, TestAppendGenesis) {
   test::TempFolder dir;
   Database database{dir.Path()};
 }
 
-TEST(DatabaseTest, RejectsSameBlockCoinbaseSpendViaLocalPrevoutPath) {
+TEST(DatabaseTest, ParseBlockPrevoutsExtractsCoinbaseSpendPrevout) {
   protocol::Block block;
 
   protocol::Transaction coinbase;
@@ -54,27 +74,57 @@ TEST(DatabaseTest, RejectsSameBlockCoinbaseSpendViaLocalPrevoutPath) {
   spend.SetLockTime(0);
   block.AddTransaction(spend);
 
-  constexpr int kHeight = 1000;
   std::array<InputHeader, 1> inputs;
   std::array<OutputKey, 1> keys;
-  std::array<OutputId, 1> rids;
-  std::array<OutputDetail, 1> outputs;
-  std::vector<uint8_t> scripts;
 
-  const int local_count =
-      Database::ParseBlockPrevouts(block, kHeight, inputs, keys, rids, outputs, scripts);
-  ASSERT_EQ(local_count, 1);
-  ASSERT_EQ(rids[0], kLocalOutputId);
+  const int prevout_count = ParseBlockPrevouts(block, inputs, keys);
+  ASSERT_EQ(prevout_count, 1);
+  EXPECT_EQ(inputs[0].tx_index, 1);
+  EXPECT_EQ(inputs[0].input_index, 0);
+  EXPECT_EQ(keys[0], (OutputKey{coinbase.GetHash(), 0}));
+}
 
-  const consensus::SpendRecord local_spend{.funding_height = outputs[0].header.height,
-                                           .funding_flags = outputs[0].header.flags,
-                                           .amount = outputs[0].header.amount,
-                                           .pubkey_script = outputs[0].script.Span(scripts),
-                                           .spend_input_index = inputs[0].input_index};
-  const protocol::TransactionConstView spend_view = spend;
+TEST(DatabaseTest, ParseBlockPrevoutsExtractsForwardReferencePrevout) {
+  protocol::Block block;
+  block.AddTransaction(MakeCoinbaseLikeTransaction());
 
-  EXPECT_EQ(consensus::rules::ValidateCoinbaseMaturity({spend_view, local_spend, kHeight}),
-            consensus::Error::Spending_PrematureSpend);
+  protocol::Transaction late = MakeCoinbaseLikeTransaction(1);
+  protocol::Transaction early = MakeSpendTransaction({late.GetHash(), 0}, 1);
+
+  block.AddTransaction(early);
+  block.AddTransaction(late);
+
+  std::array<InputHeader, 1> inputs;
+  std::array<OutputKey, 1> keys;
+
+  const int prevout_count = ParseBlockPrevouts(block, inputs, keys);
+
+  EXPECT_EQ(prevout_count, 1);
+  EXPECT_EQ(inputs[0].tx_index, 1);
+  EXPECT_EQ(inputs[0].input_index, 0);
+  EXPECT_EQ(keys[0], (OutputKey{late.GetHash(), 0}));
+}
+
+TEST(DatabaseTest, ParseBlockPrevoutsExtractsDuplicatePrevoutsIndividually) {
+  protocol::Block block;
+
+  protocol::Transaction funding = MakeCoinbaseLikeTransaction(1000);
+  block.AddTransaction(funding);
+
+  const protocol::OutPoint prevout{block.Transaction(0).GetHash(), 0};
+  block.AddTransaction(MakeSpendTransaction(prevout, 900));
+  block.AddTransaction(MakeSpendTransaction(prevout, 800));
+
+  std::array<InputHeader, 2> inputs;
+  std::array<OutputKey, 2> keys;
+
+  const int prevout_count = ParseBlockPrevouts(block, inputs, keys);
+
+  ASSERT_EQ(prevout_count, 2);
+  EXPECT_EQ(inputs[0].tx_index, 1);
+  EXPECT_EQ(inputs[1].tx_index, 2);
+  EXPECT_EQ(keys[0], prevout);
+  EXPECT_EQ(keys[1], prevout);
 }
 
 TEST(DatabaseTest, TestSpentOutputsNotFound_MutableSerial) {

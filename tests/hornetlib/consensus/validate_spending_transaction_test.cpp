@@ -225,7 +225,7 @@ TEST(ValidateSpendingTransactionTest, AcceptsCoreValidBlockDespiteAccumulatorOve
   protocol::Block block;
   block.AddTransaction(MakeCoinbaseTx(kSubsidy));
 
-  test::StaticUnspentOutputsView unspent;
+  test::StaticChainOutputsView unspent;
   for (int i = 0; i < kSpendCount; ++i) {
     auto tx = MakeMaxMoneySpendTx(i);
     block.AddTransaction(tx);
@@ -254,7 +254,7 @@ TEST(ValidateSpendingTransactionTest, AcceptsExactReferenceRewardDespiteAccumula
   protocol::Block block;
   block.AddTransaction(MakeCoinbaseTx(kSubsidy + 1));
 
-  test::StaticUnspentOutputsView unspent;
+  test::StaticChainOutputsView unspent;
   for (int i = 0; i < kSpendCount; ++i) {
     const int64_t output_value = (i + 1 == kSpendCount) ? (kMaxMoney - 1) : kMaxMoney;
     auto tx = MakeMaxMoneySpendTx(i, output_value);
@@ -285,7 +285,7 @@ TEST(ValidateSpendingTransactionTest, RejectsCoinbaseAboveReferenceRewardDespite
   protocol::Block block;
   block.AddTransaction(MakeCoinbaseTx(kSubsidy + 2));
 
-  test::StaticUnspentOutputsView unspent;
+  test::StaticChainOutputsView unspent;
   for (int i = 0; i < kSpendCount; ++i) {
     const int64_t output_value = (i + 1 == kSpendCount) ? (kMaxMoney - 1) : kMaxMoney;
     auto tx = MakeMaxMoneySpendTx(i, output_value);
