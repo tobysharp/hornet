@@ -9,6 +9,7 @@
 #include <iomanip>
 #include <optional>
 #include <ostream>
+#include <random>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -509,6 +510,78 @@ TEST(CurveTest, Secp256k1VerifiesBitcoinExampleUsingRawDigestDerAndUncompressedP
 
 	ASSERT_TRUE(public_key.has_value());
 	EXPECT_TRUE(secp256k1::VerifySignature(*public_key, signature, hashed_commitment_bytes));
+}
+
+secp256k1::Mod_n RandomScalarModN(std::mt19937_64& rng) {
+	const std::array<uint64_t, 4> words{rng(), rng(), rng(), rng()};
+	auto value = UIntW<256>{words}.Modulo(constants::n);
+	if (value == UIntW<256>::Zero()) value = UIntW<256>{1};
+	return secp256k1::Mod_n{value};
+}
+
+struct Secp256k1SignedMessage {
+	secp256k1::PublicKey public_key;
+	secp256k1::Signature signature;
+	std::array<uint8_t, 32> digest;
+};
+
+// Produces a genuine ECDSA signature over a random key pair and random digest, so the verify
+// path is exercised with a non-degenerate public key (Q != G).
+Secp256k1SignedMessage MakeRandomSecp256k1Signature(std::mt19937_64& rng) {
+	const secp256k1::Mod_n private_key = RandomScalarModN(rng);
+	const secp256k1::Point public_point = private_key.x * secp256k1::Point{secp256k1::G};
+	const auto public_key = ParsePublicKey<secp256k1>(public_point);
+	EXPECT_TRUE(public_key.has_value());
+
+	std::array<uint8_t, 32> digest{};
+	for (auto& byte : digest) byte = static_cast<uint8_t>(rng());
+	const secp256k1::Mod_n z{secp256k1::Wide::FromBigEndianBytes(digest)};
+
+	const secp256k1::Mod_n nonce = RandomScalarModN(rng);
+	const secp256k1::Point nonce_point = nonce.x * secp256k1::Point{secp256k1::G};
+	const secp256k1::Mod_n r{nonce_point.NormalizedX().x.Modulo(constants::n)};
+	const secp256k1::Mod_n s = (z + r * private_key) / nonce;
+	return {*public_key, {r.x, s.x}, digest};
+}
+
+// The default verify path (wNAF) must agree with the joint-NAF reference on every input: accept
+// the same valid signatures and reject the same tampered ones. This is the consensus-critical net.
+TEST(CurveTest, Secp256k1WnafVerifyMatchesJointNafOnRandomSignatures) {
+	std::mt19937_64 rng{0x5eed0c0ffeed1234ull};
+	const auto joint_naf = [](const secp256k1::Wide& u1, const secp256k1::Wide& u2, const secp256k1::Affine& Q) {
+		return LinearCombination<256, constants::p, constants::a>(u1, secp256k1::G, u2, Q);
+	};
+
+	for (int i = 0; i < 100; ++i) {
+		const auto [public_key, signature, digest] = MakeRandomSecp256k1Signature(rng);
+
+		EXPECT_TRUE(secp256k1::VerifySignature(public_key, signature, digest)) << "i=" << i;
+		EXPECT_TRUE(secp256k1::VerifySignatureWith(public_key, signature, digest, joint_naf)) << "i=" << i;
+
+		auto tampered = digest;
+		tampered[i % tampered.size()] ^= 0xFF;
+		EXPECT_FALSE(secp256k1::VerifySignature(public_key, signature, tampered)) << "i=" << i;
+		EXPECT_EQ(secp256k1::VerifySignature(public_key, signature, tampered),
+							secp256k1::VerifySignatureWith(public_key, signature, tampered, joint_naf)) << "i=" << i;
+	}
+}
+
+// The generator-table window width is configurable and must not affect the result. Sweep it,
+// including the previously-broken w >= 8 range, against a known-answer signature.
+TEST(CurveTest, Secp256k1WnafVerifyIsCorrectAcrossGeneratorTableWidths) {
+	const auto public_key = ParsePublicKey<secp256k1>(secp256k1::G);
+	const secp256k1::Signature signature{
+			"f73f5ad664342164c3997a266e1dc6b066aeddacf4e231cb024c9134dd4a6ab8"_h256,
+			"b8f4f7af604af853c210c202c328944c8fe64bd1001154efbaeb3715b3ec9257"_h256};
+	const auto digest = "69b595411d2e081915f237bdff5a0a293f32a1138f406f7e8b89984ec74093cd"_bytes;
+	const auto wrong_digest = "69b595411d2e081915f237bdff5a0a293f32a1138f406f7e8b89984ec74093cc"_bytes;
+
+	ASSERT_TRUE(public_key.has_value());
+	for (int width = 2; width <= 12; ++width) {
+		secp256k1::BuildGeneratorTable(width);
+		EXPECT_TRUE(secp256k1::VerifySignature(*public_key, signature, digest)) << "width=" << width;
+		EXPECT_FALSE(secp256k1::VerifySignature(*public_key, signature, wrong_digest)) << "width=" << width;
+	}
 }
 
 }  // namespace

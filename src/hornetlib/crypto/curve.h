@@ -1,11 +1,15 @@
 #pragma once
 
 #include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <iomanip>
+#include <mutex>
 #include <optional>
 #include <random>
+#include <span>
 #include <utility>
+#include <vector>
 
 #include "hornetlib/crypto/point.h"
 #include "hornetlib/crypto/scale.h"
@@ -38,6 +42,13 @@ class Curve {
   };
 
   static constexpr Affine G = {Mod_p{Gx}, Mod_p{Gy}};
+
+  // Builds the fixed-base wNAF table of odd multiples of G used by verification.
+  // If not called explicitly, the table is built lazily on demand.
+  static void BuildGeneratorTable(int width = 10) {
+    g_table_.resize(std::size_t{1} << (width - 1));
+    PrecomputeTableAffine(G, std::span{g_table_});
+  }
 
   inline static constexpr bool IsOnCurve(const Point& point) {
     return point.template IsOnCurve<b>();
@@ -84,17 +95,19 @@ class Curve {
 
   inline static bool VerifySignature(const PublicKey& public_key, const Signature& signature,
                                      const std::array<uint8_t, kBits / 8>& hashed_message) {
-    // Canonical path is joint NAF (Strauss-Shamir). wNAF is bench-only until it is measured
-    // faster on a full verify; see docs/secp256k1-performance-history.md.
+    // Default path is wNAF over the fixed-base generator table (faster end to end than joint
+    // NAF; see docs/secp256k1-performance-history.md). Q gets a narrow per-call table inside
+    // LinearCombination_wNAF.
+    const std::span<const Affine> g_table = GeneratorTable();
     return VerifySignatureImpl(public_key, signature, HashToInt(hashed_message),
-                               [](const Wide& u1, const Wide& u2, const Affine& Q) {
-                                 return hornet::crypto::ecdsa::LinearCombination(u1, G, u2, Q);
+                               [g_table](const Wide& u1, const Wide& u2, const Affine& Q) {
+                                 return hornet::crypto::ecdsa::LinearCombination_wNAF(u1, g_table, u2, Q);
                                });
   }
 
-  // Verifies using a caller-supplied combiner for R = u1*G + u2*Q. Exists so benchmarks can
-  // compare alternative linear-combination strategies (e.g. wNAF) on the full verify path
-  // without duplicating the surrounding scalar and normalization logic.
+  // Verifies using a caller-supplied combiner for R = u1*G + u2*Q. Exists so benchmarks and
+  // tests can compare alternative linear-combination strategies (e.g. joint NAF) against the
+  // default wNAF path without duplicating the surrounding scalar and normalization logic.
   template <class Combine>
   inline static bool VerifySignatureWith(const PublicKey& public_key, const Signature& signature,
                                          const std::array<uint8_t, kBits / 8>& hashed_message, Combine&& combine) {
@@ -102,6 +115,15 @@ class Curve {
   }
 
  private:
+  static inline std::vector<Affine> g_table_{};
+
+  // Returns the fixed-base table, building it once at default width if no explicit build ran.
+  static std::span<const Affine> GeneratorTable() {
+    static std::once_flag built;
+    std::call_once(built, [] { if (g_table_.empty()) BuildGeneratorTable(); });
+    return g_table_;
+  }
+
   inline static bool IsValidPublicKey(const Point& publicKey) {
     if (publicKey.IsInfinity()) return false;
     if (!IsOnCurve(publicKey)) return false;

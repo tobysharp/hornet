@@ -15,7 +15,7 @@ The current dedicated benchmark target is [bench/secp256k1_bench.cpp](../bench/s
 
 The core microbenchmarks to track are:
 
-- `BM_Secp256k1_VerifySignature`
+- `BM_Secp256k1_VerifySignature` (the default path; now wNAF)
 - `BM_Secp256k1_PointAdd`
 - `BM_Secp256k1_PointMultiply`
 - `BM_MultiplyModP_256_Secp256k1P`
@@ -23,6 +23,13 @@ The core microbenchmarks to track are:
 - `BM_ReduceModuloP_256_Secp256k1P`
 - `BM_SquareModP_256_Secp256k1P`
 - `BM_InvertModuloOdd_256_Secp256k1P`
+
+Companion benchmarks used for strategy comparison and kernel breakdown (not primary trend lines):
+
+- `BM_Secp256k1_VerifySignature_JointNAF` — full verify with joint NAF, the comparison baseline for the default wNAF verify
+- `BM_Secp256k1_PointDouble`, `BM_Secp256k1_PointAddMixed` — point-formula breakdown (double; Jacobian + affine mixed add)
+- `BM_LinComb_JointNAF`, `BM_LinComb_DisjointNAF`, `BM_LinComb_wNAF` — the bare `u1*G + u2*Q` linear combination per recoding strategy
+- `BM_BigUint256_MultiplyWideSelf`, `BM_BigUint256_Squared` — wide-integer multiply/square below the field layer
 
 These are the key command patterns to reuse when adding later entries:
 
@@ -45,6 +52,7 @@ build/clang20-release/secp256k1_bench \
 - These numbers are intended to be compared only against other release measurements from the same machine class.
 - The benchmark corpus was changed from fixed inputs to deterministic mixed corpora so that the reported throughput is more representative and less vulnerable to constant folding or pathological best cases.
 - On 2026-06-19 the `VerifySignature` corpus was de-degenerated to random key pairs (previously the public key was the generator, so `Q = G`, which under-exercised the `Q` side of the linear combination). Corpus invariants are now enforced by a hard `BenchCheck` (aborts on failure) instead of `Assert`, which is a no-op under `NDEBUG`; the benchmark can no longer silently time an incorrect computation. Verify numbers from 2026-06-19 onward are therefore not directly comparable to earlier rows.
+- Also on 2026-06-19 the default verify path switched from joint NAF to wNAF, so `BM_Secp256k1_VerifySignature` now measures the wNAF path; `BM_Secp256k1_VerifySignature_JointNAF` retains the joint-NAF number for comparison. The wNAF path amortises a fixed-base generator table built once outside the timed region, matching real verify where `G` is constant.
 - Starting on 2026-05-30, the benchmark formerly labeled `ReduceModuloP(x, y)` was renamed to `Multiply mod p`, because that path performs a wide multiply and then reduction.
 - `Multiply mod p` is the representative mixed-operand field-multiply benchmark.
 - `Multiply self mod p` shares the same one-input field corpus as `Square mod p` and is the correct comparison baseline when evaluating whether squaring is cheaper than multiplication.
@@ -74,6 +82,7 @@ This is the single canonical progression table for this file. Append new entries
 | 2026-05-30 | `tsharp/feature/secp256k1-opt` | Standardized the mod-p microbenchmarks around representative mixed multiply, matched self-multiply vs square, and a diagnostic pure reducer | n/a | n/a | n/a | ~82.46M/s | ~82.98M/s | ~92.81M/s | ~160.13M/s | n/a | One-second mod-p run with `--benchmark_filter='BM_(MultiplyModP|MultiplySelfModP|ReduceModuloP|SquareModP)_256_Secp256k1P' --benchmark_min_time=1s`; shared one-input corpus for `Multiply self mod p`, `Square mod p`, and `Invert`; benchmark reported CPU scaling warning |
 | 2026-05-31 | `tsharp/feature/secp256k1-opt` | Reworked verification linear combination onto NAF-based Strauss-Shamir with mixed affine/Jacobian dispatch and signed lookup tables | ~15.61k/s | n/a | n/a | n/a | n/a | n/a | n/a | n/a | Verify-only run with `build/clang20-release/secp256k1_bench --benchmark_filter=BM_Secp256k1_VerifySignature --benchmark_min_time=1s --benchmark_repetitions=5`; mean CPU time ~64.07 us, benchmark reported CPU scaling warning |
 | 2026-06-19 | `tsharp/feature/secp256k1-opt` | Step 0 correctness/hygiene re-baseline: fixed the int8_t wNAF digit/accumulator overflow (now `int16_t`), restored joint NAF as the executed verify path, de-degenerated the verify corpus to random key pairs (was public key == G, i.e. Q = G), and made the corpus correctness check a hard gate outside the timed region | ~11.51k/s | n/a | n/a | n/a | n/a | n/a | n/a | n/a | **Honest re-baseline, not comparable to the 2026-05-31 ~15.61k/s row**: that number was measured on a degenerate Q = G corpus; random-key verify is ~11.5k/s. wNAF is kept bench-only behind a precomputed affine G-table (w=10) with a differential check vs joint NAF. Pinned `taskset -c 0`, governor `powersave`, EPP `balance_performance`, `--benchmark_min_time=1s --benchmark_repetitions=5`, cv 0.03%; CPU scaling warning present. Full-verify like-for-like (`BM_Secp256k1_VerifySignature` vs `BM_Secp256k1_VerifySignature_wNAF`, same random-key corpus, only the linear combination differs, wNAF G-table precomputed once outside timing as in real verify): joint NAF ~11.51k/s vs **wNAF ~14.05k/s (~22% faster end to end)**. Companion `u1*G + u2*Q` lincomb micro-benches: joint NAF ~13.07k/s, disjoint NAF ~12.39k/s, wNAF ~16.37k/s. **Not apples-to-apples for the lincomb row**: the joint/disjoint benches use two random bases and build their tables inside the timed region, while wNAF uses the verify-shaped fixed base G with its wide (w=10) table precomputed *outside* timing (only the per-call Q-table is timed). So the wNAF lead reflects the fixed-base verify scenario plus sparser wide-window adds, not a clean recoding-vs-recoding result; the confound-separated comparison is Step 3 |
+| 2026-06-19 | `tsharp/feature/secp256k1-opt` | Wired wNAF as the **default** verify path (full canonical-suite snapshot). The fixed-base generator table is now a static `Curve` member with an explicit `BuildGeneratorTable(width)` plus a thread-safe (`call_once`) on-demand build at default width 10; `VerifySignature` uses wNAF, joint NAF stays available via `VerifySignatureWith` for comparison | ~14.03k/s | ~3.87M/s | ~15.22k/s | ~80.35M/s | ~81.06M/s | ~91.01M/s | ~156.6M/s | ~303.2k/s | Full canonical suite, single pinned run: `taskset -c 0`, governor `powersave`, EPP `balance_performance`, `--benchmark_min_time=1s --benchmark_repetitions=5`, cv ≤ 0.11%, CPU scaling warning present. Like-for-like full verify on the same random-key corpus: joint NAF `BM_Secp256k1_VerifySignature_JointNAF` ~11.49k/s vs default wNAF `BM_Secp256k1_VerifySignature` ~14.03k/s (~22% faster). Companion benches: point double ~7.51M/s, mixed (jac+aff) add ~5.07M/s; lincomb `u1*G + u2*Q` joint NAF ~13.01k/s, disjoint NAF ~12.38k/s, wNAF ~16.32k/s; `BigUint::MultiplyWide`(self) ~170.7M/s, `BigUint::Squared` ~173.6M/s. Default path exercised by all existing verify KAT / SigOps tests plus a new wNAF-vs-joint differential (100 random sigs) and a generator-table width sweep (w=2..12). Generator-table width tuning (suspected w≈8 cache peak) deferred to Step 3 |
 
 ## Interpretation
 
@@ -99,6 +108,12 @@ Once multiplication and reduction got much faster, inversions and affine-style f
 
 Once the point kernels were already in good shape, the next meaningful gain came from changing verification structure rather than raw field arithmetic. The Strauss-Shamir linear combination reuses doublings and mixed additions across `u1 * G + u2 * Q`, which pushed `VerifySignature` to about 3.18k ops/s while the standalone `PointMultiply` and `PointAdd` benchmarks moved only modestly. That pattern is exactly what this optimization should produce.
 
+### 5. Honest re-baseline, then wNAF as the default verify
+
+Two things happened on 2026-06-19. First, a correctness and measurement cleanup: a latent `int8_t` overflow in the wNAF recoder was fixed (digits are now `int16_t`), the verify corpus was de-degenerated from `Q = G` to random key pairs, and the bench's correctness check became a hard gate that also fires under `NDEBUG`. That moved the *reported* verify from the old degenerate ~15.61k/s down to an honest ~11.5k/s on joint NAF — not a regression, just a representative measurement.
+
+Second, wNAF became the default verify path. Over the same random-key corpus it runs ~14.0k/s versus ~11.5k/s for joint NAF (~22% faster end to end), by amortising a wide fixed-base table for `G` and recoding both scalars more sparsely so the additions roughly halve. With additions cut, the verify cost is now dominated by the ~256 shared point doublings and the two field inversions in the tail (`s^-1 mod n` and the R normalization) — which is exactly where the next steps aim: GLV to halve the doublings, and projective x-comparison plus batching to remove or amortise the inversions.
+
 ## What Still Matters Most
 
 When recording future entries, pay particular attention to which of these buckets the change attacks:
@@ -118,6 +133,16 @@ In practical terms, the ratios to watch are:
 - `Square mod p / Multiply self mod p`
 
 Those ratios help show whether the next bottleneck is inversion, point formulas, or verification overhead outside the scalar-multiply core.
+
+## Investigated and Set Aside
+
+Negative or marginal results worth recording so they are not re-investigated.
+
+- **Positive-only wNAF G table (2026-06-19).** Storing only the positive odd multiples `{ P, 3P, 5P, ... }` (half the both-signs table) and recovering negative multiples with a branchless conditional negate (compute `-y = p - y`, `cmov` on the digit sign). Measured at full verify, pinned (`taskset -c 0`, `powersave`, reps=10, cv ≤ 0.04%) against the ~14.02k/s both-signs w=10 default:
+  - half memory, same width (w=10, 16 KiB): ~14.00k/s, **−0.16%**. The cache hypothesis did not hold — at w=10 each verify touches only ~23 of 512 entries and 32 KiB already fits L1D (48 KiB), so halving buys no measurable cache win while the conditional negate costs a hair.
+  - same memory, wider window (w=11, 32 KiB): ~14.07k/s, **+0.40%**. Real but marginal — the ~256 shared doublings dominate and the G-side adds are already sparse.
+  - positive-only Q as well (w=11): ~14.06k/s, neutral-to-slightly-negative vs positive-G-only, confirming the small variable-base Q table (≈1 KiB, L1-resident) sees no cache upside.
+  Conclusion: not worth the extra kernel path and per-add conditional-negate complexity; both-signs stays the default. (`std::copysign` is not applicable here — field negation is the modular subtract `p - y`, not an IEEE sign-bit flip.) Revisit only if a width sweep (w ≥ 12, table spilling L1) shows the G table going cache-bound — part of the Step 3 cache-knee work.
 
 ## Updating It
 

@@ -266,7 +266,8 @@ static void RunVerifySignatureBench(benchmark::State& state, Verify verify) {
   SetOpsPerSecondCounter(state);
 }
 
-// Production verify: canonical joint-NAF linear combination.
+// Production verify: the default path, now wNAF over the fixed-base generator table (built once
+// by the pre-timing correctness pass / corpus construction, outside the timed region).
 static void BM_Secp256k1_VerifySignature(benchmark::State& state) {
   RunVerifySignatureBench(state, [](const secp256k1::PublicKey& pk, const secp256k1::Signature& sig,
                                     const std::array<uint8_t, 32>& digest) {
@@ -274,20 +275,13 @@ static void BM_Secp256k1_VerifySignature(benchmark::State& state) {
   });
 }
 
-// Same verify path with the linear combination swapped for wNAF: a fixed wide G-table (w=10)
-// built once outside the timed region, plus a per-call table for the variable key Q. Reported
-// alongside the joint-NAF verify so the two strategies compare like-for-like end to end.
-static void BM_Secp256k1_VerifySignature_wNAF(benchmark::State& state) {
-  constexpr int kGWidth = 10;
-  std::array<secp256k1::Affine, (1 << (kGWidth - 1))> g_table;
-  PrecomputeTableAffine(secp256k1::G, {g_table.data(), g_table.size()});
-  const std::span<const secp256k1::Affine> g_span{g_table.data(), g_table.size()};
-
-  RunVerifySignatureBench(state, [&](const secp256k1::PublicKey& pk, const secp256k1::Signature& sig,
-                                     const std::array<uint8_t, 32>& digest) {
+// Joint-NAF verify, kept for comparison now that wNAF is the default path.
+static void BM_Secp256k1_VerifySignature_JointNAF(benchmark::State& state) {
+  RunVerifySignatureBench(state, [](const secp256k1::PublicKey& pk, const secp256k1::Signature& sig,
+                                    const std::array<uint8_t, 32>& digest) {
     return secp256k1::VerifySignatureWith(pk, sig, digest,
-        [&](const secp256k1::Wide& u1, const secp256k1::Wide& u2, const secp256k1::Affine& Q) {
-          return LinearCombination_wNAF<256, constants::p, constants::a>(u1, g_span, u2, Q);
+        [](const secp256k1::Wide& u1, const secp256k1::Wide& u2, const secp256k1::Affine& Q) {
+          return LinearCombination<256, constants::p, constants::a>(u1, secp256k1::G, u2, Q);
         });
   });
 }
@@ -537,7 +531,7 @@ static void BM_BigUint256_Squared(benchmark::State& state) {
 }
 
 BENCHMARK(BM_Secp256k1_VerifySignature);
-BENCHMARK(BM_Secp256k1_VerifySignature_wNAF);
+BENCHMARK(BM_Secp256k1_VerifySignature_JointNAF);
 BENCHMARK(BM_Secp256k1_PointAdd);
 BENCHMARK(BM_Secp256k1_PointAddMixed);
 BENCHMARK(BM_Secp256k1_PointDouble);
