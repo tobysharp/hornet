@@ -13,7 +13,7 @@ namespace hornet::crypto::ecdsa {
 template <class Point>
 constexpr Point Scale(const typename Point::Wide& scalar, const Point& pt);
 
-template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a, const UIntW<kBits>& b>
+template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a>
 class AffinePoint {
  public:
   using Mod_p = Fp<kBits, p>;
@@ -26,6 +26,7 @@ class AffinePoint {
 
   constexpr bool IsInfinity() const { return x == 0 && y == 0; }
 
+  template <const UIntW<kBits>& b>
   constexpr bool IsOnCurve() const {
     if (IsInfinity()) return true;
     const auto lhs = y.Squared();
@@ -81,10 +82,10 @@ class AffinePoint {
   Mod_p x, y;
 };
 
-template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a, const UIntW<kBits>& b>
+template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a>
 class JacobianPoint {
  public:
-  using Affine = AffinePoint<kBits, p, a, b>;
+  using Affine = AffinePoint<kBits, p, a>;
   using Mod_p = Fp<kBits, p>;
   using Wide = typename Mod_p::Type;
 
@@ -105,6 +106,7 @@ class JacobianPoint {
 
   constexpr bool IsInfinity() const { return Z == 0; }
 
+  template <const UIntW<kBits>& b>
   constexpr bool IsOnCurve() const {
     if (IsInfinity()) return true;
     // Y² == X³ + a·X·Z⁴ + b·Z⁶

@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <optional>
 #include <random>
+#include <utility>
 
 #include "hornetlib/crypto/point.h"
 #include "hornetlib/crypto/scale.h"
@@ -19,12 +20,12 @@ template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a, const UIntW<k
           const UIntW<kBits>& Gy, const UIntW<kBits>& n>
 class Curve {
  public:
-  using Affine = AffinePoint<kBits, p, a, b>;
+  using Affine = AffinePoint<kBits, p, a>;
   using Mod_p = Fp<kBits, p>;
   using Mod_n = Fp<kBits, n>;
   using Wide = typename Mod_p::Type;
   using Signature = std::pair<Wide, Wide>;
-  using Point = JacobianPoint<kBits, p, a, b>;
+  using Point = JacobianPoint<kBits, p, a>;
   static_assert(p > n);
 
   class PublicKey {
@@ -39,7 +40,7 @@ class Curve {
   static constexpr Affine G = {Mod_p{Gx}, Mod_p{Gy}};
 
   inline static constexpr bool IsOnCurve(const Point& point) {
-    return point.IsOnCurve();
+    return point.template IsOnCurve<b>();
   }
 
   static_assert(IsOnCurve(G));
@@ -83,7 +84,21 @@ class Curve {
 
   inline static bool VerifySignature(const PublicKey& public_key, const Signature& signature,
                                      const std::array<uint8_t, kBits / 8>& hashed_message) {
-    return VerifySignatureImpl(public_key, signature, HashToInt(hashed_message));
+    // Canonical path is joint NAF (Strauss-Shamir). wNAF is bench-only until it is measured
+    // faster on a full verify; see docs/secp256k1-performance-history.md.
+    return VerifySignatureImpl(public_key, signature, HashToInt(hashed_message),
+                               [](const Wide& u1, const Wide& u2, const Affine& Q) {
+                                 return hornet::crypto::ecdsa::LinearCombination(u1, G, u2, Q);
+                               });
+  }
+
+  // Verifies using a caller-supplied combiner for R = u1*G + u2*Q. Exists so benchmarks can
+  // compare alternative linear-combination strategies (e.g. wNAF) on the full verify path
+  // without duplicating the surrounding scalar and normalization logic.
+  template <class Combine>
+  inline static bool VerifySignatureWith(const PublicKey& public_key, const Signature& signature,
+                                         const std::array<uint8_t, kBits / 8>& hashed_message, Combine&& combine) {
+    return VerifySignatureImpl(public_key, signature, HashToInt(hashed_message), std::forward<Combine>(combine));
   }
 
  private:
@@ -94,14 +109,16 @@ class Curve {
     return true;
   }
 
-  inline static bool VerifySignatureImpl(const Affine& publicKey, const Signature& signature, const Mod_n& e) {
+  template <class Combine>
+  inline static bool VerifySignatureImpl(const Affine& publicKey, const Signature& signature, const Mod_n& e,
+                                         Combine&& combine) {
     if (signature.first == 0 || signature.first >= n) return false;
     if (signature.second == 0 || signature.second >= n) return false;
     const Mod_n r = signature.first, s = signature.second;
     const auto sinv = s.Inverse();
     const auto u1 = e * sinv;
     const auto u2 = r * sinv;
-    const Point R = hornet::crypto::ecdsa::LinearCombination(u1.x, G, u2.x, publicKey);
+    const Point R = combine(u1.x, u2.x, publicKey);
     if (R.IsInfinity()) return false;
     return R.NormalizedX().x.Modulo(n) == r.x;
   }

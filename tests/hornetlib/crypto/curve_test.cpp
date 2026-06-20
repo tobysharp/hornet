@@ -258,6 +258,81 @@ TEST(CurveTest, PlainNafRecoderProducesExpectedSignedDigits) {
 	EXPECT_TRUE(std::all_of(naf.begin() + 5, naf.end(), [](int8_t digit) { return digit == 0; }));
 }
 
+// Reconstructs the integer encoded by a (windowed) NAF digit array. The mathematical
+// value fits in 64 bits, so accumulating modulo 2^64 (with signed digits wrapping)
+// yields the exact value without intermediate shift/overflow concerns.
+template <typename Naf>
+uint64_t ReconstructFromNaf(const Naf& naf) {
+	uint64_t value = 0;
+	for (int index = static_cast<int>(naf.size()) - 1; index >= 0; --index) {
+		value = value * 2 + static_cast<uint64_t>(static_cast<int64_t>(naf[index]));
+	}
+	return value;
+}
+
+// A spread of 64-bit test values: small numbers, boundary patterns, and a pseudo-random
+// sweep. Returns a fresh vector so each test can iterate over it.
+std::vector<uint64_t> WnafTestValues() {
+	std::vector<uint64_t> values = {0, 1, 2, 3, 14, 15, 16, 17, 18, 0x80, 0xFF, 0xAAAA, 0x5555,
+																	0xFFFFFFFFull, 0x8000000000000000ull, 0x7FFFFFFFFFFFFFFFull,
+																	0xFFFFFFFFFFFFFFFFull, 0xDEADBEEFCAFEBABEull};
+	for (uint64_t seed = 0; seed < 4000; ++seed) values.push_back(seed * 0x9E3779B97F4A7C15ull);
+	return values;
+}
+
+TEST(CurveTest, WindowedNafWidthTwoMatchesPlainNaf) {
+	// Width-2 wNAF is exactly the plain NAF, so the two recoders must agree digit-for-digit.
+	for (const uint64_t value : WnafTestValues()) {
+		const ToyCurve::Wide x{value};
+		EXPECT_EQ(WindowedNonAdjacentForm(x, 2), NonAdjacentForm(x)) << "value=" << value;
+	}
+}
+
+TEST(CurveTest, WindowedNafReconstructsOriginalValue) {
+	// Sweep the full supported width range, including w >= 8 where an int8_t digit/accumulator
+	// would silently overflow (the bug that previously broke verify).
+	for (int w = 2; w <= 12; ++w) {
+		for (const uint64_t value : WnafTestValues()) {
+			const auto naf = WindowedNonAdjacentForm(ToyCurve::Wide{value}, w);
+			EXPECT_EQ(ReconstructFromNaf(naf), value) << "w=" << w << " value=" << value;
+		}
+	}
+}
+
+TEST(CurveTest, WindowedNafDigitsAreSignedOddWithinWindowAndSeparated) {
+	for (int w = 2; w <= 12; ++w) {
+		const int limit = 1 << (w - 1);  // |digit| < 2^{w-1}
+		for (const uint64_t value : WnafTestValues()) {
+			const auto naf = WindowedNonAdjacentForm(ToyCurve::Wide{value}, w);
+			for (size_t index = 0; index < naf.size(); ++index) {
+				const int digit = naf[index];
+				if (digit == 0) continue;
+				EXPECT_EQ(digit & 1, 1) << "digit not odd: w=" << w << " value=" << value;
+				EXPECT_GT(digit, -limit) << "w=" << w << " value=" << value;
+				EXPECT_LT(digit, limit) << "w=" << w << " value=" << value;
+				// Every nonzero digit is followed by at least w-1 zero digits.
+				for (size_t k = 1; k < static_cast<size_t>(w) && index + k < naf.size(); ++k) {
+					EXPECT_EQ(naf[index + k], 0) << "no zero run after digit: w=" << w << " value=" << value;
+				}
+			}
+		}
+	}
+}
+
+TEST(CurveTest, WindowedNafRecoderProducesExpectedSignedDigits) {
+	// 14 = 7 * 2^1, a single positive odd digit at the top of the width-4 digit set.
+	const auto positive = WindowedNonAdjacentForm(ToyCurve::Wide{14}, 4);
+	EXPECT_EQ(positive[1], 7);
+	EXPECT_EQ(positive[0], 0);
+	EXPECT_TRUE(std::all_of(positive.begin() + 2, positive.end(), [](int8_t d) { return d == 0; }));
+
+	// 18 = -7 * 2^1 + 1 * 2^5, exercising a negative digit and the carry it propagates.
+	const auto negative = WindowedNonAdjacentForm(ToyCurve::Wide{18}, 4);
+	EXPECT_EQ(negative[1], -7);
+	EXPECT_EQ(negative[5], 1);
+	EXPECT_EQ(ReconstructFromNaf(negative), 18u);
+}
+
 TEST(CurveTest, PublicKeyValidationRejectsInfinityOffCurveOutOfRangeAndWrongSubgroup) {
 	const ToyCurve::Point generator = ToyCurve::G;
 	auto out_of_range_x = EncodeUncompressedPublicKey<ToyCurve>(generator);

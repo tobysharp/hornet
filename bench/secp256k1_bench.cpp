@@ -3,9 +3,13 @@
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -20,10 +24,16 @@
 namespace hornet::crypto::ecdsa {
 namespace {
 
-constexpr auto kGeneratorCompressedSEC1 =
-    "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"_bytes;
 constexpr std::size_t kCorpusSize = 256;
 static_assert((kCorpusSize & (kCorpusSize - 1)) == 0);
+
+// Hard correctness gate for corpus invariants. Unlike Assert (a no-op under NDEBUG), this
+// fires in release builds so a wrong computation can never be timed as if it were correct.
+void BenchCheck(bool condition, const char* message) {
+  if (condition) return;
+  std::fprintf(stderr, "secp256k1_bench: corpus invariant failed: %s\n", message);
+  std::abort();
+}
 
 struct VerifySignatureBenchCase {
   secp256k1::PublicKey public_key;
@@ -68,24 +78,44 @@ secp256k1::Mod_n RandomNonZeroScalar(uint64_t& state) {
   return secp256k1::Mod_n{reduced};
 }
 
+std::array<uint8_t, 65> EncodeUncompressedPublicKey(const secp256k1::Affine& point) {
+  std::array<uint8_t, 65> bytes{};
+  bytes[0] = 0x04;
+  const auto x = ToBigEndianBytes(point.x.x);
+  const auto y = ToBigEndianBytes(point.y.x);
+  std::copy(x.begin(), x.end(), bytes.begin() + 1);
+  std::copy(y.begin(), y.end(), bytes.begin() + 33);
+  return bytes;
+}
+
+// Builds a corpus of genuine ECDSA signatures over random key pairs (not the degenerate
+// public-key == G case): for each entry pick a private key d, form Q = d*G, sign a random
+// digest with a fresh nonce, and keep only valid (r, s). Every case is verified here, outside
+// any timed region, so the benchmark always times a computation known to be correct.
 std::vector<VerifySignatureBenchCase> MakeVerifySignatureBenchCorpus() {
   std::vector<VerifySignatureBenchCase> corpus;
   corpus.reserve(kCorpusSize);
-  const auto public_key = secp256k1::PublicKeyFromSEC1(kGeneratorCompressedSEC1);
-  Assert(public_key.has_value());
-
-  const secp256k1::Mod_n private_key{1};
-  const secp256k1::Mod_n nonce{1};
-  const secp256k1::Point nonce_point = nonce.x * secp256k1::G;
-  const secp256k1::Mod_n r{nonce_point.NormalizedX().x.Modulo(constants::n)};
 
   uint64_t state = 0x6c8e9cf570932bd5ull;
-  for (std::size_t i = 0; i < kCorpusSize; ++i) {
+  while (corpus.size() < kCorpusSize) {
+    const secp256k1::Mod_n private_key = RandomNonZeroScalar(state);
+    const secp256k1::Affine public_point = private_key.x * secp256k1::G;
+    const auto public_key = secp256k1::PublicKeyFromSEC1(EncodeUncompressedPublicKey(public_point));
+    BenchCheck(public_key.has_value(), "random public key failed validation");
+
+    const secp256k1::Mod_n nonce = RandomNonZeroScalar(state);
+    const secp256k1::Point nonce_point = nonce.x * secp256k1::G;
+    const secp256k1::Mod_n r{nonce_point.NormalizedX().x.Modulo(constants::n)};
+    if (r.x == UIntW<256>::Zero()) continue;
+
     const auto digest = ToBigEndianBytes(RandomUInt256(state));
     const secp256k1::Mod_n z{secp256k1::Wide::FromBigEndianBytes(digest)};
     const secp256k1::Mod_n s = (z + r * private_key) / nonce;
+    if (s.x == UIntW<256>::Zero()) continue;
+
     VerifySignatureBenchCase bench_case{*public_key, {r.x, s.x}, digest};
-    Assert(secp256k1::VerifySignature(bench_case.public_key, bench_case.signature, bench_case.digest));
+    BenchCheck(secp256k1::VerifySignature(bench_case.public_key, bench_case.signature, bench_case.digest),
+               "generated signature did not verify");
     corpus.push_back(std::move(bench_case));
   }
   return corpus;
@@ -129,6 +159,27 @@ std::vector<PointMultiplyBenchCase> MakePointMultiplyBenchCorpus() {
     corpus.push_back(std::move(bench_case));
   }
 
+  return corpus;
+}
+
+struct LinCombBenchCase {
+  secp256k1::Wide u1;
+  secp256k1::Affine P;
+  secp256k1::Wide u2;
+  secp256k1::Affine Q;
+};
+
+std::vector<LinCombBenchCase> MakeLinCombCorpus() {
+  std::vector<LinCombBenchCase> corpus;
+  corpus.reserve(kCorpusSize);
+  uint64_t state = 0x123456789abcdef0ull;
+  for (std::size_t i = 0; i < kCorpusSize; ++i) {
+    const auto u1 = RandomNonZeroScalar(state);
+    const auto u2 = RandomNonZeroScalar(state);
+    const secp256k1::Affine P = RandomNonZeroScalar(state).x * secp256k1::G;
+    const secp256k1::Affine Q = RandomNonZeroScalar(state).x * secp256k1::G;
+    corpus.push_back({u1.x, P, u2.x, Q});
+  }
   return corpus;
 }
 
@@ -189,10 +240,16 @@ void SetOpsPerSecondCounter(benchmark::State& state) {
   state.counters["ops/s"] = benchmark::Counter(static_cast<double>(state.iterations()), benchmark::Counter::kIsRate);
 }
 
-static void BM_Secp256k1_VerifySignature(benchmark::State& state) {
+// Drives the full verify path (s^-1, the u1*G + u2*Q linear combination, and R normalization)
+// over the shared random-key corpus. `verify` selects the linear-combination strategy; every
+// corpus signature is checked to verify before timing, so a wrong path can never be timed.
+template <class Verify>
+static void RunVerifySignatureBench(benchmark::State& state, Verify verify) {
   const auto corpus = MakeVerifySignatureBenchCorpus();
-  std::size_t index = 0;
+  for (const auto& c : corpus)
+    BenchCheck(verify(c.public_key, c.signature, c.digest), "corpus signature failed to verify");
 
+  std::size_t index = 0;
   for (auto _ : state) {
     const auto& bench_case = corpus[index];
     index = (index + 1) & (kCorpusSize - 1);
@@ -202,12 +259,37 @@ static void BM_Secp256k1_VerifySignature(benchmark::State& state) {
     benchmark::DoNotOptimize(public_key);
     benchmark::DoNotOptimize(signature);
     benchmark::DoNotOptimize(digest);
-    auto verified = secp256k1::VerifySignature(public_key, signature, digest);
+    auto verified = verify(public_key, signature, digest);
     benchmark::DoNotOptimize(verified);
     benchmark::ClobberMemory();
   }
-
   SetOpsPerSecondCounter(state);
+}
+
+// Production verify: canonical joint-NAF linear combination.
+static void BM_Secp256k1_VerifySignature(benchmark::State& state) {
+  RunVerifySignatureBench(state, [](const secp256k1::PublicKey& pk, const secp256k1::Signature& sig,
+                                    const std::array<uint8_t, 32>& digest) {
+    return secp256k1::VerifySignature(pk, sig, digest);
+  });
+}
+
+// Same verify path with the linear combination swapped for wNAF: a fixed wide G-table (w=10)
+// built once outside the timed region, plus a per-call table for the variable key Q. Reported
+// alongside the joint-NAF verify so the two strategies compare like-for-like end to end.
+static void BM_Secp256k1_VerifySignature_wNAF(benchmark::State& state) {
+  constexpr int kGWidth = 10;
+  std::array<secp256k1::Affine, (1 << (kGWidth - 1))> g_table;
+  PrecomputeTableAffine(secp256k1::G, {g_table.data(), g_table.size()});
+  const std::span<const secp256k1::Affine> g_span{g_table.data(), g_table.size()};
+
+  RunVerifySignatureBench(state, [&](const secp256k1::PublicKey& pk, const secp256k1::Signature& sig,
+                                     const std::array<uint8_t, 32>& digest) {
+    return secp256k1::VerifySignatureWith(pk, sig, digest,
+        [&](const secp256k1::Wide& u1, const secp256k1::Wide& u2, const secp256k1::Affine& Q) {
+          return LinearCombination_wNAF<256, constants::p, constants::a>(u1, g_span, u2, Q);
+        });
+  });
 }
 
 static void BM_Secp256k1_PointAdd(benchmark::State& state) {
@@ -245,6 +327,91 @@ static void BM_Secp256k1_PointMultiply(benchmark::State& state) {
     benchmark::ClobberMemory();
   }
 
+  SetOpsPerSecondCounter(state);
+}
+
+static void BM_Secp256k1_PointDouble(benchmark::State& state) {
+  const auto corpus = MakePointAddBenchCorpus();
+  std::size_t index = 0;
+  for (auto _ : state) {
+    auto lhs = corpus[index].lhs;
+    index = (index + 1) & (kCorpusSize - 1);
+    benchmark::DoNotOptimize(lhs);
+    auto doubled = lhs.Double();
+    benchmark::DoNotOptimize(doubled);
+    benchmark::ClobberMemory();
+  }
+  SetOpsPerSecondCounter(state);
+}
+
+static void BM_Secp256k1_PointAddMixed(benchmark::State& state) {
+  const auto corpus = MakePointAddBenchCorpus();
+  std::vector<secp256k1::Affine> rhs_affine;  // normalize outside the timed loop
+  rhs_affine.reserve(corpus.size());
+  for (const auto& c : corpus) rhs_affine.push_back(c.rhs);
+  std::size_t index = 0;
+  for (auto _ : state) {
+    auto lhs = corpus[index].lhs;
+    auto rhs = rhs_affine[index];
+    index = (index + 1) & (kCorpusSize - 1);
+    benchmark::DoNotOptimize(lhs);
+    benchmark::DoNotOptimize(rhs);
+    auto sum = lhs + rhs;  // mixed: Jacobian + Affine
+    benchmark::DoNotOptimize(sum);
+    benchmark::ClobberMemory();
+  }
+  SetOpsPerSecondCounter(state);
+}
+
+template <auto Fn>
+static void BM_LinComb(benchmark::State& state) {
+  const auto corpus = MakeLinCombCorpus();
+  std::size_t index = 0;
+  for (auto _ : state) {
+    const auto& c = corpus[index];
+    index = (index + 1) & (kCorpusSize - 1);
+    auto u1 = c.u1, u2 = c.u2;
+    auto P = c.P, Q = c.Q;
+    benchmark::DoNotOptimize(u1);
+    benchmark::DoNotOptimize(u2);
+    benchmark::DoNotOptimize(P);
+    benchmark::DoNotOptimize(Q);
+    auto r = Fn(u1, P, u2, Q);
+    benchmark::DoNotOptimize(r);
+    benchmark::ClobberMemory();
+  }
+  SetOpsPerSecondCounter(state);
+}
+
+// wNAF mirrors the verify kernel: a fixed wide base (the generator) with a precomputed affine
+// table, plus a variable base Q. The table is built once, before the timed region, and a
+// differential check against the joint-NAF result gates correctness for every corpus entry.
+static void BM_LinComb_wNAF(benchmark::State& state) {
+  constexpr int kGWidth = 10;
+  std::array<secp256k1::Affine, (1 << (kGWidth - 1))> g_table;
+  PrecomputeTableAffine(secp256k1::G, {g_table.data(), g_table.size()});
+  const std::span<const secp256k1::Affine> g_span{g_table.data(), g_table.size()};
+
+  const auto corpus = MakeLinCombCorpus();
+  for (const auto& c : corpus) {
+    const secp256k1::Affine reference = LinearCombination<256, constants::p, constants::a>(c.u1, secp256k1::G, c.u2, c.Q);
+    const secp256k1::Affine actual = LinearCombination_wNAF<256, constants::p, constants::a>(c.u1, g_span, c.u2, c.Q);
+    BenchCheck(reference.x == actual.x && reference.y == actual.y, "wNAF result disagrees with joint NAF");
+  }
+
+  std::size_t index = 0;
+  for (auto _ : state) {
+    const auto& c = corpus[index];
+    index = (index + 1) & (kCorpusSize - 1);
+    auto u1 = c.u1, u2 = c.u2;
+    auto Q = c.Q;  // P is the fixed generator, so only Q varies per case
+    benchmark::DoNotOptimize(u1);
+    benchmark::DoNotOptimize(u2);
+    benchmark::DoNotOptimize(Q);
+    auto r = LinearCombination_wNAF<256, constants::p, constants::a>(u1, g_span, u2, Q);
+    benchmark::DoNotOptimize(r);
+    benchmark::ClobberMemory();
+  }
   SetOpsPerSecondCounter(state);
 }
 
@@ -370,8 +537,14 @@ static void BM_BigUint256_Squared(benchmark::State& state) {
 }
 
 BENCHMARK(BM_Secp256k1_VerifySignature);
+BENCHMARK(BM_Secp256k1_VerifySignature_wNAF);
 BENCHMARK(BM_Secp256k1_PointAdd);
+BENCHMARK(BM_Secp256k1_PointAddMixed);
+BENCHMARK(BM_Secp256k1_PointDouble);
 BENCHMARK(BM_Secp256k1_PointMultiply);
+BENCHMARK(BM_LinComb<LinearCombination<256, constants::p, constants::a>>)->Name("BM_LinComb_JointNAF");
+BENCHMARK(BM_LinComb<LinearCombination_NAF_Disjoint<256, constants::p, constants::a>>)->Name("BM_LinComb_DisjointNAF");
+BENCHMARK(BM_LinComb_wNAF);
 BENCHMARK(BM_MultiplyModP_256_Secp256k1P);
 BENCHMARK(BM_MultiplySelfModP_256_Secp256k1P);
 BENCHMARK(BM_SquareModP_256_Secp256k1P);

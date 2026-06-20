@@ -1,6 +1,8 @@
 #pragma once
 
+#include <bit>
 #include <iterator>
+#include <span>
 
 #include "hornetlib/crypto/naf.h"
 #include "hornetlib/crypto/point.h"
@@ -30,12 +32,12 @@ constexpr Point Scale(const typename Point::Wide& scalar, const Point& pt) {
   return sum;
 }
 
-template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a, const UIntW<kBits>& b>
-constexpr JacobianPoint<kBits, p, a, b> LinearCombination(const UIntW<kBits>& u1, const AffinePoint<kBits, p, a, b>& P,
+template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a>
+constexpr JacobianPoint<kBits, p, a> LinearCombination(const UIntW<kBits>& u1, const AffinePoint<kBits, p, a>& P,
                                                           const UIntW<kBits>& u2,
-                                                          const AffinePoint<kBits, p, a, b>& Q) {
-  using Affine = AffinePoint<kBits, p, a, b>;
-  using Point = JacobianPoint<kBits, p, a, b>;
+                                                          const AffinePoint<kBits, p, a>& Q) {
+  using Affine = AffinePoint<kBits, p, a>;
+  using Point = JacobianPoint<kBits, p, a>;
   const auto naf1 = NonAdjacentForm(u1);
   const auto naf2 = NonAdjacentForm(u2);
   constexpr int kBitCount = std::ssize(naf1);
@@ -49,21 +51,21 @@ constexpr JacobianPoint<kBits, p, a, b> LinearCombination(const UIntW<kBits>& u1
   Point sum;
   for (int bitIndex = kBitCount - 1; bitIndex >= 0; --bitIndex) {
     sum = sum.Double();
-    const int8_t digit1 = naf1[bitIndex];
-    const int8_t digit2 = naf2[bitIndex];
-    const int8_t index = 3 * (digit1 + 1) + (digit2 + 1);
+    const int digit1 = naf1[bitIndex];
+    const int digit2 = naf2[bitIndex];
+    const int index = 3 * (digit1 + 1) + (digit2 + 1);
     if (add_kind[index] == 1) sum += affine_addends[index >> 1];
     else if (add_kind[index] == 2) sum += jacobian_addends[index >> 1];
   }
   return sum;
 }
 
-template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a, const UIntW<kBits>& b>
-constexpr JacobianPoint<kBits, p, a, b> LinearCombination_NAF_Disjoint(const UIntW<kBits>& u1, const AffinePoint<kBits, p, a, b>& P,
+template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a>
+constexpr JacobianPoint<kBits, p, a> LinearCombination_NAF_Disjoint(const UIntW<kBits>& u1, const AffinePoint<kBits, p, a>& P,
                                                           const UIntW<kBits>& u2,
-                                                          const AffinePoint<kBits, p, a, b>& Q) {
-  using Affine = AffinePoint<kBits, p, a, b>;
-  using Point = JacobianPoint<kBits, p, a, b>;
+                                                          const AffinePoint<kBits, p, a>& Q) {
+  using Affine = AffinePoint<kBits, p, a>;
+  using Point = JacobianPoint<kBits, p, a>;
   const auto nafP = NonAdjacentForm(u1);
   const auto nafQ = NonAdjacentForm(u2);
   constexpr int kBitCount = std::ssize(nafP);
@@ -74,10 +76,40 @@ constexpr JacobianPoint<kBits, p, a, b> LinearCombination_NAF_Disjoint(const UIn
   Point sum;
   for (int bitIndex = kBitCount - 1; bitIndex >= 0; --bitIndex) {
     sum = sum.Double();
-    const int8_t digitP = nafP[bitIndex];
-    const int8_t digitQ = nafQ[bitIndex];
+    const int digitP = nafP[bitIndex];
+    const int digitQ = nafQ[bitIndex];
     if (digitP != 0) sum += P_addends[(digitP + 1) >> 1];
     if (digitQ != 0) sum += Q_addends[(digitQ + 1) >> 1];
+  }
+  return sum;
+}
+
+// Computes u1*P + u2*Q with wNAF recoding. The fixed-base table P_table holds the odd
+// affine multiples of P (built once via PrecomputeTableAffine); its width is inferred from
+// the table size (2^{w-1} entries). The variable base Q gets a narrow per-call table.
+template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a>
+JacobianPoint<kBits, p, a> LinearCombination_wNAF(const UIntW<kBits>& u1,
+                                                  std::span<const AffinePoint<kBits, p, a>> P_table,
+                                                  const UIntW<kBits>& u2, const AffinePoint<kBits, p, a>& Q) {
+  using Point = JacobianPoint<kBits, p, a>;
+  constexpr int kQWidth = 5;
+  const int kPWidth = std::bit_width(P_table.size());  // 2^{w-1} entries -> window width w
+  const auto nafP = WindowedNonAdjacentForm(u1, kPWidth);
+  const auto nafQ = WindowedNonAdjacentForm(u2, kQWidth);
+  constexpr int kBitCount = std::ssize(nafP);
+
+  std::array<Point, 1 << (kQWidth - 1)> Q_table;
+  PrecomputeTableJacobian(Q, {Q_table.data(), Q_table.size()});
+
+  Point sum;
+  const int kPOffset = std::ssize(P_table) - 1;
+  constexpr int kQOffset = (1 << (kQWidth - 1)) - 1;
+  for (int bitIndex = kBitCount - 1; bitIndex >= 0; --bitIndex) {
+    sum = sum.Double();
+    const int digitP = nafP[bitIndex];
+    const int digitQ = nafQ[bitIndex];
+    if (digitP != 0) sum += P_table[(digitP + kPOffset) >> 1];
+    if (digitQ != 0) sum += Q_table[(digitQ + kQOffset) >> 1];
   }
   return sum;
 }
