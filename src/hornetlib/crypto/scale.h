@@ -1,9 +1,12 @@
 #pragma once
 
+#include <array>
 #include <bit>
+#include <cstddef>
 #include <iterator>
 #include <span>
 
+#include "hornetlib/crypto/glv.h"
 #include "hornetlib/crypto/naf.h"
 #include "hornetlib/crypto/point.h"
 #include "hornetlib/crypto/uintw.h"
@@ -110,6 +113,29 @@ JacobianPoint<kBits, p, a> LinearCombination_wNAF(const UIntW<kBits>& u1,
     const int digitQ = nafQ[bitIndex];
     if (digitP != 0) sum += P_table[(digitP + kPOffset) >> 1];
     if (digitQ != 0) sum += Q_table[(digitQ + kQOffset) >> 1];
+  }
+  return sum;
+}
+
+// Computes u1*G + u2*Q via GLV: a 4-term Strauss over two GLV terms (G-side, Q-side). Each term
+// (glv.h) carries a lambda split plus the odd-multiple tables for its base and phi(base), and yields
+// its wNAF digits (NonAdjacentFormDigits) and summands (Base/Phi). The accumulator is always
+// Jacobian; G's affine table yields mixed adds.
+template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a, class GTable, class QTable>
+JacobianPoint<kBits, p, a> LinearCombination_GLV(const GlvTerm<kBits, GTable>& g,
+                                                 const GlvTerm<kBits, QTable>& q) {
+  using Point = JacobianPoint<kBits, p, a>;
+  const auto [naf_g_a, naf_g_b] = g.NonAdjacentFormDigits();
+  const auto [naf_q_a, naf_q_b] = q.NonAdjacentFormDigits();
+
+  // SplitLambda guarantees |k_i| < 2^(kBits/2), so the top wNAF digit index is <= kBits/2.
+  Point sum;
+  for (int bit = kBits >> 1; bit >= 0; --bit) {
+    sum = sum.Double();
+    if (naf_g_a[bit] != 0) sum += g.Base(naf_g_a[bit]);
+    if (naf_g_b[bit] != 0) sum += g.Phi(naf_g_b[bit]);
+    if (naf_q_a[bit] != 0) sum += q.Base(naf_q_a[bit]);
+    if (naf_q_b[bit] != 0) sum += q.Phi(naf_q_b[bit]);
   }
   return sum;
 }

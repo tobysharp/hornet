@@ -16,7 +16,7 @@ namespace hornet::crypto::ecdsa {
 namespace {
 
 Uint256 ReferenceReduceModuloP(const Uint256& x, const Uint256& y) {
-  return x.MultiplyWide(y).Modulo(constants::p);
+  return x.MultiplyWide(y).Modulo(secp256k1::p);
 }
 
 uint64_t XorShift64(uint64_t& state) {
@@ -37,10 +37,10 @@ TEST(ReduceModuloPTest, MatchesReferenceForEdgeCases) {
       Uint256{2},
       Uint256{977},
       Uint256{uint64_t{1} << 32},
-      constants::p - Uint256{2},
-      constants::p - Uint256{1},
-      constants::p,
-      constants::p + Uint256{1},
+      secp256k1::p - Uint256{2},
+      secp256k1::p - Uint256{1},
+      secp256k1::p,
+      secp256k1::p + Uint256{1},
       "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe"_h256,
       "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"_h256,
   };
@@ -54,13 +54,13 @@ TEST(ReduceModuloPTest, MatchesReferenceForEdgeCases) {
 
 TEST(ReduceModuloPTest, MatchesReferenceForValuesAroundModulusBoundary) {
   const std::array<Uint256, 7> near_modulus = {
-      constants::p - Uint256{3},
-      constants::p - Uint256{2},
-      constants::p - Uint256{1},
-      constants::p,
-      constants::p + Uint256{1},
-      constants::p + Uint256{2},
-      constants::p + Uint256{3},
+      secp256k1::p - Uint256{3},
+      secp256k1::p - Uint256{2},
+      secp256k1::p - Uint256{1},
+      secp256k1::p,
+      secp256k1::p + Uint256{1},
+      secp256k1::p + Uint256{2},
+      secp256k1::p + Uint256{3},
   };
 
   for (const auto& x : near_modulus) {
@@ -87,7 +87,7 @@ TEST(ReduceModuloPTest, ResultIsAlwaysCanonicalForRandomizedInputs) {
     const Uint256 x = RandomUint256(state);
     const Uint256 y = RandomUint256(state);
     const Uint256 reduced = ReduceModuloP(x, y);
-    EXPECT_LT(reduced, constants::p) << "iteration=" << i;
+    EXPECT_LT(reduced, secp256k1::p) << "iteration=" << i;
   }
 }
 

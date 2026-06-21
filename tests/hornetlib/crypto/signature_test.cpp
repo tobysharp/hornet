@@ -29,7 +29,7 @@ constexpr auto kExpectedR = "4e45e16932b8af514961a1d3a1a25fdf3f4f7732e9d624c6c61
 constexpr auto kExpectedS = "181522ec8eca07de4860a4acdd12909d831cc56cbbac4622082221a8768d1d09"_h256;
 
 TEST(SignatureTest, ParseSignatureDERLaxParsesStrictDERExample) {
-	const auto signature = ParseSignatureDER<secp256k1::Wide>(kStrictDERExample, DERParseType::Lax);
+	const auto signature = ParseSignatureDER<Curve::Wide>(kStrictDERExample, DERParseType::Lax);
 
 	ASSERT_TRUE(signature.has_value());
 	EXPECT_EQ(signature->first, kExpectedR);
@@ -37,7 +37,7 @@ TEST(SignatureTest, ParseSignatureDERLaxParsesStrictDERExample) {
 }
 
 TEST(SignatureTest, ParseSignatureDERStrictParsesStrictDERExample) {
-	const auto signature = ParseSignatureDER<secp256k1::Wide>(kStrictDERExample, DERParseType::Strict);
+	const auto signature = ParseSignatureDER<Curve::Wide>(kStrictDERExample, DERParseType::Strict);
 
 	ASSERT_TRUE(signature.has_value());
 	EXPECT_EQ(signature->first, kExpectedR);
@@ -57,12 +57,12 @@ TEST(SignatureTest, ParseSignatureDERLaxIgnoresTrailingGarbage) {
 			0x21, 0xa8, 0x76, 0x8d, 0x1d, 0x09, 0xaa, 0xbb,
 	};
 
-	const auto signature = ParseSignatureDER<secp256k1::Wide>(der, DERParseType::Lax);
+	const auto signature = ParseSignatureDER<Curve::Wide>(der, DERParseType::Lax);
 
 	ASSERT_TRUE(signature.has_value());
 	EXPECT_EQ(signature->first, kExpectedR);
 	EXPECT_EQ(signature->second, kExpectedS);
-	EXPECT_FALSE(ParseSignatureDER<secp256k1::Wide>(der, DERParseType::Strict).has_value());
+	EXPECT_FALSE(ParseSignatureDER<Curve::Wide>(der, DERParseType::Strict).has_value());
 }
 
 TEST(SignatureTest, ParseSignatureDERLaxAcceptsLongFormLengths) {
@@ -72,12 +72,12 @@ TEST(SignatureTest, ParseSignatureDERLaxAcceptsLongFormLengths) {
 			0x02, 0x81, 0x01, 0x01,
 	};
 
-	const auto signature = ParseSignatureDER<secp256k1::Wide>(der, DERParseType::Lax);
+	const auto signature = ParseSignatureDER<Curve::Wide>(der, DERParseType::Lax);
 
 	ASSERT_TRUE(signature.has_value());
-	EXPECT_EQ(signature->first, secp256k1::Wide{1});
-	EXPECT_EQ(signature->second, secp256k1::Wide{1});
-	EXPECT_FALSE(ParseSignatureDER<secp256k1::Wide>(der, DERParseType::Strict).has_value());
+	EXPECT_EQ(signature->first, Curve::Wide{1});
+	EXPECT_EQ(signature->second, Curve::Wide{1});
+	EXPECT_FALSE(ParseSignatureDER<Curve::Wide>(der, DERParseType::Strict).has_value());
 }
 
 TEST(SignatureTest, ParseSignatureDERLaxAcceptsOverpaddedIntegerButStrictRejects) {
@@ -86,12 +86,12 @@ TEST(SignatureTest, ParseSignatureDERLaxAcceptsOverpaddedIntegerButStrictRejects
 			0x02, 0x02, 0x00, 0x01,
 			0x02, 0x01, 0x01,
 	};
-	const auto signature = ParseSignatureDER<secp256k1::Wide>(der, DERParseType::Lax);
+	const auto signature = ParseSignatureDER<Curve::Wide>(der, DERParseType::Lax);
 
 	ASSERT_TRUE(signature.has_value());
-	EXPECT_EQ(signature->first, secp256k1::Wide{1});
-	EXPECT_EQ(signature->second, secp256k1::Wide{1});
-	EXPECT_FALSE(ParseSignatureDER<secp256k1::Wide>(der, DERParseType::Strict).has_value());
+	EXPECT_EQ(signature->first, Curve::Wide{1});
+	EXPECT_EQ(signature->second, Curve::Wide{1});
+	EXPECT_FALSE(ParseSignatureDER<Curve::Wide>(der, DERParseType::Strict).has_value());
 }
 
 TEST(SignatureTest, ParseSignatureDERLaxAcceptsZeroLengthIntegerButStrictRejects) {
@@ -101,12 +101,12 @@ TEST(SignatureTest, ParseSignatureDERLaxAcceptsZeroLengthIntegerButStrictRejects
 			0x02, 0x00,
 	};
 
-	const auto signature = ParseSignatureDER<secp256k1::Wide>(der, DERParseType::Lax);
+	const auto signature = ParseSignatureDER<Curve::Wide>(der, DERParseType::Lax);
 
 	ASSERT_TRUE(signature.has_value());
-	EXPECT_EQ(signature->first, secp256k1::Wide{});
-	EXPECT_EQ(signature->second, secp256k1::Wide{});
-	EXPECT_FALSE(ParseSignatureDER<secp256k1::Wide>(der, DERParseType::Strict).has_value());
+	EXPECT_EQ(signature->first, Curve::Wide{});
+	EXPECT_EQ(signature->second, Curve::Wide{});
+	EXPECT_FALSE(ParseSignatureDER<Curve::Wide>(der, DERParseType::Strict).has_value());
 }
 
 TEST(SignatureTest, ParseSignatureDERLaxTreatsNegativeIntegerAsPositiveButStrictRejects) {
@@ -116,12 +116,12 @@ TEST(SignatureTest, ParseSignatureDERLaxTreatsNegativeIntegerAsPositiveButStrict
 			0x02, 0x01, 0x01,
 	};
 
-	const auto signature = ParseSignatureDER<secp256k1::Wide>(der, DERParseType::Lax);
+	const auto signature = ParseSignatureDER<Curve::Wide>(der, DERParseType::Lax);
 
 	ASSERT_TRUE(signature.has_value());
-	EXPECT_EQ(signature->first, secp256k1::Wide{0x80});
-	EXPECT_EQ(signature->second, secp256k1::Wide{1});
-	EXPECT_FALSE(ParseSignatureDER<secp256k1::Wide>(der, DERParseType::Strict).has_value());
+	EXPECT_EQ(signature->first, Curve::Wide{0x80});
+	EXPECT_EQ(signature->second, Curve::Wide{1});
+	EXPECT_FALSE(ParseSignatureDER<Curve::Wide>(der, DERParseType::Strict).has_value());
 }
 
 TEST(SignatureTest, ParseSignatureDERLaxZeroesOverflowingValues) {
@@ -136,17 +136,17 @@ TEST(SignatureTest, ParseSignatureDERLaxZeroesOverflowingValues) {
 			0x02, 0x01, 0x01,
 	};
 
-	const auto signature = ParseSignatureDER<secp256k1::Wide>(der, DERParseType::Lax);
+	const auto signature = ParseSignatureDER<Curve::Wide>(der, DERParseType::Lax);
 
 	ASSERT_TRUE(signature.has_value());
-	EXPECT_EQ(signature->first, secp256k1::Wide{});
-	EXPECT_EQ(signature->second, secp256k1::Wide{});
+	EXPECT_EQ(signature->first, Curve::Wide{});
+	EXPECT_EQ(signature->second, Curve::Wide{});
 }
 
 TEST(SignatureTest, ParseSignatureDERLaxRejectsMalformedStructure) {
 	const std::array<uint8_t, 6> der = {0x30, 0x04, 0x02, 0x01, 0x01, 0x03};
 
-	EXPECT_FALSE(ParseSignatureDER<secp256k1::Wide>(der, DERParseType::Lax).has_value());
+	EXPECT_FALSE(ParseSignatureDER<Curve::Wide>(der, DERParseType::Lax).has_value());
 }
 
 }  // namespace

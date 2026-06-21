@@ -34,11 +34,11 @@ constexpr auto NonAdjacentForm(const UIntW<kBits>& x) noexcept {
   return naf;
 }
 
-// Returns the width-w NAF (wNAF) of x in little-endian digit order.
+// Returns the width-w NAF (wNAF) of x, negated if `negative`, in little-endian digit order.
 // Every nonzero digit is an odd integer in {+-1, +-3, ..., +-(2^{w-1}-1)}, which reaches
 // +-511 at w=10 -- too wide for int8_t, so digits are stored as int16_t.
 template <int kBits>
-constexpr auto WindowedNonAdjacentForm(const UIntW<kBits>& x, int w) noexcept {
+constexpr auto WindowedNonAdjacentForm(const UIntW<kBits>& x, int w, bool negative = false) noexcept {
   std::array<int16_t, kBits + 1> naf = {};
 
   const int high = 1 << w;        // 2^w
@@ -50,12 +50,12 @@ constexpr auto WindowedNonAdjacentForm(const UIntW<kBits>& x, int w) noexcept {
       int window = 1;
       for (int j = 1; j < std::min(w, kBits - i); ++j) window += x.GetBit(i + j) << j;
       const int digit = ((window + half) & (high - 1)) - half;
-      naf[i] = digit;
+      naf[i] = negative ? -digit : digit;
       carry = (window - digit) >> w;
       i += w - 1;
     }
   }
-  naf[kBits] = carry;
+  naf[kBits] = negative ? -int{carry} : int{carry};
   return naf;
 }
 

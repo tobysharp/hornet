@@ -14,23 +14,22 @@
 #include "hornetlib/crypto/point.h"
 #include "hornetlib/crypto/scale.h"
 #include "hornetlib/crypto/fp.h"
-#include "hornetlib/crypto/secp256k1_constants.h"
+#include "hornetlib/crypto/secp256k1.h"
 #include "hornetlib/crypto/uintw.h"
 #include "hornetlib/util/hex.h"
 
 namespace hornet::crypto::ecdsa {
 
-template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a, const UIntW<kBits>& b, const UIntW<kBits>& Gx,
-          const UIntW<kBits>& Gy, const UIntW<kBits>& n>
 class Curve {
  public:
-  using Affine = AffinePoint<kBits, p, a>;
-  using Mod_p = Fp<kBits, p>;
-  using Mod_n = Fp<kBits, n>;
+  static constexpr int kBits = 256;
+  using Affine = AffinePoint<kBits, secp256k1::p, secp256k1::a>;
+  using Mod_p = Fp<kBits, secp256k1::p>;
+  using Mod_n = Fp<kBits, secp256k1::n>;
   using Wide = typename Mod_p::Type;
   using Signature = std::pair<Wide, Wide>;
-  using Point = JacobianPoint<kBits, p, a>;
-  static_assert(p > n);
+  using Point = JacobianPoint<kBits, secp256k1::p, secp256k1::a>;
+  static_assert(secp256k1::p > secp256k1::n);
 
   class PublicKey {
    public:
@@ -38,25 +37,29 @@ class Curve {
    private:
     friend class Curve;
     explicit PublicKey(Affine point) : point_(std::move(point)) {}
-    Affine point_; 
+    Affine point_;
   };
 
-  static constexpr Affine G = {Mod_p{Gx}, Mod_p{Gy}};
+  static constexpr Affine G = {Mod_p{secp256k1::Gx}, Mod_p{secp256k1::Gy}};
 
-  // Builds the fixed-base wNAF table of odd multiples of G used by verification.
-  // If not called explicitly, the table is built lazily on demand.
+  // Builds the fixed-base wNAF tables of odd multiples of G and phi(G) used by verification.
+  // If not called explicitly, the tables are built lazily on demand.
   static void BuildGeneratorTable(int width = 10) {
+    using namespace secp256k1;
     g_table_.resize(std::size_t{1} << (width - 1));
     PrecomputeTableAffine(G, std::span{g_table_});
+    const Mod_p beta_fp{beta};
+    phi_g_table_.resize(g_table_.size());
+    for (std::size_t i = 0; i < g_table_.size(); ++i)
+      phi_g_table_[i] = {beta_fp * g_table_[i].x, g_table_[i].y};
   }
 
   inline static constexpr bool IsOnCurve(const Point& point) {
-    return point.template IsOnCurve<b>();
+    return point.template IsOnCurve<secp256k1::b>();
   }
 
-  static_assert(IsOnCurve(G));
-
   inline static std::optional<PublicKey> PublicKeyFromSEC1(std::span<const uint8_t> bytes) {
+    using namespace secp256k1;
     constexpr int kBytes = kBits >> 3;
     if (bytes.empty()) return std::nullopt;
 
@@ -95,27 +98,41 @@ class Curve {
 
   inline static bool VerifySignature(const PublicKey& public_key, const Signature& signature,
                                      const std::array<uint8_t, kBits / 8>& hashed_message) {
-    // Default path is wNAF over the fixed-base generator table (faster end to end than joint
-    // NAF; see docs/secp256k1-performance-history.md). Q gets a narrow per-call table inside
-    // LinearCombination_wNAF.
-    const std::span<const Affine> g_table = GeneratorTable();
+    using namespace secp256k1;
+    // GLV: split u1, u2 via the lambda endomorphism, then a 4-term Strauss over the fixed
+    // G/phi(G) tables. Halves the shared doublings (docs/secp256k1-performance-history.md).
+    const std::span<const Affine> g_a = GeneratorTable(), g_b = PhiGeneratorTable();
+    const Mod_p beta_fp{beta};
     return VerifySignatureImpl(public_key, signature, HashToInt(hashed_message),
-                               [g_table](const Wide& u1, const Wide& u2, const Affine& Q) {
-                                 return hornet::crypto::ecdsa::LinearCombination_wNAF(u1, g_table, u2, Q);
-                               });
+        [g_a, g_b, beta_fp](const Wide& u1, const Wide& u2, const Affine& Q) {
+          const GlvTerm<kBits, std::span<const Affine>> g_term{
+              SplitLambda<kBits, n, glv_a1, glv_minus_b1, glv_a2, glv_b2>(u1), g_a, g_b};
+          const auto q_term = MakeVariableGlvTerm<kBits, p, a>(
+              SplitLambda<kBits, n, glv_a1, glv_minus_b1, glv_a2, glv_b2>(u2), Q, beta_fp);
+          return LinearCombination_GLV<kBits, p, a>(g_term, q_term);
+        });
   }
 
-  // Verifies using a caller-supplied combiner for R = u1*G + u2*Q. Exists so benchmarks and
-  // tests can compare alternative linear-combination strategies (e.g. joint NAF) against the
-  // default wNAF path without duplicating the surrounding scalar and normalization logic.
+  // Verifies using a caller-supplied combiner for R = u1*G + u2*Q. Exists so benchmarks and tests
+  // can compare alternative linear-combination strategies (joint NAF, wNAF) against the default GLV
+  // path without duplicating the surrounding scalar and normalization logic.
   template <class Combine>
   inline static bool VerifySignatureWith(const PublicKey& public_key, const Signature& signature,
                                          const std::array<uint8_t, kBits / 8>& hashed_message, Combine&& combine) {
     return VerifySignatureImpl(public_key, signature, HashToInt(hashed_message), std::forward<Combine>(combine));
   }
 
+  static consteval bool IsNonSingularCurve() {
+    using namespace secp256k1;
+    constexpr auto a2 = a.MultiplyWide(a);
+    const auto discriminant = a2.MultiplyWide(a.template ZeroExtend<kBits * 2>()) * 4 +
+                              b.MultiplyWide(b).template ZeroExtend<kBits * 4>() * 27;
+    return discriminant != decltype(discriminant)::Zero();
+  }
+
  private:
   static inline std::vector<Affine> g_table_{};
+  static inline std::vector<Affine> phi_g_table_{};  // odd multiples of phi(G)
 
   // Returns the fixed-base table, building it once at default width if no explicit build ran.
   static std::span<const Affine> GeneratorTable() {
@@ -124,7 +141,14 @@ class Curve {
     return g_table_;
   }
 
+  // Returns the phi(G) table, ensuring the generator tables are built.
+  static std::span<const Affine> PhiGeneratorTable() {
+    GeneratorTable();
+    return phi_g_table_;
+  }
+
   inline static bool IsValidPublicKey(const Point& publicKey) {
+    using namespace secp256k1;
     if (publicKey.IsInfinity()) return false;
     if (!IsOnCurve(publicKey)) return false;
     if (!(n * publicKey).IsInfinity()) return false;
@@ -134,6 +158,7 @@ class Curve {
   template <class Combine>
   inline static bool VerifySignatureImpl(const Affine& publicKey, const Signature& signature, const Mod_n& e,
                                          Combine&& combine) {
+    using namespace secp256k1;
     if (signature.first == 0 || signature.first >= n) return false;
     if (signature.second == 0 || signature.second >= n) return false;
     const Mod_n r = signature.first, s = signature.second;
@@ -150,17 +175,11 @@ class Curve {
     static_assert(Size == kBits / 8);
     return Wide::FromBigEndianBytes(std::span<const uint8_t>{hash});
   }
-
-  static consteval bool IsNonSingularCurve() {
-    constexpr auto a2 = a.MultiplyWide(a);
-    const auto discriminant = a2.MultiplyWide(a.template ZeroExtend<kBits * 2>()) * 4 +
-                              b.MultiplyWide(b).template ZeroExtend<kBits * 4>() * 27;
-    return discriminant != decltype(discriminant)::Zero();
-  }
-
-  static_assert(IsNonSingularCurve());
 };
 
-using secp256k1 = Curve<256, constants::p, constants::a, constants::b, constants::Gx, constants::Gy, constants::n>;
+// Evaluated here (not in-class) because a non-template class is incomplete until its closing brace,
+// so its members can't be used in a constant expression inside the body.
+static_assert(Curve::IsOnCurve(Curve::G));
+static_assert(Curve::IsNonSingularCurve());
 
 }  // namespace hornet::crypto::ecdsa

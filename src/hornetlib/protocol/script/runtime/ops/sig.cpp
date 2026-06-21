@@ -38,15 +38,15 @@ static void OnCheckSig(const Context& context) {
 
     // Extract the DER-encoded ECDSA signature, which is up to 72 bytes.
     const DERParseType parse_method = context.machine.policy.require_strict_der_signatures ? DERParseType::Strict : DERParseType::Lax;
-    const auto signature = ParseSignatureDER<secp256k1::Wide>(sigblob.first(sigblob.size() - 1), parse_method);
+    const auto signature = ParseSignatureDER<Curve::Wide>(sigblob.first(sigblob.size() - 1), parse_method);
     if (!signature) return false;
   
     // The public key is in SEC1 format.
-    const auto pubkey = secp256k1::PublicKeyFromSEC1(pkblob);
+    const auto pubkey = Curve::PublicKeyFromSEC1(pkblob);
     if (!pubkey) return false;
 
     // Verify that the spend digest was signed by the private key corresponding to this public key.
-    return secp256k1::VerifySignature(*pubkey, *signature, digest);
+    return Curve::VerifySignature(*pubkey, *signature, digest);
   });
 }
 

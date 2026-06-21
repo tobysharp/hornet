@@ -38,7 +38,18 @@ inline constexpr Uint64 kToyGeneratorX{4};
 inline constexpr Uint64 kToyGeneratorY{2};
 inline constexpr Uint64 kToyOrder{7};
 
-using ToyCurve = Curve<64, kToyPrime, kToyA, kToyB, kToyGeneratorX, kToyGeneratorY, kToyOrder>;
+// Small hand-verifiable curve (y^2 = x^3 + x + 4 over F_17, order 7) for testing the point and
+// field arithmetic directly -- including the a != 0 formula branches that secp256k1 (a = 0) never
+// reaches. Bundles the lower templated types; the verify/SEC1 wrapper is secp256k1-specific.
+struct ToyCurve {
+	using Mod_p = Fp<64, kToyPrime>;
+	using Mod_n = Fp<64, kToyOrder>;
+	using Wide = Mod_p::Type;
+	using Affine = AffinePoint<64, kToyPrime, kToyA>;
+	using Point = JacobianPoint<64, kToyPrime, kToyA>;
+	static constexpr Affine G{Mod_p{kToyGeneratorX}, Mod_p{kToyGeneratorY}};
+	static constexpr bool IsOnCurve(const Point& point) { return point.template IsOnCurve<kToyB>(); }
+};
 
 template <typename CurveType>
 typename CurveType::Signature ParseDerSignature(const std::vector<uint8_t>& bytes) {
@@ -113,12 +124,6 @@ void ExpectPublicKeyPointEq(const typename CurveType::PublicKey& actual, const t
 
 ToyCurve::Point MakeToyPoint(uint64_t x, uint64_t y) {
 	return {ToyCurve::Mod_p{x}, ToyCurve::Mod_p{y}};
-}
-
-std::array<uint8_t, 8> MakeToyDigest(uint64_t value) {
-	std::array<uint8_t, 8> digest{};
-	digest.back() = static_cast<uint8_t>(value);
-	return digest;
 }
 
 void ExpectToyPointEq(const ToyCurve::Point& actual, const ToyCurve::Point& expected) {
@@ -334,73 +339,9 @@ TEST(CurveTest, WindowedNafRecoderProducesExpectedSignedDigits) {
 	EXPECT_EQ(ReconstructFromNaf(negative), 18u);
 }
 
-TEST(CurveTest, PublicKeyValidationRejectsInfinityOffCurveOutOfRangeAndWrongSubgroup) {
-	const ToyCurve::Point generator = ToyCurve::G;
-	auto out_of_range_x = EncodeUncompressedPublicKey<ToyCurve>(generator);
-	auto out_of_range_y = EncodeUncompressedPublicKey<ToyCurve>(generator);
-	out_of_range_x[8] = static_cast<uint8_t>(kToyPrime.Words()[0]);
-	out_of_range_y[16] = static_cast<uint8_t>(kToyPrime.Words()[0]);
-
-	const auto public_key = ParsePublicKey<ToyCurve>(generator);
-
-	ASSERT_TRUE(public_key.has_value());
-	ExpectPublicKeyPointEq<ToyCurve>(*public_key, generator);
-	EXPECT_FALSE(ToyCurve::PublicKeyFromSEC1(EncodeUncompressedPublicKey<ToyCurve>(ToyCurve::Point{})).has_value());
-	EXPECT_FALSE(ToyCurve::PublicKeyFromSEC1(EncodeUncompressedPublicKey<ToyCurve>(MakeToyPoint(1, 1))).has_value());
-	EXPECT_FALSE(ToyCurve::PublicKeyFromSEC1(out_of_range_x).has_value());
-	EXPECT_FALSE(ToyCurve::PublicKeyFromSEC1(out_of_range_y).has_value());
-	EXPECT_FALSE(ToyCurve::PublicKeyFromSEC1(EncodeUncompressedPublicKey<ToyCurve>(MakeToyPoint(0, 2))).has_value());
-}
-
-TEST(CurveTest, VerifySignatureRejectsInvalidScalarBounds) {
-	const auto public_key = ParsePublicKey<ToyCurve>(MakeToyPoint(16, 6));
-	const std::array<uint8_t, 8> digest = MakeToyDigest(1);
-
-	ASSERT_TRUE(public_key.has_value());
-	EXPECT_FALSE(ToyCurve::VerifySignature(*public_key, {Uint64{0}, Uint64{6}}, digest));
-	EXPECT_FALSE(ToyCurve::VerifySignature(*public_key, {kToyOrder, Uint64{6}}, digest));
-	EXPECT_FALSE(ToyCurve::VerifySignature(*public_key, {Uint64{4}, Uint64{0}}, digest));
-	EXPECT_FALSE(ToyCurve::VerifySignature(*public_key, {Uint64{4}, kToyOrder}, digest));
-}
-
-TEST(CurveTest, VerifySignatureRejectsInfinityResultAndWrongDigest) {
-	const auto public_key = ParsePublicKey<ToyCurve>(MakeToyPoint(16, 6));
-	const ToyCurve::Signature valid_signature{Uint64{4}, Uint64{6}};
-	const ToyCurve::Signature infinity_signature{Uint64{1}, Uint64{1}};
-
-	ASSERT_TRUE(public_key.has_value());
-	EXPECT_FALSE(ToyCurve::VerifySignature(*public_key, infinity_signature, MakeToyDigest(4)));
-	EXPECT_FALSE(ToyCurve::VerifySignature(*public_key, valid_signature, MakeToyDigest(2)));
-}
-
-TEST(CurveTest, VerifySignatureAcceptsKnownValidToyExample) {
-	const auto public_key = ParsePublicKey<ToyCurve>(MakeToyPoint(16, 6));
-	const ToyCurve::Signature signature{Uint64{4}, Uint64{6}};
-
-	ASSERT_TRUE(public_key.has_value());
-	EXPECT_TRUE(ToyCurve::VerifySignature(*public_key, signature, MakeToyDigest(1)));
-}
-
-TEST(CurveTest, VerifySignatureAcceptsToyExampleWithZeroBitStepInLinearCombination) {
-	const auto public_key = ParsePublicKey<ToyCurve>(MakeToyPoint(16, 6));
-	const ToyCurve::Signature signature{Uint64{2}, Uint64{1}};
-
-	ASSERT_TRUE(public_key.has_value());
-	EXPECT_TRUE(ToyCurve::VerifySignature(*public_key, signature, MakeToyDigest(4)));
-}
-
-TEST(CurveTest, VerifySignatureReducesResultXCoordinateModuloOrder) {
-	const auto public_key = ParsePublicKey<ToyCurve>(ToyCurve::G);
-	const ToyCurve::Signature signature{Uint64{2}, Uint64{3}};
-
-	ASSERT_GT((ToyCurve::Wide{3} * ToyCurve::G).NormalizedX().x, kToyOrder);
-	ASSERT_TRUE(public_key.has_value());
-	EXPECT_TRUE(ToyCurve::VerifySignature(*public_key, signature, MakeToyDigest(0)));
-}
-
 TEST(CurveTest, Secp256k1GeneratorIsOnCurveAndInMainSubgroup) {
-	EXPECT_TRUE(secp256k1::IsOnCurve(secp256k1::G));
-	EXPECT_TRUE((constants::n * secp256k1::G).IsInfinity());
+	EXPECT_TRUE(Curve::IsOnCurve(Curve::G));
+	EXPECT_TRUE((secp256k1::n * Curve::G).IsInfinity());
 }
 
 TEST(CurveTest, Secp256k1PublicKeyFromSEC1ParsesAndValidatesUncompressedKeys) {
@@ -416,18 +357,18 @@ TEST(CurveTest, Secp256k1PublicKeyFromSEC1ParsesAndValidatesUncompressedKeys) {
 			0x9c, 0x47, 0xd0, 0x8f, 0xfb, 0x10, 0xd4, 0xb8,
 	};
 
-	const auto public_key = secp256k1::PublicKeyFromSEC1(public_key_bytes);
+	const auto public_key = Curve::PublicKeyFromSEC1(public_key_bytes);
 
 	ASSERT_TRUE(public_key.has_value());
-	ExpectPublicKeyPointEq<secp256k1>(*public_key, secp256k1::G);
+	ExpectPublicKeyPointEq<Curve>(*public_key, Curve::G);
 
 	auto wrong_prefix = public_key_bytes;
 	wrong_prefix[0] = 0x03;
-	EXPECT_FALSE(secp256k1::PublicKeyFromSEC1(wrong_prefix).has_value());
+	EXPECT_FALSE(Curve::PublicKeyFromSEC1(wrong_prefix).has_value());
 
 	auto off_curve = public_key_bytes;
 	++off_curve.back();
-	EXPECT_FALSE(secp256k1::PublicKeyFromSEC1(off_curve).has_value());
+	EXPECT_FALSE(Curve::PublicKeyFromSEC1(off_curve).has_value());
 }
 
 TEST(CurveTest, Secp256k1PublicKeyFromSEC1ParsesCompressedKeysWithEitherParity) {
@@ -441,14 +382,14 @@ TEST(CurveTest, Secp256k1PublicKeyFromSEC1ParsesCompressedKeysWithEitherParity) 
 	auto odd_generator = even_generator;
 	odd_generator[0] = 0x03;
 
-	const auto even_public_key = secp256k1::PublicKeyFromSEC1(even_generator);
-	const auto odd_public_key = secp256k1::PublicKeyFromSEC1(odd_generator);
-	const secp256k1::Affine generator_affine = secp256k1::G;
+	const auto even_public_key = Curve::PublicKeyFromSEC1(even_generator);
+	const auto odd_public_key = Curve::PublicKeyFromSEC1(odd_generator);
+	const Curve::Affine generator_affine = Curve::G;
 
 	ASSERT_TRUE(even_public_key.has_value());
 	ASSERT_TRUE(odd_public_key.has_value());
-	ExpectPublicKeyPointEq<secp256k1>(*even_public_key, secp256k1::G);
-	ExpectPublicKeyPointEq<secp256k1>(*odd_public_key, {generator_affine.x, -generator_affine.y});
+	ExpectPublicKeyPointEq<Curve>(*even_public_key, Curve::G);
+	ExpectPublicKeyPointEq<Curve>(*odd_public_key, {generator_affine.x, -generator_affine.y});
 
 	const std::array<uint8_t, 33> invalid_x = {
 			0x02,
@@ -457,20 +398,32 @@ TEST(CurveTest, Secp256k1PublicKeyFromSEC1ParsesCompressedKeysWithEitherParity) 
 			0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
 			0xff, 0xff, 0xff, 0xfe, 0xff, 0xff, 0xfc, 0x2f,
 	};
-	EXPECT_FALSE(secp256k1::PublicKeyFromSEC1(invalid_x).has_value());
+	EXPECT_FALSE(Curve::PublicKeyFromSEC1(invalid_x).has_value());
 }
 
 TEST(CurveTest, Secp256k1VerifiesKnownDeterministicSignatureExample) {
-	const auto public_key = ParsePublicKey<secp256k1>(secp256k1::G);
-	const secp256k1::Signature signature{
+	const auto public_key = ParsePublicKey<Curve>(Curve::G);
+	const Curve::Signature signature{
 			"f73f5ad664342164c3997a266e1dc6b066aeddacf4e231cb024c9134dd4a6ab8"_h256,
 			"b8f4f7af604af853c210c202c328944c8fe64bd1001154efbaeb3715b3ec9257"_h256};
 	const auto digest = "69b595411d2e081915f237bdff5a0a293f32a1138f406f7e8b89984ec74093cd"_bytes;
 	const auto wrong_digest = "69b595411d2e081915f237bdff5a0a293f32a1138f406f7e8b89984ec74093cc"_bytes;
 
 	ASSERT_TRUE(public_key.has_value());
-	EXPECT_TRUE(secp256k1::VerifySignature(*public_key, signature, digest));
-	EXPECT_FALSE(secp256k1::VerifySignature(*public_key, signature, wrong_digest));
+	EXPECT_TRUE(Curve::VerifySignature(*public_key, signature, digest));
+	EXPECT_FALSE(Curve::VerifySignature(*public_key, signature, wrong_digest));
+}
+
+TEST(CurveTest, Secp256k1VerifyRejectsOutOfRangeScalars) {
+	const auto public_key = ParsePublicKey<Curve>(Curve::G);
+	const auto digest = "69b595411d2e081915f237bdff5a0a293f32a1138f406f7e8b89984ec74093cd"_bytes;
+	const Curve::Wide one{1}, zero{};
+
+	ASSERT_TRUE(public_key.has_value());
+	EXPECT_FALSE(Curve::VerifySignature(*public_key, {zero, one}, digest));
+	EXPECT_FALSE(Curve::VerifySignature(*public_key, {one, zero}, digest));
+	EXPECT_FALSE(Curve::VerifySignature(*public_key, {secp256k1::n, one}, digest));
+	EXPECT_FALSE(Curve::VerifySignature(*public_key, {one, secp256k1::n}, digest));
 }
 
 TEST(CurveTest, Secp256k1VerifiesBitcoinExampleUsingRawDigestDerAndUncompressedPubkeyBytes) {
@@ -505,42 +458,42 @@ TEST(CurveTest, Secp256k1VerifiesBitcoinExampleUsingRawDigestDerAndUncompressedP
 			0x21, 0xa8, 0x76, 0x8d, 0x1d, 0x09,
 	};
 
-	const auto public_key = secp256k1::PublicKeyFromSEC1(public_key_bytes);
-	const auto signature = ParseDerSignature<secp256k1>(signature_bytes);
+	const auto public_key = Curve::PublicKeyFromSEC1(public_key_bytes);
+	const auto signature = ParseDerSignature<Curve>(signature_bytes);
 
 	ASSERT_TRUE(public_key.has_value());
-	EXPECT_TRUE(secp256k1::VerifySignature(*public_key, signature, hashed_commitment_bytes));
+	EXPECT_TRUE(Curve::VerifySignature(*public_key, signature, hashed_commitment_bytes));
 }
 
-secp256k1::Mod_n RandomScalarModN(std::mt19937_64& rng) {
+Curve::Mod_n RandomScalarModN(std::mt19937_64& rng) {
 	const std::array<uint64_t, 4> words{rng(), rng(), rng(), rng()};
-	auto value = UIntW<256>{words}.Modulo(constants::n);
+	auto value = UIntW<256>{words}.Modulo(secp256k1::n);
 	if (value == UIntW<256>::Zero()) value = UIntW<256>{1};
-	return secp256k1::Mod_n{value};
+	return Curve::Mod_n{value};
 }
 
 struct Secp256k1SignedMessage {
-	secp256k1::PublicKey public_key;
-	secp256k1::Signature signature;
+	Curve::PublicKey public_key;
+	Curve::Signature signature;
 	std::array<uint8_t, 32> digest;
 };
 
 // Produces a genuine ECDSA signature over a random key pair and random digest, so the verify
 // path is exercised with a non-degenerate public key (Q != G).
 Secp256k1SignedMessage MakeRandomSecp256k1Signature(std::mt19937_64& rng) {
-	const secp256k1::Mod_n private_key = RandomScalarModN(rng);
-	const secp256k1::Point public_point = private_key.x * secp256k1::Point{secp256k1::G};
-	const auto public_key = ParsePublicKey<secp256k1>(public_point);
+	const Curve::Mod_n private_key = RandomScalarModN(rng);
+	const Curve::Point public_point = private_key.x * Curve::Point{Curve::G};
+	const auto public_key = ParsePublicKey<Curve>(public_point);
 	EXPECT_TRUE(public_key.has_value());
 
 	std::array<uint8_t, 32> digest{};
 	for (auto& byte : digest) byte = static_cast<uint8_t>(rng());
-	const secp256k1::Mod_n z{secp256k1::Wide::FromBigEndianBytes(digest)};
+	const Curve::Mod_n z{Curve::Wide::FromBigEndianBytes(digest)};
 
-	const secp256k1::Mod_n nonce = RandomScalarModN(rng);
-	const secp256k1::Point nonce_point = nonce.x * secp256k1::Point{secp256k1::G};
-	const secp256k1::Mod_n r{nonce_point.NormalizedX().x.Modulo(constants::n)};
-	const secp256k1::Mod_n s = (z + r * private_key) / nonce;
+	const Curve::Mod_n nonce = RandomScalarModN(rng);
+	const Curve::Point nonce_point = nonce.x * Curve::Point{Curve::G};
+	const Curve::Mod_n r{nonce_point.NormalizedX().x.Modulo(secp256k1::n)};
+	const Curve::Mod_n s = (z + r * private_key) / nonce;
 	return {*public_key, {r.x, s.x}, digest};
 }
 
@@ -548,29 +501,29 @@ Secp256k1SignedMessage MakeRandomSecp256k1Signature(std::mt19937_64& rng) {
 // the same valid signatures and reject the same tampered ones. This is the consensus-critical net.
 TEST(CurveTest, Secp256k1WnafVerifyMatchesJointNafOnRandomSignatures) {
 	std::mt19937_64 rng{0x5eed0c0ffeed1234ull};
-	const auto joint_naf = [](const secp256k1::Wide& u1, const secp256k1::Wide& u2, const secp256k1::Affine& Q) {
-		return LinearCombination<256, constants::p, constants::a>(u1, secp256k1::G, u2, Q);
+	const auto joint_naf = [](const Curve::Wide& u1, const Curve::Wide& u2, const Curve::Affine& Q) {
+		return LinearCombination<256, secp256k1::p, secp256k1::a>(u1, Curve::G, u2, Q);
 	};
 
 	for (int i = 0; i < 100; ++i) {
 		const auto [public_key, signature, digest] = MakeRandomSecp256k1Signature(rng);
 
-		EXPECT_TRUE(secp256k1::VerifySignature(public_key, signature, digest)) << "i=" << i;
-		EXPECT_TRUE(secp256k1::VerifySignatureWith(public_key, signature, digest, joint_naf)) << "i=" << i;
+		EXPECT_TRUE(Curve::VerifySignature(public_key, signature, digest)) << "i=" << i;
+		EXPECT_TRUE(Curve::VerifySignatureWith(public_key, signature, digest, joint_naf)) << "i=" << i;
 
 		auto tampered = digest;
 		tampered[i % tampered.size()] ^= 0xFF;
-		EXPECT_FALSE(secp256k1::VerifySignature(public_key, signature, tampered)) << "i=" << i;
-		EXPECT_EQ(secp256k1::VerifySignature(public_key, signature, tampered),
-							secp256k1::VerifySignatureWith(public_key, signature, tampered, joint_naf)) << "i=" << i;
+		EXPECT_FALSE(Curve::VerifySignature(public_key, signature, tampered)) << "i=" << i;
+		EXPECT_EQ(Curve::VerifySignature(public_key, signature, tampered),
+							Curve::VerifySignatureWith(public_key, signature, tampered, joint_naf)) << "i=" << i;
 	}
 }
 
 // The generator-table window width is configurable and must not affect the result. Sweep it,
 // including the previously-broken w >= 8 range, against a known-answer signature.
 TEST(CurveTest, Secp256k1WnafVerifyIsCorrectAcrossGeneratorTableWidths) {
-	const auto public_key = ParsePublicKey<secp256k1>(secp256k1::G);
-	const secp256k1::Signature signature{
+	const auto public_key = ParsePublicKey<Curve>(Curve::G);
+	const Curve::Signature signature{
 			"f73f5ad664342164c3997a266e1dc6b066aeddacf4e231cb024c9134dd4a6ab8"_h256,
 			"b8f4f7af604af853c210c202c328944c8fe64bd1001154efbaeb3715b3ec9257"_h256};
 	const auto digest = "69b595411d2e081915f237bdff5a0a293f32a1138f406f7e8b89984ec74093cd"_bytes;
@@ -578,10 +531,68 @@ TEST(CurveTest, Secp256k1WnafVerifyIsCorrectAcrossGeneratorTableWidths) {
 
 	ASSERT_TRUE(public_key.has_value());
 	for (int width = 2; width <= 12; ++width) {
-		secp256k1::BuildGeneratorTable(width);
-		EXPECT_TRUE(secp256k1::VerifySignature(*public_key, signature, digest)) << "width=" << width;
-		EXPECT_FALSE(secp256k1::VerifySignature(*public_key, signature, wrong_digest)) << "width=" << width;
+		Curve::BuildGeneratorTable(width);
+		EXPECT_TRUE(Curve::VerifySignature(*public_key, signature, digest)) << "width=" << width;
+		EXPECT_FALSE(Curve::VerifySignature(*public_key, signature, wrong_digest)) << "width=" << width;
 	}
+}
+
+// SplitLambda must give k == k1 + k2*lambda (mod n) with |k1|, |k2| < 2^128 -- the half-width bound
+// LinearCombination_GLV relies on for its kBits/2 ladder length. lambda (the endomorphism eigenvalue)
+// is a test oracle only; the decomposition itself uses the lattice basis, not lambda.
+TEST(CurveTest, SplitLambdaDecomposesScalarWithBoundedHalfWidthParts) {
+	const auto lambda = "5363ad4cc05c30e0a5261c028812645a122e22ea20816678df02967c1b23bd72"_h256;
+	const auto residue = [](const SignedScalar<256>& s) {
+		return s.negative ? secp256k1::n - s.magnitude : s.magnitude;  // canonical [0, n) representative
+	};
+	std::mt19937_64 rng{0x1abe11ed1234ull};
+	for (int i = 0; i < 1000; ++i) {
+		const UIntW<256> k = RandomScalarModN(rng).x;
+		const auto split = SplitLambda<256, secp256k1::n, secp256k1::glv_a1, secp256k1::glv_minus_b1,
+		                               secp256k1::glv_a2, secp256k1::glv_b2>(k);
+		const Curve::Mod_n reconstructed = Curve::Mod_n{residue(split.k1)} +
+		                                       Curve::Mod_n{residue(split.k2)} * Curve::Mod_n{lambda};
+		EXPECT_EQ(reconstructed.x, k) << "i=" << i;
+		EXPECT_LE(split.k1.magnitude.SignificantBits(), 128u) << "i=" << i;
+		EXPECT_LE(split.k2.magnitude.SignificantBits(), 128u) << "i=" << i;
+	}
+}
+
+// LinearCombination_GLV must equal the joint-NAF reference for u1*G + u2*Q over arbitrary scalars.
+TEST(CurveTest, LinearCombinationGlvMatchesJointNaf) {
+	constexpr int kWidth = 8;
+	std::vector<Curve::Affine> g_base(1u << (kWidth - 1)), g_phi(1u << (kWidth - 1));
+	PrecomputeTableAffine(Curve::G, std::span{g_base});
+	const Curve::Mod_p beta{secp256k1::beta};
+	for (size_t j = 0; j < g_base.size(); ++j) g_phi[j] = {beta * g_base[j].x, g_base[j].y};
+	const std::span<const Curve::Affine> g_base_span{g_base}, g_phi_span{g_phi};
+
+	const auto split = [](const UIntW<256>& u) {
+		return SplitLambda<256, secp256k1::n, secp256k1::glv_a1, secp256k1::glv_minus_b1,
+		                   secp256k1::glv_a2, secp256k1::glv_b2>(u);
+	};
+	std::mt19937_64 rng{0xC0FFEEull};
+	for (int i = 0; i < 200; ++i) {
+		const UIntW<256> u1 = RandomScalarModN(rng).x, u2 = RandomScalarModN(rng).x;
+		const Curve::Affine Q = RandomScalarModN(rng).x * Curve::G;
+
+		const GlvTerm<256, std::span<const Curve::Affine>> g_term{split(u1), g_base_span, g_phi_span};
+		const auto q_term = MakeVariableGlvTerm<256, secp256k1::p, secp256k1::a>(split(u2), Q, beta);
+
+		const Curve::Affine glv = LinearCombination_GLV<256, secp256k1::p, secp256k1::a>(g_term, q_term);
+		const Curve::Affine ref = LinearCombination<256, secp256k1::p, secp256k1::a>(u1, Curve::G, u2, Q);
+		EXPECT_EQ(glv.x.x, ref.x.x) << "i=" << i;
+		EXPECT_EQ(glv.y.x, ref.y.x) << "i=" << i;
+	}
+}
+
+// The wNAF sign flag must encode the negated value (GLV folds the decomposition sign in at recoding).
+TEST(CurveTest, WindowedNafWithNegativeFlagRecodesNegatedValue) {
+	for (int w = 2; w <= 12; ++w)
+		for (const uint64_t value : WnafTestValues()) {
+			const auto naf = WindowedNonAdjacentForm(ToyCurve::Wide{value}, w, /*negative=*/true);
+			EXPECT_EQ(ReconstructFromNaf(naf), uint64_t{0} - value) << "w=" << w << " value=" << value;
+		}
 }
 
 }  // namespace

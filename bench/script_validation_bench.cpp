@@ -25,7 +25,7 @@
 namespace hornet::consensus::rules {
 namespace {
 
-using secp256k1 = crypto::ecdsa::secp256k1;
+using Curve = crypto::ecdsa::Curve;
 using protocol::script::SpendContext;
 using protocol::script::SpendPath;
 using protocol::script::Writer;
@@ -59,7 +59,7 @@ std::vector<uint8_t> EncodeDerInteger(const Wide& value) {
   return encoded;
 }
 
-std::vector<uint8_t> EncodeDerSignature(const secp256k1::Signature& signature, uint8_t sighash_type = 0x01) {
+std::vector<uint8_t> EncodeDerSignature(const Curve::Signature& signature, uint8_t sighash_type = 0x01) {
   const auto r = EncodeDerInteger(signature.first);
   const auto s = EncodeDerInteger(signature.second);
 
@@ -105,7 +105,7 @@ std::vector<uint8_t> MakeP2PKHLockingScript(std::span<const uint8_t> pubkey_hash
 }
 
 struct SignedDigest {
-  secp256k1::Signature signature;
+  Curve::Signature signature;
   std::vector<uint8_t> encoded_signature;
   protocol::Hash digest;
 };
@@ -115,15 +115,15 @@ SignedDigest MakeSignature(const SpendContext& spend, std::span<const uint8_t> l
   static constexpr std::array<uint8_t, 1> kSigHashAll = {0x01};
   const auto digest = protocol::script::runtime::BuildSpendDigest(spend, kSigHashAll, locking_script);
 
-  const secp256k1::Wide private_key{1};
-  const secp256k1::Wide nonce{1};
-  const secp256k1::Point nonce_point = nonce * secp256k1::G;
-  const secp256k1::Mod_n r{nonce_point.NormalizedX().x.Modulo(crypto::ecdsa::constants::n)};
-  const secp256k1::Mod_n z{secp256k1::Wide::FromBigEndianBytes(digest)};
-  const secp256k1::Mod_n d{private_key};
-  const secp256k1::Mod_n s = (z + r * d) / secp256k1::Mod_n{nonce};
+  const Curve::Wide private_key{1};
+  const Curve::Wide nonce{1};
+  const Curve::Point nonce_point = nonce * Curve::G;
+  const Curve::Mod_n r{nonce_point.NormalizedX().x.Modulo(crypto::ecdsa::secp256k1::n)};
+  const Curve::Mod_n z{Curve::Wide::FromBigEndianBytes(digest)};
+  const Curve::Mod_n d{private_key};
+  const Curve::Mod_n s = (z + r * d) / Curve::Mod_n{nonce};
 
-  const secp256k1::Signature signature{r.x, s.x};
+  const Curve::Signature signature{r.x, s.x};
   return {signature, EncodeDerSignature(signature, kSigHashAll.front()), digest};
 }
 
@@ -144,25 +144,25 @@ struct BenchSpend {
   [[nodiscard]] InputSpendContext Context() const { return {tx, spend, height}; }
 };
 
-const secp256k1::Affine& PublicKeyPoint(const secp256k1::PublicKey& public_key) {
+const Curve::Affine& PublicKeyPoint(const Curve::PublicKey& public_key) {
   return public_key;
 }
 
-secp256k1::PublicKey ParseCompressedPublicKey() {
-  const auto public_key = secp256k1::PublicKeyFromSEC1(kCompressedPubkey);
+Curve::PublicKey ParseCompressedPublicKey() {
+  const auto public_key = Curve::PublicKeyFromSEC1(kCompressedPubkey);
   hornet::Assert(public_key.has_value());
   return *public_key;
 }
 
 struct VerifySignatureBenchCase {
-  secp256k1::PublicKey public_key;
-  secp256k1::Signature signature;
+  Curve::PublicKey public_key;
+  Curve::Signature signature;
   protocol::Hash digest;
 };
 
 struct VerifySignatureSEC1BenchCase {
   std::span<const uint8_t> pubkey_bytes;
-  secp256k1::Signature signature;
+  Curve::Signature signature;
   protocol::Hash digest;
 };
 
@@ -252,13 +252,13 @@ static void BM_ValidateScripts_P2PKH(benchmark::State& state) {
 
 static void BM_VerifySignature_Secp256k1(benchmark::State& state) {
   const VerifySignatureBenchCase bench_case = MakeVerifySignatureBenchCase();
-  if (!secp256k1::VerifySignature(bench_case.public_key, bench_case.signature, bench_case.digest)) {
+  if (!Curve::VerifySignature(bench_case.public_key, bench_case.signature, bench_case.digest)) {
     state.SkipWithError("failed to build valid secp256k1 verification case");
     return;
   }
 
   for (auto _ : state) {
-    benchmark::DoNotOptimize(secp256k1::VerifySignature(bench_case.public_key, bench_case.signature, bench_case.digest));
+    benchmark::DoNotOptimize(Curve::VerifySignature(bench_case.public_key, bench_case.signature, bench_case.digest));
   }
 
   state.SetItemsProcessed(state.iterations());
@@ -267,16 +267,16 @@ static void BM_VerifySignature_Secp256k1(benchmark::State& state) {
 
 static void BM_VerifySignature_FromSEC1_Secp256k1(benchmark::State& state) {
   const VerifySignatureSEC1BenchCase bench_case = MakeVerifySignatureSEC1BenchCase();
-  const auto public_key = secp256k1::PublicKeyFromSEC1(bench_case.pubkey_bytes);
-  if (!public_key || !secp256k1::VerifySignature(*public_key, bench_case.signature, bench_case.digest)) {
+  const auto public_key = Curve::PublicKeyFromSEC1(bench_case.pubkey_bytes);
+  if (!public_key || !Curve::VerifySignature(*public_key, bench_case.signature, bench_case.digest)) {
     state.SkipWithError("failed to build valid secp256k1 SEC1 verification case");
     return;
   }
 
   for (auto _ : state) {
-    const auto loop_public_key = secp256k1::PublicKeyFromSEC1(bench_case.pubkey_bytes);
+    const auto loop_public_key = Curve::PublicKeyFromSEC1(bench_case.pubkey_bytes);
     benchmark::DoNotOptimize(
-        secp256k1::VerifySignature(*loop_public_key, bench_case.signature, bench_case.digest));
+        Curve::VerifySignature(*loop_public_key, bench_case.signature, bench_case.digest));
   }
 
   state.SetItemsProcessed(state.iterations());
@@ -304,7 +304,7 @@ static void BM_BuildSpendDigest_P2PKH(benchmark::State& state) {
 
 static void BM_ParseSignatureDER_Lax(benchmark::State& state) {
   const CheckSigBenchCase bench_case = MakeCheckSigBenchCase();
-  const auto signature = crypto::ecdsa::ParseSignatureDER<secp256k1::Wide>(
+  const auto signature = crypto::ecdsa::ParseSignatureDER<Curve::Wide>(
       std::span<const uint8_t>{bench_case.encoded_signature}.first(bench_case.encoded_signature.size() - 1),
       crypto::ecdsa::DERParseType::Lax);
   if (!signature) {
@@ -315,7 +315,7 @@ static void BM_ParseSignatureDER_Lax(benchmark::State& state) {
   benchmark::DoNotOptimize(std::move(signature_sink));
 
   for (auto _ : state) {
-    const auto loop_signature = crypto::ecdsa::ParseSignatureDER<secp256k1::Wide>(
+    const auto loop_signature = crypto::ecdsa::ParseSignatureDER<Curve::Wide>(
         std::span<const uint8_t>{bench_case.encoded_signature}.first(bench_case.encoded_signature.size() - 1),
         crypto::ecdsa::DERParseType::Lax);
     auto loop_signature_sink = loop_signature->first.Words()[0];
@@ -327,7 +327,7 @@ static void BM_ParseSignatureDER_Lax(benchmark::State& state) {
 }
 
 static void BM_PublicKeyFromSEC1_Compressed(benchmark::State& state) {
-  const auto pubkey = secp256k1::PublicKeyFromSEC1(kCompressedPubkey);
+  const auto pubkey = Curve::PublicKeyFromSEC1(kCompressedPubkey);
   if (!pubkey) {
     state.SkipWithError("failed to build valid SEC1 pubkey input");
     return;
@@ -336,7 +336,7 @@ static void BM_PublicKeyFromSEC1_Compressed(benchmark::State& state) {
   benchmark::DoNotOptimize(std::move(pubkey_sink));
 
   for (auto _ : state) {
-    const auto loop_pubkey = secp256k1::PublicKeyFromSEC1(kCompressedPubkey);
+    const auto loop_pubkey = Curve::PublicKeyFromSEC1(kCompressedPubkey);
     auto loop_pubkey_sink = PublicKeyPoint(*loop_pubkey).x.x.Words()[0];
     benchmark::DoNotOptimize(std::move(loop_pubkey_sink));
   }
@@ -348,8 +348,8 @@ static void BM_PublicKeyFromSEC1_Compressed(benchmark::State& state) {
 static void BM_CheckSigSetup_P2PKH(benchmark::State& state) {
   const CheckSigBenchCase bench_case = MakeCheckSigBenchCase();
   const SpendContext spend_context{bench_case.tx, 0, SpendPath::LegacyDirect};
-  const auto pubkey = secp256k1::PublicKeyFromSEC1(kCompressedPubkey);
-  const auto signature = crypto::ecdsa::ParseSignatureDER<secp256k1::Wide>(
+  const auto pubkey = Curve::PublicKeyFromSEC1(kCompressedPubkey);
+  const auto signature = crypto::ecdsa::ParseSignatureDER<Curve::Wide>(
       std::span<const uint8_t>{bench_case.encoded_signature}.first(bench_case.encoded_signature.size() - 1),
       crypto::ecdsa::DERParseType::Lax);
   const auto digest = protocol::script::runtime::BuildSpendDigest(
@@ -364,10 +364,10 @@ static void BM_CheckSigSetup_P2PKH(benchmark::State& state) {
   for (auto _ : state) {
     const auto loop_digest = protocol::script::runtime::BuildSpendDigest(
         spend_context, bench_case.encoded_signature, bench_case.locking_script);
-    const auto loop_signature = crypto::ecdsa::ParseSignatureDER<secp256k1::Wide>(
+    const auto loop_signature = crypto::ecdsa::ParseSignatureDER<Curve::Wide>(
         std::span<const uint8_t>{bench_case.encoded_signature}.first(bench_case.encoded_signature.size() - 1),
         crypto::ecdsa::DERParseType::Lax);
-    const auto loop_pubkey = secp256k1::PublicKeyFromSEC1(kCompressedPubkey);
+    const auto loop_pubkey = Curve::PublicKeyFromSEC1(kCompressedPubkey);
     auto loop_digest_sink = loop_digest.front();
     auto loop_signature_sink = loop_signature->first.Words()[0];
     auto loop_pubkey_sink = PublicKeyPoint(*loop_pubkey).x.x.Words()[0];

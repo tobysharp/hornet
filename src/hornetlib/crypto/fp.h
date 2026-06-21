@@ -3,6 +3,7 @@
 #include <optional>
 
 #include "hornetlib/crypto/reduce.h"
+#include "hornetlib/crypto/secp256k1.h"
 #include "hornetlib/crypto/uintw.h"
 #include "hornetlib/util/hex.h"
 #include "hornetlib/util/throw.h"
@@ -29,14 +30,14 @@ template <int kXBits, int kMBits, const UIntW<kMBits>& p>
 constexpr UIntW<kMBits> ReduceModuloM(const UIntW<kXBits>& x) {
   static_assert(kXBits >= kMBits);
   if constexpr (kMBits == 256)
-    if constexpr (p == constants::p) return ReduceModuloP(x);
+    if constexpr (p == secp256k1::p) return ReduceModuloP(x);
   return x.Modulo(p);
 }
 
 template <int kBits, const UIntW<kBits>& p>
 constexpr UIntW<kBits> MultiplyModuloM(const UIntW<kBits>& x, const UIntW<kBits>& y) {
   if constexpr (kBits == 256)
-    if constexpr (p == constants::p) return ReduceModuloP(x, y);
+    if constexpr (p == secp256k1::p) return ReduceModuloP(x, y);
   return x.MultiplyWide(y).Modulo(p);
 }
 
@@ -44,7 +45,7 @@ template <int kBits, const UIntW<kBits>& p>
 constexpr UIntW<kBits> SquaredModuloM(const UIntW<kBits>& x) {
   const auto sqr = x.Squared();
   if constexpr (kBits == 256)
-    if constexpr (p == constants::p) return ReduceModuloP(sqr);
+    if constexpr (p == secp256k1::p) return ReduceModuloP(sqr);
   return sqr.Modulo(p);
 }
 

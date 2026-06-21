@@ -36,19 +36,19 @@ void BenchCheck(bool condition, const char* message) {
 }
 
 struct VerifySignatureBenchCase {
-  secp256k1::PublicKey public_key;
-  secp256k1::Signature signature;
+  Curve::PublicKey public_key;
+  Curve::Signature signature;
   std::array<uint8_t, 32> digest;
 };
 
 struct PointAddBenchCase {
-  secp256k1::Point lhs;
-  secp256k1::Point rhs;
+  Curve::Point lhs;
+  Curve::Point rhs;
 };
 
 struct PointMultiplyBenchCase {
-  secp256k1::Wide scalar;
-  secp256k1::Point point;
+  Curve::Wide scalar;
+  Curve::Point point;
 };
 
 uint64_t XorShift64(uint64_t& state) {
@@ -72,13 +72,13 @@ std::array<uint8_t, 32> ToBigEndianBytes(const UIntW<256>& value) {
   return bytes;
 }
 
-secp256k1::Mod_n RandomNonZeroScalar(uint64_t& state) {
-  auto reduced = RandomUInt256(state).Modulo(constants::n);
+Curve::Mod_n RandomNonZeroScalar(uint64_t& state) {
+  auto reduced = RandomUInt256(state).Modulo(secp256k1::n);
   if (reduced == UIntW<256>::Zero()) reduced = UIntW<256>{1};
-  return secp256k1::Mod_n{reduced};
+  return Curve::Mod_n{reduced};
 }
 
-std::array<uint8_t, 65> EncodeUncompressedPublicKey(const secp256k1::Affine& point) {
+std::array<uint8_t, 65> EncodeUncompressedPublicKey(const Curve::Affine& point) {
   std::array<uint8_t, 65> bytes{};
   bytes[0] = 0x04;
   const auto x = ToBigEndianBytes(point.x.x);
@@ -98,23 +98,23 @@ std::vector<VerifySignatureBenchCase> MakeVerifySignatureBenchCorpus() {
 
   uint64_t state = 0x6c8e9cf570932bd5ull;
   while (corpus.size() < kCorpusSize) {
-    const secp256k1::Mod_n private_key = RandomNonZeroScalar(state);
-    const secp256k1::Affine public_point = private_key.x * secp256k1::G;
-    const auto public_key = secp256k1::PublicKeyFromSEC1(EncodeUncompressedPublicKey(public_point));
+    const Curve::Mod_n private_key = RandomNonZeroScalar(state);
+    const Curve::Affine public_point = private_key.x * Curve::G;
+    const auto public_key = Curve::PublicKeyFromSEC1(EncodeUncompressedPublicKey(public_point));
     BenchCheck(public_key.has_value(), "random public key failed validation");
 
-    const secp256k1::Mod_n nonce = RandomNonZeroScalar(state);
-    const secp256k1::Point nonce_point = nonce.x * secp256k1::G;
-    const secp256k1::Mod_n r{nonce_point.NormalizedX().x.Modulo(constants::n)};
+    const Curve::Mod_n nonce = RandomNonZeroScalar(state);
+    const Curve::Point nonce_point = nonce.x * Curve::G;
+    const Curve::Mod_n r{nonce_point.NormalizedX().x.Modulo(secp256k1::n)};
     if (r.x == UIntW<256>::Zero()) continue;
 
     const auto digest = ToBigEndianBytes(RandomUInt256(state));
-    const secp256k1::Mod_n z{secp256k1::Wide::FromBigEndianBytes(digest)};
-    const secp256k1::Mod_n s = (z + r * private_key) / nonce;
+    const Curve::Mod_n z{Curve::Wide::FromBigEndianBytes(digest)};
+    const Curve::Mod_n s = (z + r * private_key) / nonce;
     if (s.x == UIntW<256>::Zero()) continue;
 
     VerifySignatureBenchCase bench_case{*public_key, {r.x, s.x}, digest};
-    BenchCheck(secp256k1::VerifySignature(bench_case.public_key, bench_case.signature, bench_case.digest),
+    BenchCheck(Curve::VerifySignature(bench_case.public_key, bench_case.signature, bench_case.digest),
                "generated signature did not verify");
     corpus.push_back(std::move(bench_case));
   }
@@ -131,14 +131,14 @@ std::vector<PointAddBenchCase> MakePointAddBenchCorpus() {
     auto rhs_scalar = RandomNonZeroScalar(state);
     while (rhs_scalar == lhs_scalar) rhs_scalar = RandomNonZeroScalar(state);
 
-    const secp256k1::Point lhs = lhs_scalar.x * secp256k1::G;
-    const secp256k1::Point rhs = rhs_scalar.x * secp256k1::G;
+    const Curve::Point lhs = lhs_scalar.x * Curve::G;
+    const Curve::Point rhs = rhs_scalar.x * Curve::G;
 
     PointAddBenchCase bench_case{lhs, rhs};
     Assert(!bench_case.lhs.IsInfinity());
     Assert(!bench_case.rhs.IsInfinity());
-    const secp256k1::Affine lhs_affine = bench_case.lhs;
-    const secp256k1::Affine rhs_affine = bench_case.rhs;
+    const Curve::Affine lhs_affine = bench_case.lhs;
+    const Curve::Affine rhs_affine = bench_case.rhs;
     Assert(lhs_affine.x != rhs_affine.x || lhs_affine.y != -rhs_affine.y);
     corpus.push_back(std::move(bench_case));
   }
@@ -154,7 +154,7 @@ std::vector<PointMultiplyBenchCase> MakePointMultiplyBenchCorpus() {
   for (std::size_t i = 0; i < kCorpusSize; ++i) {
     const auto scalar = RandomNonZeroScalar(state);
     const auto point_scalar = RandomNonZeroScalar(state);
-    PointMultiplyBenchCase bench_case{scalar.x, point_scalar.x * secp256k1::G};
+    PointMultiplyBenchCase bench_case{scalar.x, point_scalar.x * Curve::G};
     Assert(!bench_case.point.IsInfinity());
     corpus.push_back(std::move(bench_case));
   }
@@ -163,10 +163,10 @@ std::vector<PointMultiplyBenchCase> MakePointMultiplyBenchCorpus() {
 }
 
 struct LinCombBenchCase {
-  secp256k1::Wide u1;
-  secp256k1::Affine P;
-  secp256k1::Wide u2;
-  secp256k1::Affine Q;
+  Curve::Wide u1;
+  Curve::Affine P;
+  Curve::Wide u2;
+  Curve::Affine Q;
 };
 
 std::vector<LinCombBenchCase> MakeLinCombCorpus() {
@@ -176,8 +176,8 @@ std::vector<LinCombBenchCase> MakeLinCombCorpus() {
   for (std::size_t i = 0; i < kCorpusSize; ++i) {
     const auto u1 = RandomNonZeroScalar(state);
     const auto u2 = RandomNonZeroScalar(state);
-    const secp256k1::Affine P = RandomNonZeroScalar(state).x * secp256k1::G;
-    const secp256k1::Affine Q = RandomNonZeroScalar(state).x * secp256k1::G;
+    const Curve::Affine P = RandomNonZeroScalar(state).x * Curve::G;
+    const Curve::Affine Q = RandomNonZeroScalar(state).x * Curve::G;
     corpus.push_back({u1.x, P, u2.x, Q});
   }
   return corpus;
@@ -189,8 +189,8 @@ std::vector<std::pair<UIntW<256>, UIntW<256>>> MakeMultiplyModuloBenchCorpus() {
   uint64_t state = 0x0f4b2c1d9876a5e3ull;
 
   for (std::size_t i = 0; i < kCorpusSize; ++i) {
-    auto x = RandomUInt256(state).Modulo(constants::p);
-    auto y = RandomUInt256(state).Modulo(constants::p);
+    auto x = RandomUInt256(state).Modulo(secp256k1::p);
+    auto y = RandomUInt256(state).Modulo(secp256k1::p);
     if (x == UIntW<256>::Zero()) x = UIntW<256>{1};
     if (y == UIntW<256>::Zero()) y = UIntW<256>{1};
     corpus.emplace_back(x, y);
@@ -216,7 +216,7 @@ std::vector<UIntW<256>> MakeFieldModuloPCorpus() {
   uint64_t state = 0x4ea91cb8d6723f05ull;
 
   for (std::size_t i = 0; i < kCorpusSize; ++i) {
-    auto x = RandomUInt256(state).Modulo(constants::p);
+    auto x = RandomUInt256(state).Modulo(secp256k1::p);
     if (x == UIntW<256>::Zero()) x = UIntW<256>{1};
     corpus.push_back(x);
   }
@@ -269,19 +269,19 @@ static void RunVerifySignatureBench(benchmark::State& state, Verify verify) {
 // Production verify: the default path, now wNAF over the fixed-base generator table (built once
 // by the pre-timing correctness pass / corpus construction, outside the timed region).
 static void BM_Secp256k1_VerifySignature(benchmark::State& state) {
-  RunVerifySignatureBench(state, [](const secp256k1::PublicKey& pk, const secp256k1::Signature& sig,
+  RunVerifySignatureBench(state, [](const Curve::PublicKey& pk, const Curve::Signature& sig,
                                     const std::array<uint8_t, 32>& digest) {
-    return secp256k1::VerifySignature(pk, sig, digest);
+    return Curve::VerifySignature(pk, sig, digest);
   });
 }
 
 // Joint-NAF verify, kept for comparison now that wNAF is the default path.
 static void BM_Secp256k1_VerifySignature_JointNAF(benchmark::State& state) {
-  RunVerifySignatureBench(state, [](const secp256k1::PublicKey& pk, const secp256k1::Signature& sig,
+  RunVerifySignatureBench(state, [](const Curve::PublicKey& pk, const Curve::Signature& sig,
                                     const std::array<uint8_t, 32>& digest) {
-    return secp256k1::VerifySignatureWith(pk, sig, digest,
-        [](const secp256k1::Wide& u1, const secp256k1::Wide& u2, const secp256k1::Affine& Q) {
-          return LinearCombination<256, constants::p, constants::a>(u1, secp256k1::G, u2, Q);
+    return Curve::VerifySignatureWith(pk, sig, digest,
+        [](const Curve::Wide& u1, const Curve::Wide& u2, const Curve::Affine& Q) {
+          return LinearCombination<256, secp256k1::p, secp256k1::a>(u1, Curve::G, u2, Q);
         });
   });
 }
@@ -340,7 +340,7 @@ static void BM_Secp256k1_PointDouble(benchmark::State& state) {
 
 static void BM_Secp256k1_PointAddMixed(benchmark::State& state) {
   const auto corpus = MakePointAddBenchCorpus();
-  std::vector<secp256k1::Affine> rhs_affine;  // normalize outside the timed loop
+  std::vector<Curve::Affine> rhs_affine;  // normalize outside the timed loop
   rhs_affine.reserve(corpus.size());
   for (const auto& c : corpus) rhs_affine.push_back(c.rhs);
   std::size_t index = 0;
@@ -382,14 +382,14 @@ static void BM_LinComb(benchmark::State& state) {
 // differential check against the joint-NAF result gates correctness for every corpus entry.
 static void BM_LinComb_wNAF(benchmark::State& state) {
   constexpr int kGWidth = 10;
-  std::array<secp256k1::Affine, (1 << (kGWidth - 1))> g_table;
-  PrecomputeTableAffine(secp256k1::G, {g_table.data(), g_table.size()});
-  const std::span<const secp256k1::Affine> g_span{g_table.data(), g_table.size()};
+  std::array<Curve::Affine, (1 << (kGWidth - 1))> g_table;
+  PrecomputeTableAffine(Curve::G, {g_table.data(), g_table.size()});
+  const std::span<const Curve::Affine> g_span{g_table.data(), g_table.size()};
 
   const auto corpus = MakeLinCombCorpus();
   for (const auto& c : corpus) {
-    const secp256k1::Affine reference = LinearCombination<256, constants::p, constants::a>(c.u1, secp256k1::G, c.u2, c.Q);
-    const secp256k1::Affine actual = LinearCombination_wNAF<256, constants::p, constants::a>(c.u1, g_span, c.u2, c.Q);
+    const Curve::Affine reference = LinearCombination<256, secp256k1::p, secp256k1::a>(c.u1, Curve::G, c.u2, c.Q);
+    const Curve::Affine actual = LinearCombination_wNAF<256, secp256k1::p, secp256k1::a>(c.u1, g_span, c.u2, c.Q);
     BenchCheck(reference.x == actual.x && reference.y == actual.y, "wNAF result disagrees with joint NAF");
   }
 
@@ -402,7 +402,7 @@ static void BM_LinComb_wNAF(benchmark::State& state) {
     benchmark::DoNotOptimize(u1);
     benchmark::DoNotOptimize(u2);
     benchmark::DoNotOptimize(Q);
-    auto r = LinearCombination_wNAF<256, constants::p, constants::a>(u1, g_span, u2, Q);
+    auto r = LinearCombination_wNAF<256, secp256k1::p, secp256k1::a>(u1, g_span, u2, Q);
     benchmark::DoNotOptimize(r);
     benchmark::ClobberMemory();
   }
@@ -420,7 +420,7 @@ static void BM_MultiplyModP_256_Secp256k1P(benchmark::State& state) {
     auto y = input_y;
     benchmark::DoNotOptimize(x);
     benchmark::DoNotOptimize(y);
-    auto product = detail::MultiplyModuloM<256, constants::p>(x, y);
+    auto product = detail::MultiplyModuloM<256, secp256k1::p>(x, y);
     benchmark::DoNotOptimize(product);
     benchmark::ClobberMemory();
   }
@@ -454,7 +454,7 @@ static void BM_SquareModP_256_Secp256k1P(benchmark::State& state) {
     index = (index + 1) & (kCorpusSize - 1);
     auto x = input;
     benchmark::DoNotOptimize(x);
-    auto squared = detail::SquaredModuloM<256, constants::p>(x);
+    auto squared = detail::SquaredModuloM<256, secp256k1::p>(x);
     benchmark::DoNotOptimize(squared);
     benchmark::ClobberMemory();
   }
@@ -471,7 +471,7 @@ static void BM_MultiplySelfModP_256_Secp256k1P(benchmark::State& state) {
     index = (index + 1) & (kCorpusSize - 1);
     auto x = input;
     benchmark::DoNotOptimize(x);
-    auto product = detail::MultiplyModuloM<256, constants::p>(x, x);
+    auto product = detail::MultiplyModuloM<256, secp256k1::p>(x, x);
     benchmark::DoNotOptimize(product);
     benchmark::ClobberMemory();
   }
@@ -488,7 +488,7 @@ static void BM_InvertModuloOdd_256_Secp256k1P(benchmark::State& state) {
     index = (index + 1) & (kCorpusSize - 1);
     auto x = input;
     benchmark::DoNotOptimize(x);
-    auto inverse = detail::InvertModuloOdd<256, constants::p>(x);
+    auto inverse = detail::InvertModuloOdd<256, secp256k1::p>(x);
     benchmark::DoNotOptimize(inverse);
     benchmark::ClobberMemory();
   }
@@ -536,8 +536,8 @@ BENCHMARK(BM_Secp256k1_PointAdd);
 BENCHMARK(BM_Secp256k1_PointAddMixed);
 BENCHMARK(BM_Secp256k1_PointDouble);
 BENCHMARK(BM_Secp256k1_PointMultiply);
-BENCHMARK(BM_LinComb<LinearCombination<256, constants::p, constants::a>>)->Name("BM_LinComb_JointNAF");
-BENCHMARK(BM_LinComb<LinearCombination_NAF_Disjoint<256, constants::p, constants::a>>)->Name("BM_LinComb_DisjointNAF");
+BENCHMARK(BM_LinComb<LinearCombination<256, secp256k1::p, secp256k1::a>>)->Name("BM_LinComb_JointNAF");
+BENCHMARK(BM_LinComb<LinearCombination_NAF_Disjoint<256, secp256k1::p, secp256k1::a>>)->Name("BM_LinComb_DisjointNAF");
 BENCHMARK(BM_LinComb_wNAF);
 BENCHMARK(BM_MultiplyModP_256_Secp256k1P);
 BENCHMARK(BM_MultiplySelfModP_256_Secp256k1P);

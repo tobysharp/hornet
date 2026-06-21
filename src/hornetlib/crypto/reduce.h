@@ -1,6 +1,6 @@
 #pragma once
 
-#include "hornetlib/crypto/secp256k1_constants.h"
+#include "hornetlib/crypto/secp256k1.h"
 #include "hornetlib/crypto/uintw.h"
 
 namespace hornet::crypto::ecdsa {
@@ -23,8 +23,8 @@ constexpr Uint256 ReduceModuloP(const UIntW<kBits>& x) {
 }
 
 constexpr Uint256 ReduceModuloP(const UIntW<256>& b_2) {
-  if (b_2 < constants::p) return b_2;
-  else return b_2 - constants::p;  
+  if (b_2 < secp256k1::p) return b_2;
+  else return b_2 - secp256k1::p;  
 }
 
 constexpr Uint256 ReduceModuloP(const UIntW<320>& t1) {

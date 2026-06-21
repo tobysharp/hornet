@@ -47,7 +47,7 @@ std::vector<uint8_t> EncodeDerInteger(const Wide& value) {
   return encoded;
 }
 
-std::vector<uint8_t> EncodeDerSignature(const crypto::ecdsa::secp256k1::Signature& signature, uint8_t sighash_type = 0x01) {
+std::vector<uint8_t> EncodeDerSignature(const crypto::ecdsa::Curve::Signature& signature, uint8_t sighash_type = 0x01) {
   const auto r = EncodeDerInteger(signature.first);
   const auto s = EncodeDerInteger(signature.second);
 
@@ -89,18 +89,18 @@ std::vector<uint8_t> MakeP2PKHLockingScript(std::span<const uint8_t> pubkey_hash
 }
 
 std::vector<uint8_t> MakeP2PKHSignature(const protocol::script::SpendContext& spend, std::span<const uint8_t> locking_script) {
-  using secp256k1 = crypto::ecdsa::secp256k1;
+  using Curve = crypto::ecdsa::Curve;
 
   static constexpr std::array<uint8_t, 1> kSigHashAll = {0x01};
   const auto digest = protocol::script::runtime::BuildSpendDigest(spend, kSigHashAll, locking_script);
 
-  const secp256k1::Wide private_key{1};
-  const secp256k1::Wide nonce{1};
-  const secp256k1::Point nonce_point = nonce * secp256k1::G;
-  const secp256k1::Mod_n r{nonce_point.NormalizedX().x.Modulo(crypto::ecdsa::constants::n)};
-  const secp256k1::Mod_n z{secp256k1::Wide::FromBigEndianBytes(digest)};
-  const secp256k1::Mod_n d{private_key};
-  const secp256k1::Mod_n s = (z + r * d) / secp256k1::Mod_n{nonce};
+  const Curve::Wide private_key{1};
+  const Curve::Wide nonce{1};
+  const Curve::Point nonce_point = nonce * Curve::G;
+  const Curve::Mod_n r{nonce_point.NormalizedX().x.Modulo(crypto::ecdsa::secp256k1::n)};
+  const Curve::Mod_n z{Curve::Wide::FromBigEndianBytes(digest)};
+  const Curve::Mod_n d{private_key};
+  const Curve::Mod_n s = (z + r * d) / Curve::Mod_n{nonce};
 
   return EncodeDerSignature({r.x, s.x}, kSigHashAll.front());
 }
