@@ -281,7 +281,7 @@ static void BM_Secp256k1_VerifySignature_JointNAF(benchmark::State& state) {
                                     const std::array<uint8_t, 32>& digest) {
     return Curve::VerifySignatureWith(pk, sig, digest,
         [](const Curve::Wide& u1, const Curve::Wide& u2, const Curve::Affine& Q) {
-          return LinearCombination<256, secp256k1::p, secp256k1::a>(u1, Curve::G, u2, Q);
+          return LinearCombination(u1, Curve::G, u2, Q);
         });
   });
 }
@@ -388,8 +388,8 @@ static void BM_LinComb_wNAF(benchmark::State& state) {
 
   const auto corpus = MakeLinCombCorpus();
   for (const auto& c : corpus) {
-    const Curve::Affine reference = LinearCombination<256, secp256k1::p, secp256k1::a>(c.u1, Curve::G, c.u2, c.Q);
-    const Curve::Affine actual = LinearCombination_wNAF<256, secp256k1::p, secp256k1::a>(c.u1, g_span, c.u2, c.Q);
+    const Curve::Affine reference = LinearCombination(c.u1, Curve::G, c.u2, c.Q);
+    const Curve::Affine actual = LinearCombination_wNAF(c.u1, g_span, c.u2, c.Q);
     BenchCheck(reference.x == actual.x && reference.y == actual.y, "wNAF result disagrees with joint NAF");
   }
 
@@ -402,7 +402,7 @@ static void BM_LinComb_wNAF(benchmark::State& state) {
     benchmark::DoNotOptimize(u1);
     benchmark::DoNotOptimize(u2);
     benchmark::DoNotOptimize(Q);
-    auto r = LinearCombination_wNAF<256, secp256k1::p, secp256k1::a>(u1, g_span, u2, Q);
+    auto r = LinearCombination_wNAF(u1, g_span, u2, Q);
     benchmark::DoNotOptimize(r);
     benchmark::ClobberMemory();
   }
@@ -536,8 +536,8 @@ BENCHMARK(BM_Secp256k1_PointAdd);
 BENCHMARK(BM_Secp256k1_PointAddMixed);
 BENCHMARK(BM_Secp256k1_PointDouble);
 BENCHMARK(BM_Secp256k1_PointMultiply);
-BENCHMARK(BM_LinComb<LinearCombination<256, secp256k1::p, secp256k1::a>>)->Name("BM_LinComb_JointNAF");
-BENCHMARK(BM_LinComb<LinearCombination_NAF_Disjoint<256, secp256k1::p, secp256k1::a>>)->Name("BM_LinComb_DisjointNAF");
+BENCHMARK(BM_LinComb<LinearCombination>)->Name("BM_LinComb_JointNAF");
+BENCHMARK(BM_LinComb<LinearCombination_NAF_Disjoint>)->Name("BM_LinComb_DisjointNAF");
 BENCHMARK(BM_LinComb_wNAF);
 BENCHMARK(BM_MultiplyModP_256_Secp256k1P);
 BENCHMARK(BM_MultiplySelfModP_256_Secp256k1P);

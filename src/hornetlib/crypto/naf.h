@@ -59,8 +59,7 @@ constexpr auto WindowedNonAdjacentForm(const UIntW<kBits>& x, int w, bool negati
   return naf;
 }
 
-template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a>
-void PrecomputeTableJacobian(const AffinePoint<kBits, p, a>& P, std::span<JacobianPoint<kBits, p, a>> table) {
+inline void PrecomputeTableJacobian(const AffinePoint& P, std::span<JacobianPoint> table) {
   if (table.size() < 2u) return;
 
   // The table size is 2^(w-1) for window size w, to include both negative and positive odd multiples.
@@ -69,7 +68,7 @@ void PrecomputeTableJacobian(const AffinePoint<kBits, p, a>& P, std::span<Jacobi
   const int count = size >> 1;
 
   // We compute the odd-multiple points, {..., -5P, -3P, -P, P, 3P, 5P, ... } to fill the table.
-  const auto P2 = JacobianPoint<kBits, p, a>{P}.Double();
+  const auto P2 = JacobianPoint{P}.Double();
   table[count] = P;
   table[count - 1] = -P;
   for (int i = 1; i < count; ++i) {
@@ -81,9 +80,8 @@ void PrecomputeTableJacobian(const AffinePoint<kBits, p, a>& P, std::span<Jacobi
 // Builds the wide fixed-base odd-multiple table in affine form: { ..., -3P, -P, P, 3P, ... }.
 // Intended to be precomputed once for a fixed base (e.g. the generator) and passed into the
 // wNAF linear combination, so the per-table normalization cost is amortized across many calls.
-template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a>
-void PrecomputeTableAffine(const AffinePoint<kBits, p, a>& P, std::span<AffinePoint<kBits, p, a>> table) {
-  std::vector<JacobianPoint<kBits, p, a>> jacobian(table.size());
+inline void PrecomputeTableAffine(const AffinePoint& P, std::span<AffinePoint> table) {
+  std::vector<JacobianPoint> jacobian(table.size());
   PrecomputeTableJacobian(P, std::span{jacobian});
   for (int i = 0; i < std::ssize(table); ++i) table[i] = jacobian[i];  // Jacobian -> affine
 }

@@ -5,31 +5,30 @@
 
 #include "hornetlib/crypto/fp.h"
 #include "hornetlib/crypto/naf.h"
+#include "hornetlib/crypto/secp256k1.h"
 #include "hornetlib/crypto/uintw.h"
 #include "hornetlib/util/assert.h"
 
 namespace hornet::crypto::ecdsa {
 
 // Signed scalar: unsigned magnitude + sign (folded into the wNAF digits at recoding).
-template <int kBits>
 struct SignedScalar {
-  UIntW<kBits> magnitude;
+  UInt256 magnitude;
   bool negative;
 };
 
 // k1 + k2*lambda == k (mod n), with |k1|, |k2| ~ sqrt(n).
-template <int kBits>
 struct LambdaSplit {
-  SignedScalar<kBits> k1;  // coefficient of the base point P
-  SignedScalar<kBits> k2;  // coefficient of phi(P) = lambda*P
+  SignedScalar k1;  // coefficient of the base point P
+  SignedScalar k2;  // coefficient of phi(P) = lambda*P
 };
 
 // A GLV term: a scalar's lambda split with the odd-multiple tables of its base P and of phi(P).
 // Table is the table storage -- a span viewing fixed tables (G) or an owning array (per-call, Q).
 // LinearCombination_GLV sums two of these -- the G-side and the Q-side.
-template <int kBits, class Table>
+template <class Table>
 struct GlvTerm {
-  LambdaSplit<kBits> scalar;
+  LambdaSplit scalar;
   Table base;  // odd multiples of P
   Table phi;   // odd multiples of phi(P)
 
@@ -49,42 +48,41 @@ struct GlvTerm {
 // Decomposes k (reduced mod n) as k == k1 + k2*lambda (mod n) with |k1|, |k2| ~ sqrt(n), by Babai
 // rounding on the lattice basis (a1,b1),(a2,b2), a1*b2-a2*b1=n, b1<0 passed as minus_b1=-b1:
 //   beta1=round(b2*k/n), beta2=round(-b1*k/n); k1 = k-beta1*a1-beta2*a2; k2 = -(beta1*b1+beta2*b2).
-template <int kBits, const UIntW<kBits>& n, const UIntW<kBits>& a1, const UIntW<kBits>& minus_b1,
-          const UIntW<kBits>& a2, const UIntW<kBits>& b2>
-LambdaSplit<kBits> SplitLambda(const UIntW<kBits>& k) {
+inline LambdaSplit SplitLambda(const UInt256& k) {
+  using namespace secp256k1;
   using Mod_n = Fp<kBits, n>;
   Assert(k < n);
 
   // round(num/n) = floor((num + n/2)/n), n odd. A quotient, not a residue -> raw division, not Fp.
-  const auto round_div = [](const UIntW<2 * kBits>& num) -> UIntW<kBits> {
-    const auto shifted = num + (n >> 1).template ZeroExtend<2 * kBits>();
-    return shifted.QuotientRemainder(n).first.template LowBits<kBits>();
+  const auto round_div = [](const UIntW<512>& num) -> UInt256 {
+    const auto shifted = num + (n >> 1).template ZeroExtend<512>();
+    return shifted.QuotientRemainder(n).first.template LowBits<256>();
   };
-  const Mod_n beta1{round_div(b2.MultiplyWide(k))};
-  const Mod_n beta2{round_div(minus_b1.MultiplyWide(k))};
+  const Mod_n beta1{round_div(glv_b2.MultiplyWide(k))};
+  const Mod_n beta2{round_div(glv_minus_b1.MultiplyWide(k))};
 
   // k2 = minus_b1*beta1 - b2*beta2;  k1 = k - a1*beta1 - a2*beta2  (mod n, as Fp(n)).
-  const Mod_n k2 = Mod_n{minus_b1} * beta1 - Mod_n{b2} * beta2;
-  const Mod_n k1 = Mod_n{k} - Mod_n{a1} * beta1 - Mod_n{a2} * beta2;
+  const Mod_n k2 = Mod_n{glv_minus_b1} * beta1 - Mod_n{glv_b2} * beta2;
+  const Mod_n k1 = Mod_n{k} - Mod_n{glv_a1} * beta1 - Mod_n{glv_a2} * beta2;
 
   // Nearest signed representative: |k_i| << n/2, so a residue above n/2 is negative (magnitude n-x).
-  const UIntW<kBits> half = n >> 1;
-  const auto to_signed = [&half](const Mod_n& v) -> SignedScalar<kBits> {
-    return v.x > half ? SignedScalar<kBits>{n - v.x, true} : SignedScalar<kBits>{v.x, false};
+  const UInt256 half = n >> 1;
+  const auto to_signed = [&half](const Mod_n& v) -> SignedScalar {
+    return v.x > half ? SignedScalar{n - v.x, true} : SignedScalar{v.x, false};
   };
   return {to_signed(k1), to_signed(k2)};
 }
 
 // Builds an owning Q-side GlvTerm: the odd-multiple tables of Q and phi(Q) (2^{kWidth-1} entries
 // each) packed with the scalar split. The term owns its tables, so no external storage is needed.
-template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a, int kWidth = 5>
-GlvTerm<kBits, std::array<JacobianPoint<kBits, p, a>, 1 << (kWidth - 1)>> MakeVariableGlvTerm(
-    const LambdaSplit<kBits>& scalar, const AffinePoint<kBits, p, a>& Q, const Fp<kBits, p>& beta) {
-  GlvTerm<kBits, std::array<JacobianPoint<kBits, p, a>, 1 << (kWidth - 1)>> term;
+template <int kWidth = 5>
+GlvTerm<std::array<JacobianPoint, 1 << (kWidth - 1)>> MakeVariableGlvTerm(
+    const LambdaSplit& scalar, const AffinePoint& Q) {
+  GlvTerm<std::array<JacobianPoint, 1 << (kWidth - 1)>> term;
   term.scalar = scalar;
   PrecomputeTableJacobian(Q, {term.base.data(), term.base.size()});
   for (std::size_t i = 0; i < term.base.size(); ++i)
-    term.phi[i] = {beta * term.base[i].X, term.base[i].Y, term.base[i].Z};
+    term.phi[i] = {secp256k1::beta * term.base[i].X, term.base[i].Y, term.base[i].Z};
   return term;
 }
 

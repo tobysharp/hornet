@@ -14,7 +14,7 @@
 namespace hornet::crypto::ecdsa {
 
 template <class Point>
-constexpr Point Scale(const typename Point::Wide& scalar, const Point& pt) {
+constexpr Point Scale(const UInt256& scalar, const Point& pt) {
   const auto naf = NonAdjacentForm(scalar);
   constexpr int kBitCount = std::ssize(naf);
 
@@ -35,12 +35,11 @@ constexpr Point Scale(const typename Point::Wide& scalar, const Point& pt) {
   return sum;
 }
 
-template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a>
-constexpr JacobianPoint<kBits, p, a> LinearCombination(const UIntW<kBits>& u1, const AffinePoint<kBits, p, a>& P,
-                                                          const UIntW<kBits>& u2,
-                                                          const AffinePoint<kBits, p, a>& Q) {
-  using Affine = AffinePoint<kBits, p, a>;
-  using Point = JacobianPoint<kBits, p, a>;
+constexpr JacobianPoint LinearCombination(const UInt256& u1, const AffinePoint& P,
+                                                          const UInt256& u2,
+                                                          const AffinePoint& Q) {
+  using Affine = AffinePoint;
+  using Point = JacobianPoint;
   const auto naf1 = NonAdjacentForm(u1);
   const auto naf2 = NonAdjacentForm(u2);
   constexpr int kBitCount = std::ssize(naf1);
@@ -63,12 +62,11 @@ constexpr JacobianPoint<kBits, p, a> LinearCombination(const UIntW<kBits>& u1, c
   return sum;
 }
 
-template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a>
-constexpr JacobianPoint<kBits, p, a> LinearCombination_NAF_Disjoint(const UIntW<kBits>& u1, const AffinePoint<kBits, p, a>& P,
-                                                          const UIntW<kBits>& u2,
-                                                          const AffinePoint<kBits, p, a>& Q) {
-  using Affine = AffinePoint<kBits, p, a>;
-  using Point = JacobianPoint<kBits, p, a>;
+constexpr JacobianPoint LinearCombination_NAF_Disjoint(const UInt256& u1, const AffinePoint& P,
+                                                          const UInt256& u2,
+                                                          const AffinePoint& Q) {
+  using Affine = AffinePoint;
+  using Point = JacobianPoint;
   const auto nafP = NonAdjacentForm(u1);
   const auto nafQ = NonAdjacentForm(u2);
   constexpr int kBitCount = std::ssize(nafP);
@@ -90,11 +88,10 @@ constexpr JacobianPoint<kBits, p, a> LinearCombination_NAF_Disjoint(const UIntW<
 // Computes u1*P + u2*Q with wNAF recoding. The fixed-base table P_table holds the odd
 // affine multiples of P (built once via PrecomputeTableAffine); its width is inferred from
 // the table size (2^{w-1} entries). The variable base Q gets a narrow per-call table.
-template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a>
-JacobianPoint<kBits, p, a> LinearCombination_wNAF(const UIntW<kBits>& u1,
-                                                  std::span<const AffinePoint<kBits, p, a>> P_table,
-                                                  const UIntW<kBits>& u2, const AffinePoint<kBits, p, a>& Q) {
-  using Point = JacobianPoint<kBits, p, a>;
+inline JacobianPoint LinearCombination_wNAF(const UInt256& u1,
+                                                  std::span<const AffinePoint> P_table,
+                                                  const UInt256& u2, const AffinePoint& Q) {
+  using Point = JacobianPoint;
   constexpr int kQWidth = 5;
   const int kPWidth = std::bit_width(P_table.size());  // 2^{w-1} entries -> window width w
   const auto nafP = WindowedNonAdjacentForm(u1, kPWidth);
@@ -121,16 +118,16 @@ JacobianPoint<kBits, p, a> LinearCombination_wNAF(const UIntW<kBits>& u1,
 // (glv.h) carries a lambda split plus the odd-multiple tables for its base and phi(base), and yields
 // its wNAF digits (NonAdjacentFormDigits) and summands (Base/Phi). The accumulator is always
 // Jacobian; G's affine table yields mixed adds.
-template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a, class GTable, class QTable>
-JacobianPoint<kBits, p, a> LinearCombination_GLV(const GlvTerm<kBits, GTable>& g,
-                                                 const GlvTerm<kBits, QTable>& q) {
-  using Point = JacobianPoint<kBits, p, a>;
+template <class GTable, class QTable>
+JacobianPoint LinearCombination_GLV(const GlvTerm<GTable>& g,
+                                                 const GlvTerm<QTable>& q) {
+  using Point = JacobianPoint;
   const auto [naf_g_a, naf_g_b] = g.NonAdjacentFormDigits();
   const auto [naf_q_a, naf_q_b] = q.NonAdjacentFormDigits();
 
   // SplitLambda guarantees |k_i| < 2^(kBits/2), so the top wNAF digit index is <= kBits/2.
   Point sum;
-  for (int bit = kBits >> 1; bit >= 0; --bit) {
+  for (int bit = secp256k1::kBits >> 1; bit >= 0; --bit) {
     sum = sum.Double();
     if (naf_g_a[bit] != 0) sum += g.Base(naf_g_a[bit]);
     if (naf_g_b[bit] != 0) sum += g.Phi(naf_g_b[bit]);

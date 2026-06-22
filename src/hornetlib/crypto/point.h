@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "hornetlib/crypto/fp.h"
+#include "hornetlib/crypto/secp256k1.h"
 #include "hornetlib/crypto/uintw.h"
 
 namespace hornet::crypto::ecdsa {
@@ -11,13 +12,11 @@ namespace hornet::crypto::ecdsa {
 // Scalar multiplication of a curve point. Defined in scale.h; forward-declared here so the
 // operator* hidden friends below can delegate to it without point.h depending on scale.h.
 template <class Point>
-constexpr Point Scale(const typename Point::Wide& scalar, const Point& pt);
+constexpr Point Scale(const UInt256& scalar, const Point& pt);
 
-template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a>
 class AffinePoint {
  public:
-  using Mod_p = Fp<kBits, p>;
-  using Wide = typename Mod_p::Type;
+  using Mod_p = Fp<secp256k1::kBits, secp256k1::p>;
 
   constexpr AffinePoint() {}
   constexpr AffinePoint(const AffinePoint& rhs) : x(rhs.x), y(rhs.y) {}
@@ -26,11 +25,10 @@ class AffinePoint {
 
   constexpr bool IsInfinity() const { return x == 0 && y == 0; }
 
-  template <const UIntW<kBits>& b>
   constexpr bool IsOnCurve() const {
     if (IsInfinity()) return true;
     const auto lhs = y.Squared();
-    const auto rhs = (x.Squared() + a) * x + b;
+    const auto rhs = x.Squared() * x + secp256k1::b;
     return lhs == rhs;
   }
 
@@ -53,7 +51,7 @@ class AffinePoint {
   AffinePoint Double() const {
     if (IsInfinity()) return {};
 
-    const Mod_p lambda = (3 * x.Squared() + a) / (y + y);
+    const Mod_p lambda = (3 * x.Squared()) / (y + y);
     const Mod_p x3 = lambda.Squared() - (x + x);
     const Mod_p y3 = lambda * (x - x3) - y;
     return {x3, y3};
@@ -62,7 +60,7 @@ class AffinePoint {
   friend AffinePoint operator-(const AffinePoint& lhs, const AffinePoint& rhs) { return lhs + (-rhs); }
 
   // Scalar multiplication. Implemented by Scale (scale.h).
-  friend AffinePoint operator*(const Wide& scalar, const AffinePoint& pt) { return Scale(scalar, pt); }
+  friend AffinePoint operator*(const UInt256& scalar, const AffinePoint& pt) { return Scale(scalar, pt); }
 
   AffinePoint& operator=(const AffinePoint& rhs) {
     x = rhs.x;
@@ -82,12 +80,10 @@ class AffinePoint {
   Mod_p x, y;
 };
 
-template <int kBits, const UIntW<kBits>& p, const UIntW<kBits>& a>
 class JacobianPoint {
  public:
-  using Affine = AffinePoint<kBits, p, a>;
-  using Mod_p = Fp<kBits, p>;
-  using Wide = typename Mod_p::Type;
+  using Affine = AffinePoint;
+  using Mod_p = Fp<secp256k1::kBits, secp256k1::p>;
 
   constexpr JacobianPoint() {}
   constexpr JacobianPoint(const JacobianPoint& rhs) = default;
@@ -106,7 +102,6 @@ class JacobianPoint {
 
   constexpr bool IsInfinity() const { return Z == 0; }
 
-  template <const UIntW<kBits>& b>
   constexpr bool IsOnCurve() const {
     if (IsInfinity()) return true;
     // Y² == X³ + a·X·Z⁴ + b·Z⁶
@@ -115,17 +110,8 @@ class JacobianPoint {
     const auto Z2 = Z.Squared();
     const auto Z4 = Z2.Squared();
     const auto Z6 = Z2 * Z4;
-    Mod_p bZ6;
-    if constexpr (b <= std::numeric_limits<typename Wide::Word>::max()) {
-      bZ6 = Z6 * b.Words()[0];
-    } else {
-      bZ6 = b * Z6;
-    }
-    if constexpr (a == 0) {
-      return Y2 == X3 + bZ6;
-    } else {
-      return Y2 == X3 + a * X * Z4 + bZ6;
-    }
+    const auto bZ6 = Z6 * secp256k1::b;
+    return Y2 == X3 + bZ6;
   }
 
   constexpr operator Affine() const {
@@ -160,14 +146,7 @@ class JacobianPoint {
         // a = 0: 2M, 5S
         // Add a (non-infinity) point to itself
         const Mod_p X2 = lhs.X.Squared();
-        const Mod_p M = [&] {
-          if constexpr (a == 0) {
-            return 3_c * X2;
-          } else {
-            const Mod_p Z4 = lZ2.Squared();
-            return 3_c * X2 + a * Z4;
-          }
-        }();
+        const Mod_p M = 3_c * X2;
         const Mod_p Y2 = lhs.Y.Squared();
         const Mod_p S = 4_c * lhs.X * Y2;
         const Mod_p X_3 = M.Squared() - 2_c * S;
@@ -207,13 +186,7 @@ class JacobianPoint {
         // 1M, 5S
         // Add a (non-infinity) point to itself
         const Mod_p X2 = lhs.x.Squared();
-        const Mod_p M = [&] {
-          if constexpr (a == 0) {
-            return 3_c * X2;
-          } else {
-            return 3_c * X2 + a;
-          }
-        }();
+        const Mod_p M = 3_c * X2;
         const Mod_p Y2 = lhs.y.Squared();
         const Mod_p Y4 = Y2.Squared();
         // S = x * 4Y^2 = 2(2xY^2) = 2((x + Y^2)^2 - x^2 - Y^4)
@@ -242,14 +215,7 @@ class JacobianPoint {
     // Add a (non-infinity) point to itself
     const Mod_p X2 = X.Squared();
     const Mod_p Z2 = Z.Squared();
-    const Mod_p M = [&] {
-      if constexpr (a == 0) {
-        return X2.template Times<3>();
-      } else {
-        const Mod_p Z4 = Z2.Squared();
-        return X2.template Times<3>() + a * Z4;
-      }
-    }();
+    const Mod_p M = X2.template Times<3>();
     const Mod_p Y2 = Y.Squared();
     const Mod_p Y4 = Y2.Squared();
     const Mod_p S = 2_c * ((X + Y2).Squared() - X2 - Y4);
@@ -266,7 +232,7 @@ class JacobianPoint {
   friend constexpr JacobianPoint operator-(const JacobianPoint& lhs, const JacobianPoint& rhs) { return lhs + (-rhs); }
 
   // Scalar multiplication. Implemented by Scale (scale.h).
-  friend constexpr JacobianPoint operator*(const Wide& scalar, const JacobianPoint& pt) { return Scale(scalar, pt); }
+  friend constexpr JacobianPoint operator*(const UInt256& scalar, const JacobianPoint& pt) { return Scale(scalar, pt); }
 
   constexpr JacobianPoint& operator+=(const JacobianPoint& rhs) { return *this = *this + rhs; }
   constexpr JacobianPoint& operator+=(const Affine& rhs) { return *this = rhs + *this; }

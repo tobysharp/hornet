@@ -31,25 +31,16 @@ void PrintTo(const util::BigUint<kBits, T>& value, std::ostream* os) {
 
 using Uint64 = util::BigUint<64, uint64_t>;
 
-inline constexpr Uint64 kToyPrime{17};
-inline constexpr Uint64 kToyA{1};
-inline constexpr Uint64 kToyB{4};
-inline constexpr Uint64 kToyGeneratorX{4};
-inline constexpr Uint64 kToyGeneratorY{2};
-inline constexpr Uint64 kToyOrder{7};
-
-// Small hand-verifiable curve (y^2 = x^3 + x + 4 over F_17, order 7) for testing the point and
-// field arithmetic directly -- including the a != 0 formula branches that secp256k1 (a = 0) never
-// reaches. Bundles the lower templated types; the verify/SEC1 wrapper is secp256k1-specific.
-struct ToyCurve {
-	using Mod_p = Fp<64, kToyPrime>;
-	using Mod_n = Fp<64, kToyOrder>;
-	using Wide = Mod_p::Type;
-	using Affine = AffinePoint<64, kToyPrime, kToyA>;
-	using Point = JacobianPoint<64, kToyPrime, kToyA>;
-	static constexpr Affine G{Mod_p{kToyGeneratorX}, Mod_p{kToyGeneratorY}};
-	static constexpr bool IsOnCurve(const Point& point) { return point.template IsOnCurve<kToyB>(); }
-};
+// Reference multiples of the secp256k1 generator (computed independently), used to anchor the
+// point-arithmetic tests now that the point types are concrete secp256k1 (a = 0).
+constexpr Curve::Affine TwoG() {
+	return {Curve::Mod_p{"c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"_h256},
+	        Curve::Mod_p{"1ae168fea63dc339a3c58419466ceaeef7f632653266d0e1236431a950cfe52a"_h256}};
+}
+constexpr Curve::Affine ThreeG() {
+	return {Curve::Mod_p{"f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9"_h256},
+	        Curve::Mod_p{"388f7b0f632de8140fe337e62a37f3566500a99934c2231b6cb9fd7584b8e672"_h256}};
+}
 
 template <typename CurveType>
 typename CurveType::Signature ParseDerSignature(const std::vector<uint8_t>& bytes) {
@@ -122,139 +113,110 @@ void ExpectPublicKeyPointEq(const typename CurveType::PublicKey& actual, const t
 	EXPECT_EQ(actual_affine.y, expected_affine.y);
 }
 
-ToyCurve::Point MakeToyPoint(uint64_t x, uint64_t y) {
-	return {ToyCurve::Mod_p{x}, ToyCurve::Mod_p{y}};
-}
-
-void ExpectToyPointEq(const ToyCurve::Point& actual, const ToyCurve::Point& expected) {
-	const ToyCurve::Affine actual_affine = actual;
-	const ToyCurve::Affine expected_affine = expected;
-	EXPECT_EQ(actual_affine.x, expected_affine.x);
-	EXPECT_EQ(actual_affine.y, expected_affine.y);
+void ExpectPointEq(const Curve::Point& actual, const Curve::Affine& expected) {
+	const Curve::Affine actual_affine = actual;
+	EXPECT_EQ(actual_affine.x, expected.x);
+	EXPECT_EQ(actual_affine.y, expected.y);
 }
 
 TEST(CurveTest, PointConstructionCopyMoveAndAssignmentPreserveCoordinates) {
-	const ToyCurve::Point original = MakeToyPoint(4, 2);
-	const ToyCurve::Point copy{original};
-	ToyCurve::Point moved{ToyCurve::Point{original}};
-	ToyCurve::Point assigned;
-	ToyCurve::Point move_assigned;
+	const Curve::Point original{Curve::G};
+	const Curve::Point copy{original};
+	Curve::Point moved{Curve::Point{original}};
+	Curve::Point assigned;
+	Curve::Point move_assigned;
 
 	assigned = original;
-	move_assigned = ToyCurve::Point{original};
+	move_assigned = Curve::Point{original};
 
-	ExpectToyPointEq(copy, original);
-	ExpectToyPointEq(moved, original);
-	ExpectToyPointEq(assigned, original);
-	ExpectToyPointEq(move_assigned, original);
+	ExpectPointEq(copy, Curve::G);
+	ExpectPointEq(moved, Curve::G);
+	ExpectPointEq(assigned, Curve::G);
+	ExpectPointEq(move_assigned, Curve::G);
 }
 
 TEST(CurveTest, InfinityNegationAndOnCurveBehaveAsExpected) {
-	const ToyCurve::Point infinity;
-	const ToyCurve::Point generator = ToyCurve::G;
-	const ToyCurve::Point negated = -generator;
+	const Curve::Point infinity;
+	const Curve::Point generator{Curve::G};
+	const Curve::Affine off_curve{Curve::Mod_p{1}, Curve::Mod_p{1}};  // 1 != 1 + 7
 
 	EXPECT_TRUE(infinity.IsInfinity());
 	EXPECT_FALSE(generator.IsInfinity());
-	ExpectToyPointEq(negated, MakeToyPoint(4, 15));
-	EXPECT_TRUE(ToyCurve::IsOnCurve(infinity));
-	EXPECT_TRUE(ToyCurve::IsOnCurve(generator));
-	EXPECT_FALSE(ToyCurve::IsOnCurve(MakeToyPoint(1, 1)));
+	ExpectPointEq(-generator, Curve::Affine{Curve::G.x, -Curve::G.y});
+	EXPECT_TRUE(Curve::IsOnCurve(infinity));
+	EXPECT_TRUE(Curve::IsOnCurve(generator));
+	EXPECT_FALSE(Curve::IsOnCurve(Curve::Point{off_curve}));
 }
 
 TEST(CurveTest, AffinePlusAffineDistinctPointsMatchesKnownMultiple) {
-	const ToyCurve::Point generator = ToyCurve::G;
-	const ToyCurve::Point two_g = MakeToyPoint(5, 7);
-	const ToyCurve::Point three_g = MakeToyPoint(16, 6);
-	const ToyCurve::Affine affine_generator = generator;
-	const ToyCurve::Affine affine_two_g = two_g;
+	const Curve::Affine generator = Curve::G;
+	const Curve::Affine two_g = TwoG();
 
-	ExpectToyPointEq(ToyCurve::Point{affine_generator + affine_two_g}, three_g);
+	ExpectPointEq(Curve::Point{generator + two_g}, ThreeG());
 }
 
 TEST(CurveTest, AffinePlusAffineSamePointMatchesDoublingResult) {
-	const ToyCurve::Point generator = ToyCurve::G;
-	const ToyCurve::Point two_g = MakeToyPoint(5, 7);
-	const ToyCurve::Affine affine_generator = generator;
+	const Curve::Affine generator = Curve::G;
 
-	ExpectToyPointEq(ToyCurve::Point{affine_generator + affine_generator}, two_g);
+	ExpectPointEq(Curve::Point{generator + generator}, TwoG());
 }
 
 TEST(CurveTest, AffinePlusJacobianDistinctPointsMatchesKnownMultiple) {
-	const ToyCurve::Point generator = ToyCurve::G;
-	const ToyCurve::Point two_g = MakeToyPoint(5, 7);
-	const ToyCurve::Point three_g = MakeToyPoint(16, 6);
-	const ToyCurve::Affine affine_generator = generator;
+	const Curve::Affine generator = Curve::G;
 
-	ExpectToyPointEq(affine_generator + two_g, three_g);
+	ExpectPointEq(generator + Curve::Point{TwoG()}, ThreeG());
 }
 
 TEST(CurveTest, AffinePlusJacobianSamePointMatchesDoublingResult) {
-	const ToyCurve::Point generator = ToyCurve::G;
-	const ToyCurve::Point two_g = MakeToyPoint(5, 7);
-	const ToyCurve::Affine affine_generator = generator;
+	const Curve::Affine generator = Curve::G;
 
-	ExpectToyPointEq(affine_generator + generator, two_g);
+	ExpectPointEq(generator + Curve::Point{generator}, TwoG());
 }
 
 TEST(CurveTest, JacobianPlusJacobianDistinctPointsMatchesKnownMultiple) {
-	const ToyCurve::Point generator = ToyCurve::G;
-	const ToyCurve::Point two_g = MakeToyPoint(5, 7);
-	const ToyCurve::Point three_g = MakeToyPoint(16, 6);
-
-	ExpectToyPointEq(generator + two_g, three_g);
+	ExpectPointEq(Curve::Point{Curve::G} + Curve::Point{TwoG()}, ThreeG());
 }
 
 TEST(CurveTest, JacobianPlusJacobianSamePointMatchesDoublingResult) {
-	const ToyCurve::Point generator = ToyCurve::G;
-	const ToyCurve::Point two_g = MakeToyPoint(5, 7);
-
-	ExpectToyPointEq(generator + generator, two_g);
+	ExpectPointEq(Curve::Point{Curve::G} + Curve::Point{Curve::G}, TwoG());
 }
 
 TEST(CurveTest, JacobianPointAdditionHandlesInfinityAndInverseInputs) {
-	const ToyCurve::Point infinity;
-	const ToyCurve::Point generator = ToyCurve::G;
+	const Curve::Point infinity;
+	const Curve::Point generator{Curve::G};
 
-	ExpectToyPointEq(infinity + generator, generator);
-	ExpectToyPointEq(generator + infinity, generator);
+	ExpectPointEq(infinity + generator, Curve::G);
+	ExpectPointEq(generator + infinity, Curve::G);
 	EXPECT_TRUE((generator + (-generator)).IsInfinity());
 }
 
 TEST(CurveTest, JacobianDoubleMatchesDoublingResultForFinitePoint) {
-	const ToyCurve::Point generator = ToyCurve::G;
-	const ToyCurve::Point two_g = MakeToyPoint(5, 7);
-
-	ExpectToyPointEq(generator.Double(), two_g);
+	ExpectPointEq(Curve::Point{Curve::G}.Double(), TwoG());
 }
 
 TEST(CurveTest, JacobianDoublePreservesInfinity) {
-	const ToyCurve::Point infinity;
+	const Curve::Point infinity;
 
 	EXPECT_TRUE(infinity.Double().IsInfinity());
 }
 
 TEST(CurveTest, PointAddAssignAndScalarMultiplicationMatchKnownMultiples) {
-	const ToyCurve::Point generator = ToyCurve::G;
-	const ToyCurve::Point three_g = MakeToyPoint(16, 6);
-	const ToyCurve::Point subgroup_public_key = MakeToyPoint(16, 6);
-	const ToyCurve::Affine affine_generator = generator;
+	const Curve::Affine generator = Curve::G;
 
-	ToyCurve::Point accumulated = generator;
-	accumulated += MakeToyPoint(5, 7);
-	ToyCurve::Point mixed_accumulated = MakeToyPoint(5, 7);
-	mixed_accumulated += affine_generator;
+	Curve::Point accumulated{generator};
+	accumulated += Curve::Point{TwoG()};
+	Curve::Point mixed_accumulated{TwoG()};
+	mixed_accumulated += generator;  // mixed: Jacobian += affine
 
-	ExpectToyPointEq(accumulated, three_g);
-	ExpectToyPointEq(mixed_accumulated, three_g);
-	ExpectToyPointEq(ToyCurve::Wide{3} * generator, three_g);
-	ExpectToyPointEq(ToyCurve::Mod_n{3}.x * generator, three_g);
-	EXPECT_TRUE((ToyCurve::Wide{7} * generator).IsInfinity());
-	EXPECT_TRUE((kToyOrder * subgroup_public_key).IsInfinity());
+	ExpectPointEq(accumulated, ThreeG());
+	ExpectPointEq(mixed_accumulated, ThreeG());
+	ExpectPointEq(Curve::Wide{3} * Curve::Point{generator}, ThreeG());
+	ExpectPointEq(Curve::Mod_n{3}.x * Curve::Point{generator}, ThreeG());
+	EXPECT_TRUE((secp256k1::n * Curve::Point{generator}).IsInfinity());
 }
 
 TEST(CurveTest, PlainNafRecoderProducesExpectedSignedDigits) {
-	const auto naf = NonAdjacentForm(ToyCurve::Wide{14});
+	const auto naf = NonAdjacentForm(Uint64{14});
 
 	EXPECT_EQ(naf[0], 0);
 	EXPECT_EQ(naf[1], -1);
@@ -289,7 +251,7 @@ std::vector<uint64_t> WnafTestValues() {
 TEST(CurveTest, WindowedNafWidthTwoMatchesPlainNaf) {
 	// Width-2 wNAF is exactly the plain NAF, so the two recoders must agree digit-for-digit.
 	for (const uint64_t value : WnafTestValues()) {
-		const ToyCurve::Wide x{value};
+		const Uint64 x{value};
 		EXPECT_EQ(WindowedNonAdjacentForm(x, 2), NonAdjacentForm(x)) << "value=" << value;
 	}
 }
@@ -299,7 +261,7 @@ TEST(CurveTest, WindowedNafReconstructsOriginalValue) {
 	// would silently overflow (the bug that previously broke verify).
 	for (int w = 2; w <= 12; ++w) {
 		for (const uint64_t value : WnafTestValues()) {
-			const auto naf = WindowedNonAdjacentForm(ToyCurve::Wide{value}, w);
+			const auto naf = WindowedNonAdjacentForm(Uint64{value}, w);
 			EXPECT_EQ(ReconstructFromNaf(naf), value) << "w=" << w << " value=" << value;
 		}
 	}
@@ -309,7 +271,7 @@ TEST(CurveTest, WindowedNafDigitsAreSignedOddWithinWindowAndSeparated) {
 	for (int w = 2; w <= 12; ++w) {
 		const int limit = 1 << (w - 1);  // |digit| < 2^{w-1}
 		for (const uint64_t value : WnafTestValues()) {
-			const auto naf = WindowedNonAdjacentForm(ToyCurve::Wide{value}, w);
+			const auto naf = WindowedNonAdjacentForm(Uint64{value}, w);
 			for (size_t index = 0; index < naf.size(); ++index) {
 				const int digit = naf[index];
 				if (digit == 0) continue;
@@ -327,13 +289,13 @@ TEST(CurveTest, WindowedNafDigitsAreSignedOddWithinWindowAndSeparated) {
 
 TEST(CurveTest, WindowedNafRecoderProducesExpectedSignedDigits) {
 	// 14 = 7 * 2^1, a single positive odd digit at the top of the width-4 digit set.
-	const auto positive = WindowedNonAdjacentForm(ToyCurve::Wide{14}, 4);
+	const auto positive = WindowedNonAdjacentForm(Uint64{14}, 4);
 	EXPECT_EQ(positive[1], 7);
 	EXPECT_EQ(positive[0], 0);
 	EXPECT_TRUE(std::all_of(positive.begin() + 2, positive.end(), [](int8_t d) { return d == 0; }));
 
 	// 18 = -7 * 2^1 + 1 * 2^5, exercising a negative digit and the carry it propagates.
-	const auto negative = WindowedNonAdjacentForm(ToyCurve::Wide{18}, 4);
+	const auto negative = WindowedNonAdjacentForm(Uint64{18}, 4);
 	EXPECT_EQ(negative[1], -7);
 	EXPECT_EQ(negative[5], 1);
 	EXPECT_EQ(ReconstructFromNaf(negative), 18u);
@@ -502,7 +464,7 @@ Secp256k1SignedMessage MakeRandomSecp256k1Signature(std::mt19937_64& rng) {
 TEST(CurveTest, Secp256k1WnafVerifyMatchesJointNafOnRandomSignatures) {
 	std::mt19937_64 rng{0x5eed0c0ffeed1234ull};
 	const auto joint_naf = [](const Curve::Wide& u1, const Curve::Wide& u2, const Curve::Affine& Q) {
-		return LinearCombination<256, secp256k1::p, secp256k1::a>(u1, Curve::G, u2, Q);
+		return LinearCombination(u1, Curve::G, u2, Q);
 	};
 
 	for (int i = 0; i < 100; ++i) {
@@ -542,14 +504,13 @@ TEST(CurveTest, Secp256k1WnafVerifyIsCorrectAcrossGeneratorTableWidths) {
 // is a test oracle only; the decomposition itself uses the lattice basis, not lambda.
 TEST(CurveTest, SplitLambdaDecomposesScalarWithBoundedHalfWidthParts) {
 	const auto lambda = "5363ad4cc05c30e0a5261c028812645a122e22ea20816678df02967c1b23bd72"_h256;
-	const auto residue = [](const SignedScalar<256>& s) {
+	const auto residue = [](const SignedScalar& s) {
 		return s.negative ? secp256k1::n - s.magnitude : s.magnitude;  // canonical [0, n) representative
 	};
 	std::mt19937_64 rng{0x1abe11ed1234ull};
 	for (int i = 0; i < 1000; ++i) {
 		const UIntW<256> k = RandomScalarModN(rng).x;
-		const auto split = SplitLambda<256, secp256k1::n, secp256k1::glv_a1, secp256k1::glv_minus_b1,
-		                               secp256k1::glv_a2, secp256k1::glv_b2>(k);
+		const auto split = SplitLambda(k);
 		const Curve::Mod_n reconstructed = Curve::Mod_n{residue(split.k1)} +
 		                                       Curve::Mod_n{residue(split.k2)} * Curve::Mod_n{lambda};
 		EXPECT_EQ(reconstructed.x, k) << "i=" << i;
@@ -568,19 +529,18 @@ TEST(CurveTest, LinearCombinationGlvMatchesJointNaf) {
 	const std::span<const Curve::Affine> g_base_span{g_base}, g_phi_span{g_phi};
 
 	const auto split = [](const UIntW<256>& u) {
-		return SplitLambda<256, secp256k1::n, secp256k1::glv_a1, secp256k1::glv_minus_b1,
-		                   secp256k1::glv_a2, secp256k1::glv_b2>(u);
+		return SplitLambda(u);
 	};
 	std::mt19937_64 rng{0xC0FFEEull};
 	for (int i = 0; i < 200; ++i) {
 		const UIntW<256> u1 = RandomScalarModN(rng).x, u2 = RandomScalarModN(rng).x;
 		const Curve::Affine Q = RandomScalarModN(rng).x * Curve::G;
 
-		const GlvTerm<256, std::span<const Curve::Affine>> g_term{split(u1), g_base_span, g_phi_span};
-		const auto q_term = MakeVariableGlvTerm<256, secp256k1::p, secp256k1::a>(split(u2), Q, beta);
+		const GlvTerm<std::span<const Curve::Affine>> g_term{split(u1), g_base_span, g_phi_span};
+		const auto q_term = MakeVariableGlvTerm(split(u2), Q);
 
-		const Curve::Affine glv = LinearCombination_GLV<256, secp256k1::p, secp256k1::a>(g_term, q_term);
-		const Curve::Affine ref = LinearCombination<256, secp256k1::p, secp256k1::a>(u1, Curve::G, u2, Q);
+		const Curve::Affine glv = LinearCombination_GLV(g_term, q_term);
+		const Curve::Affine ref = LinearCombination(u1, Curve::G, u2, Q);
 		EXPECT_EQ(glv.x.x, ref.x.x) << "i=" << i;
 		EXPECT_EQ(glv.y.x, ref.y.x) << "i=" << i;
 	}
@@ -590,7 +550,7 @@ TEST(CurveTest, LinearCombinationGlvMatchesJointNaf) {
 TEST(CurveTest, WindowedNafWithNegativeFlagRecodesNegatedValue) {
 	for (int w = 2; w <= 12; ++w)
 		for (const uint64_t value : WnafTestValues()) {
-			const auto naf = WindowedNonAdjacentForm(ToyCurve::Wide{value}, w, /*negative=*/true);
+			const auto naf = WindowedNonAdjacentForm(Uint64{value}, w, /*negative=*/true);
 			EXPECT_EQ(ReconstructFromNaf(naf), uint64_t{0} - value) << "w=" << w << " value=" << value;
 		}
 }
