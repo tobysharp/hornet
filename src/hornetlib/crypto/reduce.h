@@ -7,7 +7,7 @@ namespace hornet::crypto::ecdsa {
 
 template <int kBits>
 constexpr std::pair<UIntW<kBits - 256>, UIntW<256>> Partition(const UIntW<kBits>& input) {
-  return { input.template HighBits<kBits - 256>(), input.template LowBits<256>() };
+  return {input.template HighBits<kBits - 256>(), input.template LowBits<256>()};
 }
 
 template <int kBits>
@@ -16,7 +16,8 @@ consteval int NextWord() {
   return (kBits + kDefaultSize - 1) & ~(kDefaultSize - 1);
 }
 
-template <int kBits> requires (kBits < 256)
+template <int kBits>
+  requires(kBits < 256)
 constexpr Uint256 ReduceModuloP(const UIntW<kBits>& x) {
   if constexpr (kBits == 256) return x;
   return x.template ZeroExtend<256>();
@@ -24,7 +25,7 @@ constexpr Uint256 ReduceModuloP(const UIntW<kBits>& x) {
 
 constexpr Uint256 ReduceModuloP(const UIntW<256>& b_2) {
   if (b_2 < secp256k1::p) return b_2;
-  else return b_2 - secp256k1::p;  
+  else return b_2 - secp256k1::p;
 }
 
 constexpr Uint256 ReduceModuloP(const UIntW<320>& t1) {
@@ -38,7 +39,7 @@ constexpr Uint256 ReduceModuloP(const UIntW<320>& t1) {
   //        |66b|       \      65 bits                       /    \ 43 bits /
 
   auto [b_2, a_2] = b_1.AddWithCarry(ca_1_66);
-  //    1b | 256b  |256b|            \ 66b / 
+  //    1b | 256b  |256b|            \ 66b /
 
   if (a_2) return b_2 + c;
   return ReduceModuloP(b_2);
@@ -64,5 +65,12 @@ constexpr Uint256 ReduceModuloP(const Uint256& x, const Uint256& y) {
   return ReduceModuloP(x.MultiplyWide(y));
 }
 
+// For t = x/z^2 (mod p), test whether t = r (mod n).
+constexpr bool IsJacobianXEqual(const Uint256& x, const Uint256& z, const Uint256& r) {
+  const Uint256 z2 = ReduceModuloP(z.Squared());
+  if (ReduceModuloP(r, z2) == x) return true;
+  constexpr Uint256 p_n = secp256k1::p - secp256k1::n;
+  return (r < p_n) && (ReduceModuloP(r + secp256k1::n, z2) == x);
+}
 
 }  // namespace hornet::crypto::ecdsa

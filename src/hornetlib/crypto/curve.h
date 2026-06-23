@@ -13,6 +13,7 @@
 
 #include "hornetlib/crypto/fp.h"
 #include "hornetlib/crypto/point.h"
+#include "hornetlib/crypto/reduce.h"
 #include "hornetlib/crypto/scale.h"
 #include "hornetlib/crypto/secp256k1.h"
 #include "hornetlib/crypto/uintw.h"
@@ -152,7 +153,7 @@ class Curve {
     const auto u2 = r * sinv;
     const Point R = combine(u1.x, u2.x, publicKey);
     if (R.IsInfinity()) return false;
-    return R.NormalizedX().x.Modulo(n) == r.x;
+    return IsJacobianXEqual(R.X.x, R.Z.x, r.x);
   }
 
   template <size_t Size>
