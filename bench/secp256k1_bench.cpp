@@ -384,7 +384,7 @@ static void BM_LinComb(benchmark::State& state) {
 // table, plus a variable base Q. The table is built once, before the timed region, and a
 // differential check against the joint-NAF result gates correctness for every corpus entry.
 static void BM_LinComb_wNAF(benchmark::State& state) {
-  constexpr int kGWidth = 10;
+  constexpr int kGWidth = 12;
   std::array<Curve::Affine, (1 << (kGWidth - 1))> g_table;
   PrecomputeTableAffine(Curve::G, {g_table.data(), g_table.size()});
   const std::span<const Curve::Affine> g_span{g_table.data(), g_table.size()};
@@ -420,7 +420,7 @@ static void BM_LinComb_wNAF(benchmark::State& state) {
 // This is the lincomb-level peer of BM_LinComb_wNAF / BM_LinComb_JointNAF for the "adopt only where
 // measured faster" comparison.
 static void BM_LinComb_GLV(benchmark::State& state) {
-  constexpr int kGWidth = 10;  // matches BM_LinComb_wNAF and the verify default (BuildGeneratorTable)
+  constexpr int kGWidth = 12;  // matches BM_LinComb_wNAF and the verify default (BuildGeneratorTable)
   std::vector<Curve::Affine> g_base(1u << (kGWidth - 1)), g_phi(1u << (kGWidth - 1));
   PrecomputeTableAffine(Curve::G, std::span{g_base});
   const Curve::Mod_p beta{secp256k1::beta};

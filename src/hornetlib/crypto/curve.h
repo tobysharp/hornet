@@ -46,7 +46,7 @@ class Curve {
 
   // Builds the fixed-base wNAF tables of odd multiples of G and phi(G) used by verification.
   // If not called explicitly, the tables are built lazily on demand.
-  static void BuildGeneratorTable(int width = 10) {
+  static void BuildGeneratorTable(int width = 12) {
     using namespace secp256k1;
     g_table_.resize(std::size_t{1} << (width - 1));
     PrecomputeTableAffine(G, std::span{g_table_});
