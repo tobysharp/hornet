@@ -24,6 +24,10 @@
 #include "hornetlib/util/assert.h"
 #include "hornetlib/util/hex.h"
 
+#ifdef HORNET_HAVE_LIBSECP256K1
+#include <secp256k1.h>  // bitcoin-core reference impl, fetched by bench/CMakeLists.txt for comparison
+#endif
+
 namespace hornet::crypto::ecdsa {
 namespace {
 
@@ -308,6 +312,68 @@ static void BM_Secp256k1_VerifySignature_wNAF(benchmark::State& state) {
         });
   });
 }
+
+#ifdef HORNET_HAVE_LIBSECP256K1
+// Comparative baseline: bitcoin-core/libsecp256k1's single-signature verify over the SAME corpus, so
+// the hornet GLV/wNAF numbers can be read against the de-facto reference implementation. Parsing (the
+// SEC1 public key and the compact (r, s)) and low-S normalization happen once outside the timed region,
+// matching the hornet benches, which time only the verify math on already-parsed inputs. libsecp256k1
+// rejects high-S signatures, so each is normalized to low-S here -- this changes only acceptance, not
+// the verify arithmetic, keeping the comparison apples-to-apples. The context is created once outside
+// timing; verify itself is context-light.
+static void BM_Secp256k1_VerifySignature_Libsecp256k1(benchmark::State& state) {
+  const auto corpus = MakeVerifySignatureBenchCorpus();
+
+  secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+  BenchCheck(ctx != nullptr, "libsecp256k1 context creation failed");
+
+  struct ParsedCase {
+    secp256k1_pubkey pubkey;
+    secp256k1_ecdsa_signature signature;
+    std::array<uint8_t, 32> digest;
+  };
+  std::vector<ParsedCase> parsed;
+  parsed.reserve(corpus.size());
+  for (const auto& c : corpus) {
+    ParsedCase p{};
+    const auto sec1 = EncodeUncompressedPublicKey(static_cast<const Curve::Affine&>(c.public_key));
+    BenchCheck(secp256k1_ec_pubkey_parse(ctx, &p.pubkey, sec1.data(), sec1.size()) == 1,
+               "libsecp256k1 failed to parse corpus public key");
+
+    std::array<uint8_t, 64> compact{};
+    const auto r = ToBigEndianBytes(c.signature.first);
+    const auto s = ToBigEndianBytes(c.signature.second);
+    std::copy(r.begin(), r.end(), compact.begin());
+    std::copy(s.begin(), s.end(), compact.begin() + 32);
+    BenchCheck(secp256k1_ecdsa_signature_parse_compact(ctx, &p.signature, compact.data()) == 1,
+               "libsecp256k1 failed to parse corpus signature");
+    secp256k1_ecdsa_signature_normalize(ctx, &p.signature, &p.signature);
+
+    p.digest = c.digest;
+    BenchCheck(secp256k1_ecdsa_verify(ctx, &p.signature, p.digest.data(), &p.pubkey) == 1,
+               "libsecp256k1 failed to verify corpus signature");
+    parsed.push_back(p);
+  }
+
+  std::size_t index = 0;
+  for (auto _ : state) {
+    const auto& pc = parsed[index];
+    index = (index + 1) & (kCorpusSize - 1);
+    auto signature = pc.signature;
+    auto pubkey = pc.pubkey;
+    auto digest = pc.digest;
+    benchmark::DoNotOptimize(signature);
+    benchmark::DoNotOptimize(pubkey);
+    benchmark::DoNotOptimize(digest);
+    auto verified = secp256k1_ecdsa_verify(ctx, &signature, digest.data(), &pubkey);
+    benchmark::DoNotOptimize(verified);
+    benchmark::ClobberMemory();
+  }
+  SetOpsPerSecondCounter(state);
+
+  secp256k1_context_destroy(ctx);
+}
+#endif  // HORNET_HAVE_LIBSECP256K1
 
 static void BM_Secp256k1_PointAdd(benchmark::State& state) {
   const auto corpus = MakePointAddBenchCorpus();
@@ -636,6 +702,9 @@ static void BM_BigUint256_Squared(benchmark::State& state) {
 BENCHMARK(BM_Secp256k1_VerifySignature);
 BENCHMARK(BM_Secp256k1_VerifySignature_JointNAF);
 BENCHMARK(BM_Secp256k1_VerifySignature_wNAF);
+#ifdef HORNET_HAVE_LIBSECP256K1
+BENCHMARK(BM_Secp256k1_VerifySignature_Libsecp256k1);
+#endif
 BENCHMARK(BM_Secp256k1_PointAdd);
 BENCHMARK(BM_Secp256k1_PointAddMixed);
 BENCHMARK(BM_Secp256k1_PointDouble);
