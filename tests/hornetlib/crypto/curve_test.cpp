@@ -555,5 +555,45 @@ TEST(CurveTest, WindowedNafWithNegativeFlagRecodesNegatedValue) {
 		}
 }
 
+// PrecomputeTableGlobalZ builds the both-signs odd-multiple table in shared-Z form: every entry's
+// (x, y) is the point taken at the single returned global Z g, so the true affine multiple is
+// (x / g², y / g³) -- recovered here by normalizing the Jacobian point (x, y, g). Every slot must
+// match the trusted PrecomputeTableAffine builder, across window widths and the both-signs layout.
+// This pins the z-ratio telescoping direction and the g = C * g_C correction.
+TEST(CurveTest, PrecomputeTableGlobalZMatchesAffineTableAcrossWidths) {
+	std::mt19937_64 rng{0x9106a1b2c3d4e5f6ull};
+	for (int w = 2; w <= 10; ++w) {
+		const int size = 1 << (w - 1);
+		const Curve::Affine P = RandomScalarModN(rng).x * Curve::G;
+
+		std::vector<Curve::Affine> globalz(size), affine(size);
+		const Curve::Mod_p g = PrecomputeTableGlobalZ(P, std::span{globalz});
+		PrecomputeTableAffine(P, std::span{affine});
+
+		EXPECT_NE(g.x, UIntW<256>::Zero()) << "w=" << w;
+		for (int k = 0; k < size; ++k) {
+			const Curve::Affine recovered = Curve::Point{globalz[k].x, globalz[k].y, g};  // (x/g², y/g³)
+			EXPECT_EQ(recovered.x.x, affine[k].x.x) << "w=" << w << " k=" << k;
+			EXPECT_EQ(recovered.y.x, affine[k].y.x) << "w=" << w << " k=" << k;
+		}
+	}
+}
+
+// Anchor the shared-Z table to independently-computed generator multiples (not another
+// addition-based builder), so the differential test above cannot pass on a self-consistent error.
+TEST(CurveTest, PrecomputeTableGlobalZAnchorsToKnownGeneratorMultiples) {
+	constexpr int w = 5, size = 1 << (w - 1), count = size >> 1;
+	std::vector<Curve::Affine> table(size);
+	const Curve::Mod_p g = PrecomputeTableGlobalZ(Curve::G, std::span{table});
+	const auto recover = [&](int k) -> Curve::Affine { return Curve::Point{table[k].x, table[k].y, g}; };
+
+	EXPECT_EQ(recover(count).x.x, Curve::G.x.x);         // +1*G
+	EXPECT_EQ(recover(count).y.x, Curve::G.y.x);
+	EXPECT_EQ(recover(count + 1).x.x, ThreeG().x.x);     // +3*G
+	EXPECT_EQ(recover(count + 1).y.x, ThreeG().y.x);
+	EXPECT_EQ(recover(count - 1).x.x, (-Curve::G).x.x);  // -1*G  (negative half: y-flip, same g)
+	EXPECT_EQ(recover(count - 1).y.x, (-Curve::G).y.x);
+}
+
 }  // namespace
 }  // namespace hornet::crypto::ecdsa

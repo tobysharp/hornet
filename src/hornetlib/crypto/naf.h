@@ -59,6 +59,62 @@ constexpr auto WindowedNonAdjacentForm(const UIntW<kBits>& x, int w, bool negati
   return naf;
 }
 
+inline AffinePoint::Mod_p PrecomputeTableGlobalZ(const AffinePoint& P, std::span<AffinePoint> table) {
+  using Mod_p = JacobianPoint::Mod_p;
+
+  // The table size is 2^(w-1) for window size w, to include both negative and positive odd multiples.
+  // We compute the odd-multiple points, {..., -5P, -3P, -P, P, 3P, 5P, ... } to fill the table.
+
+  Assert(table.size() >= 2u);
+  Assert(std::has_single_bit(table.size()));
+
+  const int size = std::ssize(table);
+  const int count = size >> 1;
+
+  AffinePoint* positives = &table[count];  // positives[i]  =  (2i + 1)P, i \in [0, count).
+  AffinePoint* negatives = positives - 1;  // negatives[-i] = -(2i + 1)P, i \in [0, count).
+  std::vector<JacobianPoint> sums(count);
+  std::vector<Mod_p> ratios(count);
+  
+  // To allow us to perform the point additions as affine points rather than Jacobian points,
+  // we map all points to the scaled curve, E_C: y^2 = x^3 + bC^6, using the map,
+  // λ_C : (X, Y, Z) |-> (X, Y, Z/C), or equivalently,
+  // λ_C : (X, Y, Z) |-> (C^2X, C^3Y, Z).
+
+  const JacobianPoint P2 = JacobianPoint{P}.Double();
+  const Mod_p C = P2.Z;
+  const Mod_p C2 = C.Squared();
+  const Mod_p C3 = C * C2;
+  const AffinePoint a2P = { P2.X, P2.Y };  // λ_C(2P)
+  
+  // Perform affine additions on curve E_C, storing ratios[i] = Z_i / Z_{i-1}.
+  sums[0] = { P.x * C2, P.y * C3, 1 };  // λ_C(P)
+  for (int i = 1; i < count; ++i)
+    std::tie(sums[i], ratios[i]) = sums[i - 1].AddWithZRatio(a2P);  // λ_C((2i + 1)P)
+
+  // Scale all points to a shared z coordinate on E_C, g_C = Z_last, and then apply the additional map,
+  // λ_{g_C} to represent the points as affine, i.e. with an implicit Z=1 parameter.
+  const Mod_p g_C = sums[count - 1].Z;
+  Mod_p scale = 1;  // scale = g_C / sums[count - 1].Z
+  positives[count - 1] = { sums[count - 1].X, sums[count - 1].Y };
+  negatives[1 - count] = -positives[count - 1];
+  for (int i = count - 2; i >= 0; --i) {
+    // To scale sums[i] to have a Z coordinate of g_C, we need to multiply its Z value by t = g_C / Z_i,
+    // and since (X, Y, Z) ~ (t^2X, t^3Y, tZ), we therefore must scale its X value by t^2, and Y value by t^3.
+    // But t = g_C / Z_i = g_C / Z_{i+1} * (Z_{i+1} / Z_i) = g_C / Z_{i+1} * ratios[i+1].
+    scale *= ratios[i + 1];  // scale = g_C / Z_i
+    const Mod_p scale2 = scale.Squared();
+    positives[i] = { sums[i].X * scale2, sums[i].Y * scale2 * scale };  // Applies λ_{g_C}.
+    negatives[-i] = -positives[i];
+  }
+
+  // Now we have applied λ_C followed by λ_{g_C}, which is the composite λ_{C * g_C}.
+  // This composite scaling factor g = C * g_C, determines the inverse map that we will need to apply
+  // later to the result of any point arithmetic in order to map back to the original curve, E.
+  // Specifically, apply the inverse map, λ^{-1}_g : (X, Y, Z) |-> (X, Y, gZ).
+  return C * g_C;
+}
+
 inline void PrecomputeTableJacobian(const AffinePoint& P, std::span<JacobianPoint> table) {
   if (table.size() < 2u) return;
 

@@ -167,6 +167,29 @@ class JacobianPoint {
   }
   // a = 0. Double: 8M, 7S; Add: 11M, 5S.
 
+  std::tuple<JacobianPoint, Mod_p> AddWithZRatio(const Affine& affine) const {
+    // 3M, 1S
+    const Mod_p rZ2 = Z.Squared();
+    const Mod_p U_1 = affine.x * rZ2;
+    const Mod_p U_2 = X;
+    const Mod_p H = U_2 - U_1;
+    const Mod_p S_1 = affine.y * rZ2 * Z;
+    const Mod_p S_2 = Y;
+    const Mod_p r = S_2 - S_1;
+
+    Assert(H != 0);  // Implies invalid arguments for this function.
+
+    // 4M, 3S
+    const Mod_p H2 = H.Squared();
+    const Mod_p H3 = H2 * H;
+    const Mod_p U_1H2 = U_1 * H2;
+    const Mod_p X_3 = 4_c * (r.Squared() - H3 - 2_c * U_1H2);
+    const Mod_p Y_3 = r * (8_c * U_1H2 - 2_c * X_3) - 8_c * (S_1 * H3);
+    const Mod_p Z_3 = (Z + H).Squared() - rZ2 - H2;
+    
+    return {{X_3, Y_3, Z_3}, 2_c * H};
+  }
+
   // Add two Jacobian points on the curve
   friend constexpr JacobianPoint operator+(const Affine& lhs, const JacobianPoint& rhs) {
     if (lhs.IsInfinity()) return rhs;
@@ -204,7 +227,7 @@ class JacobianPoint {
     const Mod_p U_1H2 = U_1 * H2;
     const Mod_p X_3 = 4_c * (r.Squared() - H3 - 2_c * U_1H2);
     const Mod_p Y_3 = r * (8_c * U_1H2 - 2_c * X_3) - 8_c * (S_1 * H3);
-    const Mod_p Z_3 = H * ((rhs.Z + 1).Squared() - 1 - rZ2);
+    const Mod_p Z_3 = (rhs.Z + H).Squared() - rZ2 - H2;
     return {X_3, Y_3, Z_3};
   }
   // a = 0. Double: 4M, 6S; Add: 7M, 4S.

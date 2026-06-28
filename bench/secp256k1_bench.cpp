@@ -17,7 +17,10 @@
 
 #include "hornetlib/crypto/curve.h"
 #include "hornetlib/crypto/fp.h"
+#include "hornetlib/crypto/glv.h"
+#include "hornetlib/crypto/naf.h"
 #include "hornetlib/crypto/reduce.h"
+#include "hornetlib/crypto/scale.h"
 #include "hornetlib/util/assert.h"
 #include "hornetlib/util/hex.h"
 
@@ -409,6 +412,86 @@ static void BM_LinComb_wNAF(benchmark::State& state) {
   SetOpsPerSecondCounter(state);
 }
 
+// GLV mirrors the verify kernel (curve.h VerifySignature): split u1, u2 via the lambda endomorphism,
+// then a 4-term Strauss over the fixed G/phi(G) affine tables plus a per-call Q/phi(Q) table. The
+// fixed G-side tables are built once before the timed region (as the lazy generator-table build is in
+// real verify); the two splits and the Q-side table build stay inside the timed region, exactly as the
+// per-verify combiner runs them. A differential check against joint NAF gates correctness per entry.
+// This is the lincomb-level peer of BM_LinComb_wNAF / BM_LinComb_JointNAF for the "adopt only where
+// measured faster" comparison.
+static void BM_LinComb_GLV(benchmark::State& state) {
+  constexpr int kGWidth = 10;  // matches BM_LinComb_wNAF and the verify default (BuildGeneratorTable)
+  std::vector<Curve::Affine> g_base(1u << (kGWidth - 1)), g_phi(1u << (kGWidth - 1));
+  PrecomputeTableAffine(Curve::G, std::span{g_base});
+  const Curve::Mod_p beta{secp256k1::beta};
+  for (std::size_t i = 0; i < g_base.size(); ++i) g_phi[i] = {beta * g_base[i].x, g_base[i].y};  // phi(G) = (beta*x, y)
+  const std::span<const Curve::Affine> g_base_span{g_base}, g_phi_span{g_phi};
+
+  const auto glv = [&](const Curve::Wide& u1, const Curve::Wide& u2, const Curve::Affine& Q) {
+    const GlvTerm<std::span<const Curve::Affine>> g_term{SplitLambda(u1), g_base_span, g_phi_span};
+    return LinearCombination_GLV(g_term, MakeVariableGlvTerm(SplitLambda(u2), Q));
+  };
+
+  const auto corpus = MakeLinCombCorpus();
+  for (const auto& c : corpus) {
+    const Curve::Affine reference = LinearCombination(c.u1, Curve::G, c.u2, c.Q);
+    const Curve::Affine actual = glv(c.u1, c.u2, c.Q);
+    BenchCheck(reference.x == actual.x && reference.y == actual.y, "GLV result disagrees with joint NAF");
+  }
+
+  std::size_t index = 0;
+  for (auto _ : state) {
+    const auto& c = corpus[index];
+    index = (index + 1) & (kCorpusSize - 1);
+    auto u1 = c.u1, u2 = c.u2;
+    auto Q = c.Q;  // G is the fixed base, so only Q varies per case
+    benchmark::DoNotOptimize(u1);
+    benchmark::DoNotOptimize(u2);
+    benchmark::DoNotOptimize(Q);
+    auto r = glv(u1, u2, Q);
+    benchmark::DoNotOptimize(r);
+    benchmark::ClobberMemory();
+  }
+  SetOpsPerSecondCounter(state);
+}
+
+// Isolates the GLV scalar decomposition (SplitLambda): k -> (k1, k2) with k == k1 + k2*lambda (mod n)
+// and |k1|, |k2| < 2^128. This split overhead is folded into BM_LinComb_GLV and the verify path; bench
+// it alone so the glv.h follow-ups (round_div multiply-shift, fast ReduceModuloN over the generic
+// long division) can be measured directly. lambda here is a correctness oracle only -- the
+// decomposition uses the lattice basis, not lambda.
+static void BM_GLV_SplitLambda(benchmark::State& state) {
+  const auto lambda = "5363ad4cc05c30e0a5261c028812645a122e22ea20816678df02967c1b23bd72"_h256;
+  const auto residue = [](const SignedScalar& s) {
+    return s.negative ? secp256k1::n - s.magnitude : s.magnitude;  // canonical [0, n) representative
+  };
+
+  uint64_t gen = 0x9e3779b97f4a7c15ull;
+  std::vector<UIntW<256>> corpus;
+  corpus.reserve(kCorpusSize);
+  for (std::size_t i = 0; i < kCorpusSize; ++i) corpus.push_back(RandomNonZeroScalar(gen).x);  // in [1, n)
+
+  for (const auto& k : corpus) {
+    const auto split = SplitLambda(k);
+    const Curve::Mod_n reconstructed =
+        Curve::Mod_n{residue(split.k1)} + Curve::Mod_n{residue(split.k2)} * Curve::Mod_n{lambda};
+    BenchCheck(reconstructed.x == k, "SplitLambda reconstruction != k");
+    BenchCheck(split.k1.magnitude.SignificantBits() <= 128 && split.k2.magnitude.SignificantBits() <= 128,
+               "SplitLambda parts exceed half-width bound");
+  }
+
+  std::size_t index = 0;
+  for (auto _ : state) {
+    auto k = corpus[index];
+    index = (index + 1) & (kCorpusSize - 1);
+    benchmark::DoNotOptimize(k);
+    auto split = SplitLambda(k);
+    benchmark::DoNotOptimize(split);
+    benchmark::ClobberMemory();
+  }
+  SetOpsPerSecondCounter(state);
+}
+
 static void BM_MultiplyModP_256_Secp256k1P(benchmark::State& state) {
   const auto corpus = MakeMultiplyModuloBenchCorpus();
   std::size_t index = 0;
@@ -539,6 +622,8 @@ BENCHMARK(BM_Secp256k1_PointMultiply);
 BENCHMARK(BM_LinComb<LinearCombination>)->Name("BM_LinComb_JointNAF");
 BENCHMARK(BM_LinComb<LinearCombination_NAF_Disjoint>)->Name("BM_LinComb_DisjointNAF");
 BENCHMARK(BM_LinComb_wNAF);
+BENCHMARK(BM_LinComb_GLV);
+BENCHMARK(BM_GLV_SplitLambda);
 BENCHMARK(BM_MultiplyModP_256_Secp256k1P);
 BENCHMARK(BM_MultiplySelfModP_256_Secp256k1P);
 BENCHMARK(BM_SquareModP_256_Secp256k1P);
