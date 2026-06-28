@@ -278,13 +278,33 @@ static void BM_Secp256k1_VerifySignature(benchmark::State& state) {
   });
 }
 
-// Joint-NAF verify, kept for comparison now that wNAF is the default path.
+// Joint-NAF verify, kept for comparison now that GLV is the default path.
 static void BM_Secp256k1_VerifySignature_JointNAF(benchmark::State& state) {
   RunVerifySignatureBench(state, [](const Curve::PublicKey& pk, const Curve::Signature& sig,
                                     const std::array<uint8_t, 32>& digest) {
     return Curve::VerifySignatureWith(pk, sig, digest,
         [](const Curve::Wide& u1, const Curve::Wide& u2, const Curve::Affine& Q) {
           return LinearCombination(u1, Curve::G, u2, Q);
+        });
+  });
+}
+
+// wNAF verify (separate fixed-G + variable-Q tables, no endomorphism), kept for comparison against
+// the GLV default and joint NAF. Clean apples-to-apples: same VerifySignatureImpl (s^-1, the combine,
+// IsJacobianXEqual), only the linear combination differs; the fixed G-table is precomputed once
+// outside timing at the GLV default width, exactly as the real verify lazily builds it. Post-globalz
+// the Q-side adds are mixed (PrecomputeTableGlobalZ in LinearCombination_wNAF), so this measures wNAF
+// without the old jac+jac tax -- the re-timing the Step 3 plan calls for.
+static void BM_Secp256k1_VerifySignature_wNAF(benchmark::State& state) {
+  constexpr int kGWidth = 12;  // matches the GLV default generator-table width (curve.h)
+  std::vector<Curve::Affine> g_table(1u << (kGWidth - 1));
+  PrecomputeTableAffine(Curve::G, std::span{g_table});
+  const std::span<const Curve::Affine> g_span{g_table};
+  RunVerifySignatureBench(state, [&](const Curve::PublicKey& pk, const Curve::Signature& sig,
+                                     const std::array<uint8_t, 32>& digest) {
+    return Curve::VerifySignatureWith(pk, sig, digest,
+        [&](const Curve::Wide& u1, const Curve::Wide& u2, const Curve::Affine& Q) {
+          return LinearCombination_wNAF(u1, g_span, u2, Q);
         });
   });
 }
@@ -615,6 +635,7 @@ static void BM_BigUint256_Squared(benchmark::State& state) {
 
 BENCHMARK(BM_Secp256k1_VerifySignature);
 BENCHMARK(BM_Secp256k1_VerifySignature_JointNAF);
+BENCHMARK(BM_Secp256k1_VerifySignature_wNAF);
 BENCHMARK(BM_Secp256k1_PointAdd);
 BENCHMARK(BM_Secp256k1_PointAddMixed);
 BENCHMARK(BM_Secp256k1_PointDouble);
