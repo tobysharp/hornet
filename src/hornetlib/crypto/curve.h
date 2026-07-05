@@ -159,7 +159,8 @@ class Curve {
   template <size_t Size>
   inline static Wide HashToInt(const std::array<uint8_t, Size>& hash) {
     static_assert(Size == kBits / 8);
-    return Wide::FromBigEndianBytes(std::span<const uint8_t>{hash});
+    const Uint256 x = Wide::FromBigEndianBytes(std::span<const uint8_t>{hash});
+    return ReduceModuloN(x);
   }
 };
 

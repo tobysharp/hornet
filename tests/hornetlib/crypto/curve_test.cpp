@@ -459,6 +459,45 @@ Secp256k1SignedMessage MakeRandomSecp256k1Signature(std::mt19937_64& rng) {
 	return {*public_key, {r.x, s.x}, digest};
 }
 
+// Signs a caller-chosen digest, reducing it mod n exactly as verify's HashToInt does -- so digests
+// with integer value >= n (which the random helper above never produces) can be exercised.
+Secp256k1SignedMessage MakeSecp256k1SignatureForDigest(std::mt19937_64& rng,
+                                                       const std::array<uint8_t, 32>& digest) {
+	const Curve::Mod_n private_key = RandomScalarModN(rng);
+	const Curve::Point public_point = private_key.x * Curve::Point{Curve::G};
+	const auto public_key = ParsePublicKey<Curve>(public_point);
+	EXPECT_TRUE(public_key.has_value());
+
+	const Curve::Mod_n z{ReduceModuloN(Curve::Wide::FromBigEndianBytes(digest))};
+	const Curve::Mod_n nonce = RandomScalarModN(rng);
+	const Curve::Point nonce_point = nonce.x * Curve::Point{Curve::G};
+	const Curve::Mod_n r{nonce_point.NormalizedX().x.Modulo(secp256k1::n)};
+	const Curve::Mod_n s = (z + r * private_key) / nonce;
+	return {*public_key, {r.x, s.x}, digest};
+}
+
+// A digest whose integer value is >= n must be reduced (e = hash mod n, bits2int semantics), not
+// trip the Mod_n construction invariant: ~2^-128 of real hashes land there, so it is constructed.
+TEST(CurveTest, Secp256k1VerifiesDigestsWithValuesAtOrAboveGroupOrder) {
+	std::mt19937_64 rng{0xd1ce5eed00ff1234ull};
+
+	// 2^256 - 1, the maximal digest: e reduces to 2^256 - 1 - n.
+	std::array<uint8_t, 32> all_ff;
+	all_ff.fill(0xFF);
+
+	// Exactly n: e reduces to 0, so u1 = 0 and R = u2*Q -- the zero G-term end to end.
+	const std::array<uint8_t, 32> exactly_n = ToBigEndianBytes<Curve>(secp256k1::n);
+
+	for (const auto& digest : {all_ff, exactly_n}) {
+		const auto [public_key, signature, unused] = MakeSecp256k1SignatureForDigest(rng, digest);
+		EXPECT_TRUE(Curve::VerifySignature(public_key, signature, digest));
+
+		auto tampered = digest;
+		tampered[31] ^= 0x01;
+		EXPECT_FALSE(Curve::VerifySignature(public_key, signature, tampered));
+	}
+}
+
 // The default verify path (wNAF) must agree with the joint-NAF reference on every input: accept
 // the same valid signatures and reject the same tampered ones. This is the consensus-critical net.
 TEST(CurveTest, Secp256k1WnafVerifyMatchesJointNafOnRandomSignatures) {
