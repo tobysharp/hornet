@@ -135,13 +135,13 @@ struct Fp {
 
   friend constexpr Fp operator+(const Fp& lhs, const Fp& rhs) {
     const auto [sum, carry] = lhs.x.AddWithCarry(rhs.x);
-    if (!carry && sum < p) return sum;
-    return sum - p;
+    const auto [reduced, borrow] = sum.SubWithBorrow(p);
+    return reduced.ConditionalAdd(borrow && !carry, p);
   }
 
   friend constexpr Fp operator-(const Fp& lhs, const Fp& rhs) {
-    if (lhs.x >= rhs.x) return lhs.x - rhs.x;
-    else return (p - rhs.x) + lhs.x;
+    const auto [diff, borrow] = lhs.x.SubWithBorrow(rhs.x);
+    return diff.ConditionalAdd(borrow, p);
   }
 
   friend constexpr Fp operator*(const Fp& lhs, const Fp& rhs) {

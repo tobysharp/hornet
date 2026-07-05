@@ -124,6 +124,14 @@ class BigUint {
     return *this = AddWithCarry(rhs).first;
   }
 
+  // x + (condition ? rhs : 0) mod 2^kBits, branchless: the addend is masked into the carry chain.
+  [[nodiscard]] constexpr BigUint ConditionalAdd(bool condition, const BigUint& rhs) const noexcept {
+    const T mask = -T{condition};
+    BigUint masked;
+    for (int i = 0; i < kWords; ++i) masked.Words()[i] = rhs.Words()[i] & mask;
+    return *this + masked;
+  }
+
   template <int kRBits>
   [[nodiscard]] constexpr std::pair<BigUint, bool> SubWithBorrow(const BigUint<kRBits, T>& rhs, bool borrow_in = false) const noexcept {
     static_assert(kRBits <= kBits);
