@@ -102,12 +102,12 @@ class BigUint {
   template <int kRBits>
   [[nodiscard]] constexpr std::pair<BigUint<std::max(kBits, kRBits), T>, bool> AddWithCarry(const BigUint<kRBits, T>& rhs, bool carry_in = false) const noexcept {
     BigUint<std::max(kBits, kRBits), T> result;
-    T carry = carry_in ? 1 : 0;
     constexpr int kOverlap = std::min(kWords, rhs.kWords);
+    T carry = carry_in;
     for (int i = 0; i < kOverlap; ++i) {
-      const T partial = words_[i] + carry;
-      result.Words()[i] = partial + rhs.Words()[i];
-      carry = (partial < carry) || (result.Words()[i] < partial);
+      const T partial = words_[i] + rhs.Words()[i];
+      result.Words()[i] = partial + carry;
+      carry = T{partial < words_[i]} | T{result.Words()[i] < partial};
     }
     const T* src = kBits > kRBits ? words_.data() : rhs.Words().data();
     for (int i = kOverlap; i < result.kWords; ++i) {
@@ -128,17 +128,12 @@ class BigUint {
   [[nodiscard]] constexpr std::pair<BigUint, bool> SubWithBorrow(const BigUint<kRBits, T>& rhs, bool borrow_in = false) const noexcept {
     static_assert(kRBits <= kBits);
     BigUint result;
-    T borrow = borrow_in ? 1 : 0;
-    const auto& rwords = rhs.Words();
+    T borrow = borrow_in;
     for (int i = 0; i < kWords; ++i) {
-      const T partial = words_[i] - borrow;
-      // With no underflow, partial <= previous, borrow <= previous,
-      // With underflow, previous < partial, previous < borrow.
-      const T rword = i < rhs.kWords ? rwords[i] : 0;
-      result.words_[i] = partial - rword;
-      // With no underflow, words_[i] <= partial, rhs.words_[i] <= partial.
-      // With underflow, partial < result.words_[i], partial < rhs.words_[i].
-      borrow = (words_[i] < borrow) || (partial < result.words_[i]);
+      const T rword = i < rhs.kWords ? rhs.Words()[i] : 0;
+      const T partial = words_[i] - rword;
+      result.words_[i] = partial - borrow;
+      borrow = T{words_[i] < rword} | T{partial < borrow};
     }
     return {result, borrow != 0};
   }

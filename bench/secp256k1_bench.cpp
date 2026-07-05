@@ -589,7 +589,7 @@ static void BM_MultiplyModP_256_Secp256k1P(benchmark::State& state) {
     auto y = input_y;
     benchmark::DoNotOptimize(x);
     benchmark::DoNotOptimize(y);
-    auto product = detail::MultiplyModuloM<256, secp256k1::p>(x, y);
+    auto product = ReduceModulo<256, secp256k1::p>(x * y);
     benchmark::DoNotOptimize(product);
     benchmark::ClobberMemory();
   }
@@ -623,7 +623,7 @@ static void BM_SquareModP_256_Secp256k1P(benchmark::State& state) {
     index = (index + 1) & (kCorpusSize - 1);
     auto x = input;
     benchmark::DoNotOptimize(x);
-    auto squared = detail::SquaredModuloM<256, secp256k1::p>(x);
+    auto squared = ReduceModulo<256, secp256k1::p>(x.Squared());
     benchmark::DoNotOptimize(squared);
     benchmark::ClobberMemory();
   }
@@ -640,7 +640,7 @@ static void BM_MultiplySelfModP_256_Secp256k1P(benchmark::State& state) {
     index = (index + 1) & (kCorpusSize - 1);
     auto x = input;
     benchmark::DoNotOptimize(x);
-    auto product = detail::MultiplyModuloM<256, secp256k1::p>(x, x);
+    auto product = ReduceModulo<256, secp256k1::p>(x * x);
     benchmark::DoNotOptimize(product);
     benchmark::ClobberMemory();
   }
