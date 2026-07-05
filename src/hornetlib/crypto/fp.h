@@ -26,29 +26,6 @@ constexpr UIntW<kBits> HalfModuloOdd(const UIntW<kBits>& x) {
   return sum;
 }
 
-template <int kXBits, int kMBits, const UIntW<kMBits>& p>
-constexpr UIntW<kMBits> ReduceModuloM(const UIntW<kXBits>& x) {
-  static_assert(kXBits >= kMBits);
-  if constexpr (kMBits == 256)
-    if constexpr (p == secp256k1::p) return ReduceModuloP(x);
-  return x.Modulo(p);
-}
-
-template <int kBits, const UIntW<kBits>& p>
-constexpr UIntW<kBits> MultiplyModuloM(const UIntW<kBits>& x, const UIntW<kBits>& y) {
-  if constexpr (kBits == 256)
-    if constexpr (p == secp256k1::p) return ReduceModuloP(x, y);
-  return x.MultiplyWide(y).Modulo(p);
-}
-
-template <int kBits, const UIntW<kBits>& p>
-constexpr UIntW<kBits> SquaredModuloM(const UIntW<kBits>& x) {
-  const auto sqr = x.Squared();
-  if constexpr (kBits == 256)
-    if constexpr (p == secp256k1::p) return ReduceModuloP(sqr);
-  return sqr.Modulo(p);
-}
-
 template <int kBits, const UIntW<kBits>& p>
 constexpr UIntW<kBits> InvertModuloOdd(const UIntW<kBits>& b) {
   using Type = UIntW<kBits>;
@@ -74,7 +51,7 @@ constexpr UIntW<kBits> InvertModuloOdd(const UIntW<kBits>& b) {
 template <int kBits, const UIntW<kBits>& p>
 constexpr UIntW<kBits> DivideModuloOdd(const UIntW<kBits>& a, const UIntW<kBits>& b) {
   const auto s = InvertModuloOdd<kBits, p>(b);
-  return MultiplyModuloM<kBits, p>(s, a);
+  return ReduceModulo<kBits, p>(s * a);
 }
 
 }  // namespace detail
@@ -96,7 +73,7 @@ struct Fp {
   constexpr bool operator!=(const Fp& rhs) const { return x != rhs.x; }
   constexpr bool operator==(const Fp& rhs) const { return x == rhs.x; }
 
-  constexpr Fp Squared() const { return detail::SquaredModuloM<kBits, p>(x); }
+  constexpr Fp Squared() const { return ReduceModulo<kBits, p>(x.Squared()); }
   constexpr Fp Inverse() const { return detail::InvertModuloOdd<kBits, p>(x); }
 
   constexpr std::optional<Fp> SquareRoot() const {
@@ -125,7 +102,7 @@ struct Fp {
     constexpr int kResultBits = NextWord<kBits + k>();
     const auto ext = x.template ZeroExtend<kResultBits>();
     const auto mul = ext << k;
-    return detail::ReduceModuloM<mul.Bits(), kBits, p>(mul);
+    return ReduceModulo<kBits, p>(mul);
   }
 
   template <int k> Fp constexpr Times() const {
@@ -168,7 +145,7 @@ struct Fp {
   }
 
   friend constexpr Fp operator*(const Fp& lhs, const Fp& rhs) {
-    return detail::MultiplyModuloM<kBits, p>(lhs.x, rhs.x);
+    return ReduceModulo<kBits, p>(lhs.x * rhs.x);
   }
 
   constexpr Fp& operator *=(const Fp& rhs) {

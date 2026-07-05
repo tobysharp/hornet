@@ -124,14 +124,18 @@ class BigUint {
     return *this = AddWithCarry(rhs).first;
   }
 
-  [[nodiscard]] constexpr std::pair<BigUint, bool> SubWithBorrow(const BigUint& rhs, bool borrow_in = false) const noexcept {
+  template <int kRBits>
+  [[nodiscard]] constexpr std::pair<BigUint, bool> SubWithBorrow(const BigUint<kRBits, T>& rhs, bool borrow_in = false) const noexcept {
+    static_assert(kRBits <= kBits);
     BigUint result;
     T borrow = borrow_in ? 1 : 0;
+    const auto& rwords = rhs.Words();
     for (int i = 0; i < kWords; ++i) {
       const T partial = words_[i] - borrow;
       // With no underflow, partial <= previous, borrow <= previous,
       // With underflow, previous < partial, previous < borrow.
-      result.words_[i] = partial - rhs.words_[i];
+      const T rword = i < rhs.kWords ? rwords[i] : 0;
+      result.words_[i] = partial - rword;
       // With no underflow, words_[i] <= partial, rhs.words_[i] <= partial.
       // With underflow, partial < result.words_[i], partial < rhs.words_[i].
       borrow = (words_[i] < borrow) || (partial < result.words_[i]);
@@ -139,7 +143,8 @@ class BigUint {
     return {result, borrow != 0};
   }
 
-  constexpr BigUint& operator-=(const BigUint& rhs) noexcept {
+  template <int kRBits>
+  constexpr BigUint& operator-=(const BigUint<kRBits, T>& rhs) noexcept {
     return *this = SubWithBorrow(rhs).first;
   }
 
@@ -157,7 +162,8 @@ class BigUint {
     return BigUint{*this} += low;
   }
 
-  [[nodiscard]] constexpr BigUint<kBits * 2, T> MultiplyWide(const BigUint& rhs) const noexcept {
+  template <int kRBits>
+  [[nodiscard]] constexpr BigUint<kBits + kRBits, T> MultiplyWide(const BigUint<kRBits, T>& rhs) const noexcept {
     const auto Add = [](T& acc, T value) -> bool {
       acc += value;
       return acc < value;
@@ -165,15 +171,16 @@ class BigUint {
     
     // Iterate over destination words.
     T c0 = 0, c1 = 0, c2 = 0;
-    BigUint<kBits * 2, T> result;
-    for (int i = 0; i < kWords * 2; ++i) {
-      const int j_begin = std::max(0, i + 1 - kWords);
+    BigUint<kBits + kRBits, T> result;
+    constexpr int kRWords = rhs.kWords;
+    for (int i = 0; i < kWords + kRWords; ++i) {
+      const int j_begin = std::max(0, i + 1 - kRWords);
       const int j_end = std::min(i + 1, kWords);
 
       // Iterate over pairs contributing to column i.
       for (int j = j_begin; j < j_end; ++j) {
         int k = i - j;
-        const auto [lo, hi] = MulWide(words_[j], rhs.words_[k]);
+        const auto [lo, hi] = MulWide(words_[j], rhs.Words()[k]);
         Add(c2, Add(c1, hi + Add(c0, lo)));
       }
       result.Words()[i] = c0;
@@ -221,6 +228,11 @@ class BigUint {
     acc += value;
     return acc < value;
   };
+
+  template <int kRBits>
+  [[nodiscard]] constexpr BigUint<kBits + kRBits, T> operator*(const BigUint<kRBits, T>& rhs) const noexcept {
+    return MultiplyWide(rhs);
+  }
 
   constexpr BigUint operator*(T rhs) const noexcept {
     if (rhs == 0) return Zero();
@@ -315,7 +327,8 @@ class BigUint {
     return AddWithCarry(rhs).first;
   }
 
-  constexpr BigUint operator-(const BigUint& rhs) const {
+  template <int kRBits>
+  constexpr BigUint operator-(const BigUint<kRBits, T>& rhs) const {
     return BigUint{*this} -= rhs;
   }
 
@@ -325,24 +338,48 @@ class BigUint {
     return rv;
   }
 
+  template <int kRBits>
+  constexpr bool operator==(const BigUint<kRBits, T>& rhs) const {
+    constexpr int kOverlap = std::min(kWords, rhs.kWords);
+    const auto& rwords = rhs.Words();
+    for (int i = kWords - 1; i >= kOverlap; --i)
+      if (words_[i] != 0) return false;
+    for (int i = rhs.kWords - 1; i >= kOverlap; --i)
+      if (rwords[i] != 0) return false;
+    for (int i = kOverlap - 1; i >= 0; --i)
+      if (words_[i] != rwords[i]) return false;
+    return true;
+  }
+
   constexpr bool operator==(const BigUint& rhs) const {
     return words_ == rhs.words_;
   }
 
-  constexpr bool operator<(const BigUint& rhs) const {
-    return std::lexicographical_compare(words_.rbegin(), words_.rend(), rhs.words_.rbegin(),
-                                        rhs.words_.rend());
+  template <int kRBits>
+  constexpr bool operator<(const BigUint<kRBits, T>& rhs) const {
+    constexpr int kOverlap = std::min(kWords, rhs.kWords);
+    const auto& rwords = rhs.Words();
+    for (int i = kWords - 1; i >= kOverlap; --i)
+      if (words_[i] != 0) return false;
+    for (int i = rhs.kWords - 1; i >= kOverlap; --i)
+      if (rwords[i] != 0) return true;
+    for (int i = kOverlap - 1; i >= 0; --i)
+      if (words_[i] != rwords[i]) return words_[i] < rwords[i];
+    return false;
   }
 
-  constexpr bool operator>(const BigUint& rhs) const {
+  template <int kRBits>
+  constexpr bool operator>(const BigUint<kRBits, T>& rhs) const {
     return rhs < *this;
   }
 
-  constexpr bool operator>=(const BigUint& rhs) const {
+  template <int kRBits>
+  constexpr bool operator>=(const BigUint<kRBits, T>& rhs) const {
     return !(*this < rhs);
   }
 
-  constexpr bool operator<=(const BigUint& rhs) const {
+  template <int kRBits>
+  constexpr bool operator<=(const BigUint<kRBits, T>& rhs) const {
     return !(rhs < *this);
   }
 

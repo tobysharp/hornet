@@ -215,8 +215,8 @@ TEST(FpDetailTest, HalfModuloOddHandlesEvenOddAndCarryPaths) {
   EXPECT_EQ(half_multilimb_carry, MakeUint128(20ull, 0x8000000000000000ull));
 }
 
-TEST(FpDetailTest, MultiplyModuloMatchesKnownReduction) {
-  const Uint64 product = detail::MultiplyModuloM<64, kPrime17>(Uint64{8}, Uint64{15});
+TEST(FpDetailTest, ReduceModuloGenericFallbackMatchesKnownReduction) {
+  const Uint64 product = ReduceModulo<64, kPrime17>(Uint64{8} * Uint64{15});
   EXPECT_EQ(product, Uint64{1});
 }
 

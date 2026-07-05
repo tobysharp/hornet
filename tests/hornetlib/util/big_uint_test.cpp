@@ -672,5 +672,70 @@ TEST_F(BigUintTest, MultiplyFullMatchesMultiplyWideWhenBothHalvesAreNonZero) {
   EXPECT_NE(hi, TestUint256::Zero());
 }
 
+// ---- Mixed-width operators: comparison and arithmetic against a differently-sized rhs ----
+
+TEST_F(BigUintTest, MixedWidthComparisonOrdersByNumericValue) {
+  // A nonzero word above the narrower operand's width makes the wider operand larger, whatever the
+  // low words hold.
+  const TestUint256 big_hi = MakeBigUint<256, uint64_t>({0, 0, 1, 0});          // 2^128
+  const TestBigUint128 small_max = MakeBigUint<128, uint64_t>({~0ull, ~0ull});  // 2^128 - 1
+  EXPECT_TRUE(small_max < big_hi);
+  EXPECT_TRUE(big_hi > small_max);
+  EXPECT_FALSE(big_hi < small_max);
+  EXPECT_TRUE(small_max <= big_hi);
+  EXPECT_TRUE(big_hi >= small_max);
+  EXPECT_FALSE(small_max == big_hi);
+  EXPECT_TRUE(small_max != big_hi);
+
+  // Equal numeric value across widths: the wider operand's high words are zero.
+  const TestUint256 wide_five = MakeBigUint<256, uint64_t>({5, 0, 0, 0});
+  const TestBigUint128 narrow_five = MakeBigUint<128, uint64_t>({5, 0});
+  EXPECT_TRUE(wide_five == narrow_five);
+  EXPECT_TRUE(narrow_five == wide_five);
+  EXPECT_FALSE(wide_five != narrow_five);
+  EXPECT_FALSE(wide_five < narrow_five);
+  EXPECT_FALSE(narrow_five < wide_five);
+  EXPECT_TRUE(wide_five >= narrow_five);
+  EXPECT_TRUE(wide_five <= narrow_five);
+
+  // Difference decided within the overlapping (shared) words.
+  const TestUint256 wide_seven = MakeBigUint<256, uint64_t>({7, 0, 0, 0});
+  EXPECT_TRUE(narrow_five < wide_seven);
+  EXPECT_TRUE(wide_seven > narrow_five);
+  EXPECT_FALSE(wide_seven == narrow_five);
+}
+
+TEST_F(BigUintTest, MixedWidthMultiplyWideMatchesEqualWidthProductByValue) {
+  const TestUint256 a = MakeBigUint<256, uint64_t>({~0ull, ~0ull, ~0ull, 0});  // 2^192 - 1
+  const TestBigUint128 b = MakeBigUint<128, uint64_t>({0xdeadbeefcafef00dull, 0x0123456789abcdefull});
+
+  const auto narrow = a.MultiplyWide(b);                   // BigUint<384>
+  const auto wide = a.MultiplyWide(b.ZeroExtend<256>());   // BigUint<512>, same numeric value
+  static_assert(decltype(narrow)::Bits() == 384);
+  static_assert(decltype(wide)::Bits() == 512);
+  EXPECT_TRUE(narrow == wide);  // mixed-width equality: 384-bit vs 512-bit
+  EXPECT_TRUE(wide == narrow);
+
+  // Hand case: (2^128 - 1) * 3 = 2*2^128 + (2^128 - 3), across mismatched widths.
+  const TestBigUint128 m = MakeBigUint<128, uint64_t>({~0ull, ~0ull});
+  const TestBigUint64x64 three = MakeBigUint<64, uint64_t>({3});
+  const auto prod = m.MultiplyWide(three);  // BigUint<192>
+  static_assert(decltype(prod)::Bits() == 192);
+  const TestBigUint192 expected = MakeBigUint<192, uint64_t>({~0ull - 2, ~0ull, 2});
+  EXPECT_EQ(prod, expected);
+}
+
+TEST_F(BigUintTest, MixedWidthSubtractionZeroExtendsNarrowOperand) {
+  // Borrow must propagate out of the narrow operand into the wide operand's high words.
+  const TestUint256 a = MakeBigUint<256, uint64_t>({0, 0, 1, 0});  // 2^128
+  const TestBigUint128 one = MakeBigUint<128, uint64_t>({1, 0});
+  const TestUint256 expected = MakeBigUint<256, uint64_t>({~0ull, ~0ull, 0, 0});  // 2^128 - 1
+  EXPECT_EQ(a - one, expected);
+
+  // Subtracting a narrow rhs equals subtracting its explicit zero-extension.
+  const TestBigUint128 b = MakeBigUint<128, uint64_t>({0x0123456789abcdefull, 0xfedcba9876543210ull});
+  EXPECT_EQ(a - b, a - b.ZeroExtend<256>());
+}
+
 }  // namespace
 }  // namespace hornet::util

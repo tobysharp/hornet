@@ -16,10 +16,14 @@ consteval int NextWord() {
   return (kBits + kDefaultSize - 1) & ~(kDefaultSize - 1);
 }
 
+template <int kBits, int kRBits>
+constexpr auto Extend(const UIntW<kRBits>& x) {
+  return x.template ZeroExtend<NextWord<kBits>()>();
+}
+
 template <int kBits>
   requires(kBits < 256)
 constexpr Uint256 ReduceModuloP(const UIntW<kBits>& x) {
-  if constexpr (kBits == 256) return x;
   return x.template ZeroExtend<256>();
 }
 
@@ -61,16 +65,36 @@ constexpr Uint256 ReduceModuloP(const UIntW<512>& x) {
   return ReduceModuloP(t1);
 }
 
-constexpr Uint256 ReduceModuloP(const Uint256& x, const Uint256& y) {
-  return ReduceModuloP(x.MultiplyWide(y));
+constexpr Uint256 ReduceModuloN(const UIntW<512>& x) {
+  constexpr auto c_n = Uint256::Zero() - secp256k1::n;
+  constexpr auto d = c_n.template LowBits<128>();
+  static_assert(c_n.template HighBits<128>() == UIntW<128>{1});
+
+  const auto [t_h, t_l] = Partition(x);                                   // [256b | 256b]
+  const auto u = t_h * d + t_l + (Extend<385>(t_h) << 128);               // < 2^385
+  const auto [u_h, u_l] = Partition(u);                                   // [130b | 256b]
+  const auto v = (Extend<259>(u_h) << 128) + u_h * d + u_l;               // < 2^259
+  const auto [v_h, v_l] = Partition(v);                                   // [3b | 256b]  (v_h is a single-word big-int)
+  const auto w = (Extend<131>(v_h) << 128) + v_h * d + Extend<257>(v_l);  // < 2^257
+  const auto y = (w < secp256k1::n) ? w : (w - secp256k1::n);
+  return y.LowBits<256>();
 }
+
+template <int kMBits, const UIntW<kMBits>& kModulus>
+inline constexpr auto ReduceModulo = [](const auto& x) { return x.Modulo(kModulus); };
+
+template <>
+inline constexpr auto ReduceModulo<256, secp256k1::p> = [](const auto& x) { return ReduceModuloP(x); };
+
+template <>
+inline constexpr auto ReduceModulo<256, secp256k1::n> = [](const auto& x) { return ReduceModuloN(x); };
 
 // For t = x/z^2 (mod p), test whether t = r (mod n).
 constexpr bool IsJacobianXEqual(const Uint256& x, const Uint256& z, const Uint256& r) {
   const Uint256 z2 = ReduceModuloP(z.Squared());
-  if (ReduceModuloP(r, z2) == x) return true;
+  if (ReduceModuloP(r * z2) == x) return true;
   constexpr Uint256 p_n = secp256k1::p - secp256k1::n;
-  return (r < p_n) && (ReduceModuloP(r + secp256k1::n, z2) == x);
+  return (r < p_n) && (ReduceModuloP((r + secp256k1::n) * z2) == x);
 }
 
 }  // namespace hornet::crypto::ecdsa
