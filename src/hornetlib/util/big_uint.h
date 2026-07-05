@@ -143,6 +143,10 @@ class BigUint {
     return {result, borrow != 0};
   }
 
+  constexpr BigUint operator-() const {
+    return ~*this + T{1};
+  }
+
   template <int kRBits>
   constexpr BigUint& operator-=(const BigUint<kRBits, T>& rhs) noexcept {
     return *this = SubWithBorrow(rhs).first;

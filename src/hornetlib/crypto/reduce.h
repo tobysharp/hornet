@@ -32,19 +32,15 @@ constexpr Uint256 ReduceModuloP(const UIntW<256>& x) {
 }
 
 constexpr Uint256 ReduceModuloP(const UIntW<320>& x) {
-  constexpr auto c = (Uint256::Zero() - secp256k1::p).template LowBits<64>();
-  static_assert(Uint256::Zero() - secp256k1::p == c);
   const auto [hi, lo] = Partition(x); // [64b | 256b]
-  auto [y, carry] = lo.AddWithCarry(hi * c);
-  if (carry) return y + c;
+  auto [y, carry] = lo.AddWithCarry(hi * secp256k1::c_p);
+  if (carry) return y - secp256k1::p;
   return ReduceModuloP(y);
 }
 
 constexpr Uint256 ReduceModuloP(const UIntW<512>& x) {
-  constexpr auto c = (Uint256::Zero() - secp256k1::p).template LowBits<64>();
-  static_assert(Uint256::Zero() - secp256k1::p == c);
-  const auto [hi, lo] = Partition(x);  // [256b | 256b]
-  return ReduceModuloP(hi * c + lo);
+const auto [hi, lo] = Partition(x);  // [256b | 256b]
+  return ReduceModuloP(hi * secp256k1::c_p + lo);
 }
 
 inline constexpr Uint256 ReduceModuloN(const UIntW<256>& x) {
@@ -52,17 +48,13 @@ inline constexpr Uint256 ReduceModuloN(const UIntW<256>& x) {
 }
 
 inline constexpr Uint256 ReduceModuloN(const UIntW<512>& x) {
-  constexpr auto c_n = Uint256::Zero() - secp256k1::n;
-  constexpr auto d = c_n.template LowBits<128>();
-  static_assert(c_n.template HighBits<128>() == UIntW<128>{1});
-
   const auto [t_h, t_l] = Partition(x);                                   // [256b | 256b]
-  const auto u = t_h * d + t_l + (Extend<385>(t_h) << 128);               // < 2^385
+  const auto u = t_h * secp256k1::d_n + t_l + (Extend<385>(t_h) << 128);               // < 2^385
   const auto [u_h, u_l] = Partition(u);                                   // [130b | 256b]
-  const auto v = (Extend<259>(u_h) << 128) + u_h * d + u_l;               // < 2^259
+  const auto v = (Extend<259>(u_h) << 128) + u_h * secp256k1::d_n + u_l;               // < 2^259
   const auto [v_h, v_l] = Partition(v);                                   // [3b | 256b]  (v_h is a single-word big-int)
-  const auto [w, carry] = v_l.AddWithCarry((Extend<131>(v_h) << 128) + v_h * d);  // < 2^257
-  if (carry) return w + c_n;
+  const auto [w, carry] = v_l.AddWithCarry((Extend<131>(v_h) << 128) + v_h * secp256k1::d_n);  // < 2^257
+  if (carry) return w - secp256k1::n;
   return ReduceModuloN(w);
 }
 

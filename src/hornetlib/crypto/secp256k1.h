@@ -28,4 +28,10 @@ static constexpr Wide glv_minus_b1 = "00000000000000000000000000000000e4437ed601
 static constexpr Wide glv_a2       = "0000000000000000000000000000000114ca50f7a8e2f3f657c1108d9d44cfd8"_h256;
 static constexpr Wide glv_b2       = "000000000000000000000000000000003086d221a7d46bcde86c90e49284eb15"_h256;
 
+// Constants derived from p and n used in modular reduction.
+static constexpr UIntW<64> c_p  = (-p).template LowBits<64>();
+static constexpr UIntW<128> d_n = (-n).template LowBits<128>();
+static_assert(-secp256k1::p == c_p);
+static_assert((-n).template HighBits<128>() == UIntW<128>{1});
+
 }  // namespace hornet::crypto::ecdsa::secp256k1
