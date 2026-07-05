@@ -101,6 +101,35 @@ TEST(ReduceModuloPTest, ResultIsAlwaysCanonicalForRandomizedInputs) {
   }
 }
 
+// The 320-bit reducer must be total over its container: t1 = a_1*2^256 + b_1 with a_1 a full 64
+// bits, not just the <= 2^289 the 512-bit fold produces. The legacy `a_1 * 977u` word-multiply
+// truncates once a_1*977 exceeds 64 bits (a_1 > ~2^54), silently corrupting the residue.
+TEST(ReduceModuloPTest, Reduces320BitInputsAcrossTheFullDomain) {
+  const auto reduce_and_check = [](const UIntW<320>& t1) {
+    EXPECT_EQ(ReduceModuloP(t1), t1.Modulo(secp256k1::p)) << "t1=" << t1;
+    EXPECT_LT(ReduceModuloP(t1), secp256k1::p) << "t1=" << t1;
+  };
+  const auto with_top_word = [](uint64_t a_1) {
+    return UIntW<320>{std::array<uint64_t, 5>{0, 0, 0, 0, a_1}};
+  };
+
+  // Largest top word whose *977 still fits in 64 bits, and the first that does not.
+  constexpr uint64_t kTruncationBoundary = ~0ull / 977u;
+
+  reduce_and_check(with_top_word(1));                        // 2^256
+  reduce_and_check(with_top_word(1ull << 33));               // 2^289: the 512-fold ceiling
+  reduce_and_check(with_top_word(kTruncationBoundary));      // last safe value for the legacy path
+  reduce_and_check(with_top_word(kTruncationBoundary + 1));  // first truncating value
+  reduce_and_check(with_top_word(1ull << 63));               // 2^319: hand-checkable witness
+  reduce_and_check(UIntW<320>::Maximum());                   // 2^320 - 1
+
+  uint64_t state = 0xc0ac29b7c97c50ddull;
+  for (int i = 0; i < 1000; ++i) {
+    reduce_and_check(UIntW<320>{std::array<uint64_t, 5>{XorShift64(state), XorShift64(state), XorShift64(state),
+                                                        XorShift64(state), XorShift64(state)}});
+  }
+}
+
 // ---- IsJacobianXEqual: the projective x-coordinate comparison used by verify (Step 2) ----
 // Tests whether t == r (mod n) for t = X / Z^2 (mod p), without inverting Z.
 
@@ -246,6 +275,19 @@ TEST(ReduceModuloNTest, ResultIsAlwaysCanonicalForRandomizedInputs) {
   }
 }
 
+TEST(ReduceModuloNTest, Reduces256BitInputsWithOneConditionalSubtract) {
+  // The 256-bit overload: any x < 2^256 < 2n needs at most one subtract. Used by HashToInt to
+  // reduce digests with integer value >= n (the ~2^-128 case a raw Mod_n construction asserts on).
+  const Uint256 n = secp256k1::n;
+  const std::array<Uint256, 6> values = {
+      Uint256::Zero(), Uint256{1}, n - Uint256{1}, n, n + Uint256{1}, Uint256::Maximum(),
+  };
+  for (const auto& x : values) {
+    EXPECT_EQ(ReduceModuloN(x), x.Modulo(n)) << "x=" << x;
+    EXPECT_LT(ReduceModuloN(x), n) << "x=" << x;
+  }
+}
+
 // ---- ReduceModulo dispatch: the modulus-specialized variable template used by Fp ----
 
 TEST(ReduceModuloDispatchTest, SpecializationsMatchGenericModuloForBothModuli) {
@@ -256,6 +298,16 @@ TEST(ReduceModuloDispatchTest, SpecializationsMatchGenericModuloForBothModuli) {
     const auto prod = RandomUint256(state) * RandomUint256(state);
     EXPECT_EQ((ReduceModulo<256, secp256k1::p>(prod)), prod.Modulo(secp256k1::p)) << "i=" << i;
     EXPECT_EQ((ReduceModulo<256, secp256k1::n>(prod)), prod.Modulo(secp256k1::n)) << "i=" << i;
+  }
+
+  // 256-bit inputs route to the width-matching conditional-subtract overloads of both moduli.
+  const std::array<Uint256, 5> edges = {
+      secp256k1::n - Uint256{1}, secp256k1::n, secp256k1::p - Uint256{1}, secp256k1::p,
+      Uint256::Maximum(),
+  };
+  for (const auto& x : edges) {
+    EXPECT_EQ((ReduceModulo<256, secp256k1::p>(x)), x.Modulo(secp256k1::p)) << "x=" << x;
+    EXPECT_EQ((ReduceModulo<256, secp256k1::n>(x)), x.Modulo(secp256k1::n)) << "x=" << x;
   }
 }
 
