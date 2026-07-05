@@ -549,7 +549,8 @@ static void BM_LinComb_GLV(benchmark::State& state) {
 static void BM_GLV_SplitLambda(benchmark::State& state) {
   const auto lambda = "5363ad4cc05c30e0a5261c028812645a122e22ea20816678df02967c1b23bd72"_h256;
   const auto residue = [](const SignedScalar& s) {
-    return s.negative ? secp256k1::n - s.magnitude : s.magnitude;  // canonical [0, n) representative
+    return s.negative ? secp256k1::n - s.magnitude
+                      : s.magnitude.ZeroExtend<256>();  // canonical [0, n) representative
   };
 
   uint64_t gen = 0x9e3779b97f4a7c15ull;
@@ -562,8 +563,6 @@ static void BM_GLV_SplitLambda(benchmark::State& state) {
     const Curve::Mod_n reconstructed =
         Curve::Mod_n{residue(split.k1)} + Curve::Mod_n{residue(split.k2)} * Curve::Mod_n{lambda};
     BenchCheck(reconstructed.x == k, "SplitLambda reconstruction != k");
-    BenchCheck(split.k1.magnitude.SignificantBits() <= 128 && split.k2.magnitude.SignificantBits() <= 128,
-               "SplitLambda parts exceed half-width bound");
   }
 
   std::size_t index = 0;

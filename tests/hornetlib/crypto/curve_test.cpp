@@ -538,13 +538,15 @@ TEST(CurveTest, Secp256k1WnafVerifyIsCorrectAcrossGeneratorTableWidths) {
 	}
 }
 
-// SplitLambda must give k == k1 + k2*lambda (mod n) with |k1|, |k2| < 2^128 -- the half-width bound
-// LinearCombination_GLV relies on for its kBits/2 ladder length. lambda (the endomorphism eigenvalue)
-// is a test oracle only; the decomposition itself uses the lattice basis, not lambda.
+// SplitLambda must give k == k1 + k2*lambda (mod n). The half-width bound |k_i| < 2^128 is enforced
+// by SignedScalar's UIntW<128> type; a bound violation would truncate there and break reconstruction
+// here. lambda (the endomorphism eigenvalue) is a test oracle only; the decomposition itself uses
+// the lattice basis, not lambda.
 TEST(CurveTest, SplitLambdaDecomposesScalarWithBoundedHalfWidthParts) {
 	const auto lambda = "5363ad4cc05c30e0a5261c028812645a122e22ea20816678df02967c1b23bd72"_h256;
 	const auto residue = [](const SignedScalar& s) {
-		return s.negative ? secp256k1::n - s.magnitude : s.magnitude;  // canonical [0, n) representative
+		return s.negative ? secp256k1::n - s.magnitude
+		                  : s.magnitude.ZeroExtend<256>();  // canonical [0, n) representative
 	};
 	std::mt19937_64 rng{0x1abe11ed1234ull};
 	for (int i = 0; i < 1000; ++i) {
@@ -553,8 +555,93 @@ TEST(CurveTest, SplitLambdaDecomposesScalarWithBoundedHalfWidthParts) {
 		const Curve::Mod_n reconstructed = Curve::Mod_n{residue(split.k1)} +
 		                                       Curve::Mod_n{residue(split.k2)} * Curve::Mod_n{lambda};
 		EXPECT_EQ(reconstructed.x, k) << "i=" << i;
-		EXPECT_LE(split.k1.magnitude.SignificantBits(), 128u) << "i=" << i;
-		EXPECT_LE(split.k2.magnitude.SignificantBits(), 128u) << "i=" << i;
+	}
+}
+
+// The multiply-shift reciprocals must equal round(2^384 * g / n) exactly -- pinned against
+// libsecp256k1's independently-derived g1/g2 constants (scalar_impl.h).
+TEST(CurveTest, GlvReciprocalsMatchLibsecp256k1Constants) {
+	EXPECT_EQ(detail::kReciprocalB2,
+	          "3086d221a7d46bcde86c90e49284eb153daa8a1471e8ca7fe893209a45dbb031"_h256);
+	EXPECT_EQ(detail::kReciprocalMinusB1,
+	          "e4437ed6010e88286f547fa90abfe4c4221208ac9df506c61571b4ae8ac47f71"_h256);
+}
+
+// |g_hat * n - 2^384 * g| <= (n-1)/2 certifies g_hat = round(2^384 * g / n) via multiplication
+// alone, independent of the QuotientRemainder path that derives the constants.
+TEST(CurveTest, GlvReciprocalsSatisfyRoundingCertificate) {
+	const auto check = [](const UIntW<256>& g_hat, const UIntW<256>& g) {
+		const UIntW<512> approx = g_hat.MultiplyWide(secp256k1::n);
+		const UIntW<512> target = g.ZeroExtend<512>() << 384;
+		const UIntW<512> distance = approx < target ? target - approx : approx - target;
+		EXPECT_LE(distance, secp256k1::n >> 1);
+	};
+	check(detail::kReciprocalB2, secp256k1::glv_b2);
+	check(detail::kReciprocalMinusB1, secp256k1::glv_minus_b1);
+}
+
+// RoundDivide vs the exact rounded quotient floor((g*k + n/2) / n): equal on random scalars, and
+// off by exactly the predicted +-1 at adversarial k where g*k mod n == (n -+ 1)/2, i.e. g*k/n sits
+// within 1/(2n) of a half-integer and the reciprocal's O(2^-129) error can flip the rounding.
+TEST(CurveTest, RoundDivideMatchesExactRoundedQuotientWithinOne) {
+	const auto exact = [](const UIntW<256>& g, const UIntW<256>& k) {
+		const auto num = g.MultiplyWide(k) + (secp256k1::n >> 1);
+		return num.QuotientRemainder(secp256k1::n).first.LowBits<256>();
+	};
+	const auto offset = [](const UIntW<256>& q, int d) {
+		return d >= 0 ? q + UIntW<256>{d} : q - UIntW<256>{-d};
+	};
+
+	struct Boundary { UIntW<256> k; int diff_b2, diff_minus_b1; };
+	const Boundary boundaries[] = {
+		{"e94a482c1def4ec320706b3f29443ebb5b1e139f09cc3403b9bb6b34d521471d"_h256, +1, 0},
+		{"16b5b7d3e210b13cdf8f94c0d6bbc1435f90c947a57c6c380616f357fb14fa24"_h256, 0, 0},
+		{"18d8b19fe2d58fe6295c19dd8484b7ba8ad71dbab4bc5fc63bf0bbeffc939d9c"_h256, 0, 0},
+		{"e7274e601d2a7019d6a3e6227b7b48442fd7bf2bfa8c407583e1a29cd3a2a3a5"_h256, 0, -1},
+	};
+	for (const auto& [k, diff_b2, diff_minus_b1] : boundaries) {
+		EXPECT_EQ(detail::RoundDivide(detail::kReciprocalB2, k),
+		          offset(exact(secp256k1::glv_b2, k), diff_b2));
+		EXPECT_EQ(detail::RoundDivide(detail::kReciprocalMinusB1, k),
+		          offset(exact(secp256k1::glv_minus_b1, k), diff_minus_b1));
+	}
+
+	std::mt19937_64 rng{0xd1d1dedeadbeefull};
+	for (int i = 0; i < 1000; ++i) {
+		const UIntW<256> k = RandomScalarModN(rng).x;
+		EXPECT_EQ(detail::RoundDivide(detail::kReciprocalB2, k),
+		          exact(secp256k1::glv_b2, k)) << "i=" << i;
+		EXPECT_EQ(detail::RoundDivide(detail::kReciprocalMinusB1, k),
+		          exact(secp256k1::glv_minus_b1, k)) << "i=" << i;
+	}
+}
+
+// SplitLambda at edge scalars and at the rounding-boundary ks above: the reconstruction identity
+// and the half-width bounds must hold even where the quotient differs from exact rounding.
+TEST(CurveTest, SplitLambdaRemainsBoundedAtRoundingBoundaries) {
+	const auto lambda = "5363ad4cc05c30e0a5261c028812645a122e22ea20816678df02967c1b23bd72"_h256;
+	const auto residue = [](const SignedScalar& s) {
+		return s.negative ? secp256k1::n - s.magnitude : s.magnitude.ZeroExtend<256>();
+	};
+	const UIntW<256> ks[] = {
+		UIntW<256>::Zero(),
+		UIntW<256>{1},
+		secp256k1::n - UIntW<256>{1},
+		lambda,
+		secp256k1::n - lambda,
+		"00000000000000000000000000000000ffffffffffffffffffffffffffffffff"_h256,
+		"0000000000000000000000000000000100000000000000000000000000000000"_h256,
+		secp256k1::n >> 1,
+		"e94a482c1def4ec320706b3f29443ebb5b1e139f09cc3403b9bb6b34d521471d"_h256,
+		"16b5b7d3e210b13cdf8f94c0d6bbc1435f90c947a57c6c380616f357fb14fa24"_h256,
+		"18d8b19fe2d58fe6295c19dd8484b7ba8ad71dbab4bc5fc63bf0bbeffc939d9c"_h256,
+		"e7274e601d2a7019d6a3e6227b7b48442fd7bf2bfa8c407583e1a29cd3a2a3a5"_h256,
+	};
+	for (const auto& k : ks) {
+		const auto split = SplitLambda(k);
+		const Curve::Mod_n reconstructed = Curve::Mod_n{residue(split.k1)} +
+		                                       Curve::Mod_n{residue(split.k2)} * Curve::Mod_n{lambda};
+		EXPECT_EQ(reconstructed.x, k);
 	}
 }
 
