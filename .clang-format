@@ -4,6 +4,8 @@ ColumnLimit: 120
 AllowShortFunctionsOnASingleLine: Inline
 AllowShortIfStatementsOnASingleLine: AllIfsAndElse
 SpacesBeforeTrailingComments: 2
+RequiresClausePosition: WithPreceding
+BreakTemplateDeclarations: MultiLine
 SortIncludes: true
 IncludeBlocks: Preserve
 IncludeCategories:
