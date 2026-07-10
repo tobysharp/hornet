@@ -25,6 +25,15 @@ template <int kMagnitude = 1> class FieldElement {
     Assert((rhs >> 52) < kMagnitude);
     words_[0] = rhs;
   }
+  constexpr FieldElement(const Uint256& rhs) requires(kMagnitude == 1) {
+    Assert(rhs < secp256k1::p);
+    const auto& rwords = rhs.Words();
+    words_[0] = rwords[0] & kMask52;                                // r0[51..0]
+    words_[1] = ((rwords[0] >> 52) | (rwords[1] << 12)) & kMask52;  // r1[39..0] | r0[63..52]
+    words_[2] = ((rwords[1] >> 40) | (rwords[2] << 24)) & kMask52;  // r2[27..0] | r1[63..40]
+    words_[3] = ((rwords[2] >> 28) | (rwords[3] << 36)) & kMask52;  // r3[15..0] | r2[63..28]
+    words_[4] = rwords[3] >> 16;                                    // r3[63..16]   
+  }
 
   template <int kRMagnitude> requires(kRMagnitude < kMagnitude)
   constexpr FieldElement(const FieldElement<kRMagnitude>& rhs) : words_(rhs.words_) {}
@@ -32,6 +41,17 @@ template <int kMagnitude = 1> class FieldElement {
   constexpr FieldElement& operator=(const FieldElement& rhs) = default;
 
   constexpr const Array& Words() const { return words_; }
+
+  Uint256 Pack() const {
+    std::array<uint64_t, 4> words;
+    const auto normalized = Normalize();
+    const auto& rwords = normalized.Words();
+    words[0] = rwords[0] | (rwords[1] << 52);          // r1[11..0] | r0[51..0]
+    words[1] = (rwords[1] >> 12) | (rwords[2] << 40);  // r2[23..0] | r1[51..12]
+    words[2] = (rwords[2] >> 24) | (rwords[3] << 28);  // r3[35..0] | r2[51..24]
+    words[3] = (rwords[3] >> 36) | (rwords[4] << 16);  // r4[47..0] | r3[51..36]
+    return Uint256{words};
+  }
 
   template <int k> requires((kMagnitude << k) <= (1 << 12))
   constexpr FieldElement<kMagnitude << k> LShift() const {
@@ -80,20 +100,17 @@ template <int kMagnitude = 1> class FieldElement {
   constexpr FieldElement<2> operator*(const FieldElement<kRMagnitude>& rhs) const {
     // Full 5x52 limb product with interleaved fold mod p.
     Array result;
-    constexpr uint64_t c_p = secp256k1::c_p.Words()[0];
-    constexpr __uint128_t R = c_p << 4;
 
     // a * b = sum_{t=0}^8 S_t * 2^(52*t).
     // a_i < m_a * 2^B_i (B_i = 2^52 for i = 0..3, B_4 = 2^48)
     // b_i < m_b * 2^B_i.
 
     // Accumulate 128-bit column products, S_t:
-    // (This step only requires that m_a.m_b <= 2^20 since there are at most 5 terms added.)
     __uint128_t S[9] = {};
     for (int t = 0; t <= 8; ++t) {
       for (int i = std::max(0, t - 4); i <= std::min(t, 4); ++i) {
         const int j = t - i;
-        S[t] += __uint128_t{words_[i]} * rhs.words_[j];  // S_t < 5m_a.m_b.4^B_t
+        S[t] += __uint128_t{words_[i]} * rhs.words_[j];  // S_t < 4m_a.m_b.2^104
       }
     }
 
@@ -111,7 +128,7 @@ template <int kMagnitude = 1> class FieldElement {
       // next iteration, because at this stage each S_i is a 128-bit value at bit position 52*i, so the
       // representation isn't tight yet.
       const uint64_t low = static_cast<uint64_t>(remainder);
-      S[t] += R * low;  // S_t < 5m_a.m_b.4^B_t + 2^101
+      S[t] += __uint128_t{kFold260} * low;  // S_t < 4m_a.m_b.2^104 + 2^101
       remainder = (remainder - low) >> 52;
     }
     Assert(remainder == 0);  // The whole remainder should have been used and folded into S[0..4].
@@ -120,28 +137,116 @@ template <int kMagnitude = 1> class FieldElement {
 
     // Now convert S[0..4] into the efficient representation of 64-bit result words, each < 2.2^B_i
     __uint128_t accumulator = 0;
-    for (int t = 0; t < kWords; ++t) {
-      accumulator = (accumulator >> 52) + S[t];                  // Requires 2^76 + S_t < 2^128 i.e. S_t < 2^127.
+    for (int t = 0; t < 4; ++t) {
+      accumulator = (accumulator >> 52) + S[t];                  // Requires 2^76 + S_t < 2^128
       result[t] = static_cast<uint64_t>(accumulator) & kMask52;  // < 2^52
     }
-    const __uint128_t overflow = accumulator >> 52;  // < 2^76. The remaining accumulator, at bit position 260.
+    // S[4] < 2.m_a.m_b.2^48.2^52 + 3.m_a.m_b.2^52.2^52 + 2^101 < m_a.m_b.2^101 + 3.m_a.m_b.2^104 + 2^101 < (3.125)m_a.m_b.2^104 + 2^101 < m_a.m_b.2^106 + 2^101
+    accumulator = (accumulator >> 52) + S[4];  // < m.a.m_b.2^106 + 2^101 + 2^67.
+    result[4] = static_cast<uint64_t>(accumulator) & kMask48;
+    const __uint128_t overflow = accumulator >> 48;  // < m_a.m_b.2^58 + 2^53 + 2^19 < 2^13.2^58 + eps = 2^71. The remaining accumulator, at bit position 256.
 
-    // Still need to accumulate 2^260 * overflow into result, using
-    // 2^260 * overflow _= R * overflow (mod p), which we fold into bit position 0.
-    __uint128_t residual = R * overflow + result[0];  // < 2^(37+76) + 2^52 < 2^114.
+    // Still need to accumulate 2^256 * overflow into result, using
+    // 2^256 * overflow _= overflow * c_p (mod p), which we fold into bit position 0.
+    // c_p < 2^32 + 2^10.
+    __uint128_t residual = overflow * kFold256 + result[0];  // < 2^104
     result[0] = static_cast<uint64_t>(residual) & kMask52;
-    result[1] += static_cast<uint64_t>(residual >> 52);  // < 2^52 + 2^(114-52) < 2^63.
-    // result[1] < 2.2^52 <= residual < 2^104 <= overflow < 2^67 <= accumulator < 2^119 <= S[4] < 2^118
-    // <= 5.m_a.m_b.2^104 + 2^101 < 2^118 <= 5.m_a.m_b < 2^14 <= m_a.m_b < 3276
+    result[1] += static_cast<uint64_t>(residual >> 52);  // < 2^52 + 2^52 < 2^53.
+    
+    // result[1] < 2.2^52 <= residual < 2^104 <= overflow < 2^71 <= accumulator < 2^119 
+    // <= 2^76 + S[4] < 2^119 <= S[4] < 2^119 - 2^76
+
+    // 119 - 52 = 67. So if S_t <= 2^119 - 2^67 for all t, then
+    // acc_0 < 2^119 => carry_1 = (acc_0 >> 52) < 2^67 => acc_1 < 2^119 => ...
+    // => all accumulators < 2^119 => result[1] < 2.2^52.
+
+    // So it is sufficient to require S_t <= 2^119 - 2^67, i.e.
+    // 4.m_a.m_b.2^104 + 2^101 <= 2^119 - 2^67 
+    // m_a.m_b <= (2^119 - 2^101 - 2^67) / 2^106 = 2^13 - 2^-5 - 2^-39 < 2^13 = 8192.
+    // So max(m_a.m_b) = 2^13 - 1 = 8191.
 
     Assert((residual >> 104) == 0);  // residual should be fully used up now.
 
-    // Fold from bit 256 and higher, using 2^256 _= c_p (mod p).
-    const uint64_t high = result[4] >> 48;  // bits 256..259, high < 2^4
-    result[0] += high * c_p;                // Fold into bit position 0.
-    result[4] &= kMask48;                   // Dispose folded high bits.
-
     return result;
+  }
+
+  constexpr FieldElement<2> NormalizeWeak() const {
+    // Requires words <= 2^64 - 2^12. 
+    // for t=0..3, w_t < m.2^52 <= 2^64 - 2^12 => m <= 2^12 - 2^-40 => m <= 2^12 - 1.
+    static_assert(kMagnitude < (1 << 12));
+    Array result;
+    uint64_t accumulator = 0;
+    for (int t = 0; t < 4; ++t) {
+      accumulator = (accumulator >> 52) + words_[t];
+      result[t] = accumulator & kMask52;
+    }
+    accumulator = (accumulator >> 52) + words_[4];
+    result[4] = accumulator & kMask48;
+    // Since m < 2^12, w_4 < m.2^48 < 2^60, so overflow < (2^60 + 2^12) >> 48 < 2^12 + 2^-36 < 4096.
+    uint64_t overflow = accumulator >> 48;  // < 2^12 at bit position 256.
+    Assert(overflow < 4096);
+    // overflow * c_p < 2^12 * 2^33 < 2^45
+    result[0] += overflow * kFold256; // < 2^52 + 2^45 < 2^53.
+    return result;
+  }
+
+  constexpr FieldElement<1> Normalize() const {
+    const auto weak = NormalizeWeak();
+    // Has w_0 < 2^53, w_1..w_3 < 2^52, w_4 < 2^48, so weak < 2^256 + 2^52.
+    
+    // If w < p, then overflow_0 = 0 and s = w + c_p < 2^256, so overflow_1 = 0 => return w
+    // If p <= w < 2^256 < 2p, then overflow_0 = 0 and s = w + c_p >= p + c_p = 2^256, so overflow_1 = 1 => return s
+    // If 2^256 <= w < 2p, then overflow_0 = 1 and s = w + c_p - 2^256 = w - p < p, so overflow_1 = 0 => return s
+    // i.e. return (overflow_0 | overflow_1) ? s : w
+  
+    Array result;
+    uint64_t accumulator = 0;
+    for (int t = 0; t < 4; ++t) {
+      accumulator = (accumulator >> 52) + weak.words_[t];
+      result[t] = accumulator & kMask52;
+    }
+    accumulator = (accumulator >> 52) + weak.words_[4];
+    result[4] = accumulator & kMask48;
+    // Since m = 2, w_4 < 2.2^48 < 2^49, so overflow < (2^49 + 2^12) >> 48 < 2 + 2^-36 < 2.
+    bool overflow_0 = (accumulator >> 48) != 0;  // 0 or 1 at bit position 256.
+    
+    Array s;
+    accumulator = result[0] + kFold256;
+    for (int t = 0; t < 4; ++t) {
+      s[t] = accumulator & kMask52;
+      accumulator = (accumulator >> 52) + result[t+1];
+    }
+    s[4] = accumulator & kMask48;
+    bool overflow_1 = (accumulator >> 48) != 0;
+
+    return (overflow_0 | overflow_1) ? s : result;
+  }
+
+  constexpr bool NormalizesToZero() const {
+    if constexpr (kMagnitude == 0) return true;
+
+    const auto weak = NormalizeWeak();
+    // Has w_0 < 2^53, w_1..w_3 < 2^52, w_4 < 2^48, so weak < 2^256 + 2^52.
+    
+    Array result;
+    uint64_t accumulator = 0;
+    for (int t = 0; t < 4; ++t) {
+      accumulator = (accumulator >> 52) + weak.words_[t];
+      result[t] = accumulator & kMask52;
+    }
+    accumulator = (accumulator >> 52) + weak.words_[4];
+    result[4] = accumulator & kMask48;
+    // Since m = 2, w_4 < 2.2^48 < 2^49, so overflow < (2^49 + 2^12) >> 48 < 2 + 2^-36 < 2.
+    bool overflow_0 = (accumulator >> 48) != 0;  // 0 or 1 at bit position 256.
+    if (overflow_0) return false;  // p < 2^256 <= w < 2^256 + 2^52 < 2p
+
+    // Zero if w==0 or w==p52.
+    bool equal_zero = true, equal_p = true;
+    for (int i = 0; i < kWords; ++i) {
+      equal_zero &= result[i] == 0;
+      equal_p &= result[i] == p52[i];
+    }
+    return equal_zero | equal_p;
   }
 
   constexpr FieldElement<2> Squared() const requires(kMagnitude * kMagnitude <= kMaxProductMagnitude) {
@@ -153,6 +258,8 @@ template <int kMagnitude = 1> class FieldElement {
   template <int> friend class FieldElement;
   static constexpr uint64_t kMask52 = (1ull << 52) - 1;
   static constexpr uint64_t kMask48 = (1ull << 48) - 1;
+  static constexpr uint64_t kFold256 = secp256k1::c_p.Words()[0];  // < 2^33
+  static constexpr uint64_t kFold260 = kFold256 << 4;  // < 2^37
 
   static constexpr Array p52 = [] {
     Array words;

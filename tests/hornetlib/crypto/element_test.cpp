@@ -13,6 +13,7 @@
 #include <gtest/gtest.h>
 
 #include "hornetlib/crypto/element.h"
+#include "hornetlib/crypto/fp.h"
 
 namespace hornet::crypto::ecdsa {
 namespace {
@@ -46,7 +47,8 @@ UIntW<320> ToInteger(const FieldElement<kMagnitude>& x) {
 
 template <int kMagnitude>
 FieldElement<kMagnitude> RandomElement(std::mt19937_64& rng) {
-  static_assert(kMagnitude >= 1 && kMagnitude <= (1 << 11));  // keeps the bound arithmetic below overflow-free
+  // 4096 * 2^52 wraps; anything below keeps the modulus arithmetic overflow-free.
+  static_assert(kMagnitude >= 1 && kMagnitude <= (1 << 12) - 1);
   Array words;
   for (int i = 0; i < kWords - 1; ++i) words[i] = rng() % (kMagnitude * kLowBound);
   words[kWords - 1] = rng() % (kMagnitude * kTopBound);
@@ -649,6 +651,290 @@ TEST(FieldElementTest, SubtractionAtExtremeMagnitudes) {
   const auto diff = a - b;
   static_assert(std::is_same_v<std::remove_const_t<decltype(diff)>, FieldElement<4096>>);
   EXPECT_EQ(ModP(ToInteger(diff) + ToInteger(b)), ModP(ToInteger(a)));
+}
+
+// ---- Normalization family ------------------------------------------------------------------------
+// NormalizeWeak: value preserved mod p; all words in-lane except words[0] < 2^53. -> <2>
+// Normalize: THE canonical representative -- value < p, all words in-lane. -> <1>
+// NormalizesToZero: bool, true iff the value is congruent to 0 mod p. (Direction: not yet built.)
+
+constexpr uint64_t kM52 = kLowBound - 1;
+constexpr uint64_t kM48 = kTopBound - 1;
+const uint64_t kCp = secp256k1::c_p.Words()[0];  // 2^256 - p, < 2^33
+
+// The 5x52 decomposition of p, replicated for boundary construction.
+Array P52() {
+  Array words;
+  for (int i = 0; i < kWords; ++i) words[i] = (secp256k1::p >> (52 * i)).LowBits<64>() & kM52;
+  return words;
+}
+
+template <int kM>
+void ExpectNormalizeWeakContract(const FieldElement<kM>& x) {
+  const auto weak = x.NormalizeWeak();
+  static_assert(std::is_same_v<std::remove_const_t<decltype(weak)>, FieldElement<2>>);
+  EXPECT_LT(weak.Words()[0], 2 * kLowBound);
+  for (int i = 1; i < 4; ++i) EXPECT_LE(weak.Words()[i], kM52);
+  EXPECT_LE(weak.Words()[4], kM48);
+  EXPECT_EQ(ModP(ToInteger(weak)), ModP(ToInteger(x)));
+}
+
+template <int kM>
+void ExpectNormalizeContract(const FieldElement<kM>& x) {
+  const auto n = x.Normalize();
+  static_assert(std::is_same_v<std::remove_const_t<decltype(n)>, FieldElement<1>>);
+  for (int i = 0; i < 4; ++i) EXPECT_LE(n.Words()[i], kM52);
+  EXPECT_LE(n.Words()[4], kM48);
+  // Canonical means the represented integer IS the residue (in particular < p)...
+  EXPECT_EQ(ToInteger(n), ModP(ToInteger(x)).template ZeroExtend<320>());
+  // ...and canonicalizing again must be a bitwise no-op.
+  EXPECT_EQ(n.Normalize().Words(), n.Words());
+}
+
+TEST(FieldElementTest, NormalizeWeakContractAcrossMagnitudes) {
+  std::mt19937_64 rng{60601};
+  for (int trial = 0; trial < 100; ++trial) {
+    ExpectNormalizeWeakContract(RandomElement<1>(rng));
+    ExpectNormalizeWeakContract(RandomElement<2>(rng));
+    ExpectNormalizeWeakContract(RandomElement<90>(rng));
+    ExpectNormalizeWeakContract(RandomElement<4095>(rng));
+  }
+  // Max limbs at the maximum weak-normalizable magnitude: the internal overflow reaches its
+  // Assert(< 4096) ceiling.
+  ExpectNormalizeWeakContract(MaxElement<4095>());
+}
+
+TEST(FieldElementTest, NormalizeWeakIsConstexpr) {
+  static_assert(Element{5}.NormalizeWeak().Words()[0] == 5);
+}
+
+TEST(FieldElementTest, NormalizeContractAcrossMagnitudes) {
+  std::mt19937_64 rng{60602};
+  for (int trial = 0; trial < 100; ++trial) {
+    ExpectNormalizeContract(RandomElement<1>(rng));
+    ExpectNormalizeContract(RandomElement<2>(rng));
+    ExpectNormalizeContract(RandomElement<90>(rng));
+    ExpectNormalizeContract(RandomElement<4095>(rng));
+  }
+  ExpectNormalizeContract(MaxElement<4095>());
+}
+
+TEST(FieldElementTest, NormalizeIsConstexpr) {
+  static_assert(Element{7}.Normalize().Words()[0] == 7);
+  // p canonicalizes to zero at compile time.
+  static_assert((-FieldElement<0>{}).Normalize().Words()[0] == 0);
+}
+
+TEST(FieldElementTest, NormalizeReducesMultiplesOfP) {
+  // -(zero of magnitude k-1) has words k * p52: the value k*p, exercising k up to the cap.
+  EXPECT_EQ((-FieldElement<0>{}).Normalize().Words(), Array{});     // p
+  EXPECT_EQ((-FieldElement<1>{}).Normalize().Words(), Array{});     // 2p
+  EXPECT_EQ((-FieldElement<4>{}).Normalize().Words(), Array{});     // 5p
+  EXPECT_EQ((-FieldElement<4094>{}).Normalize().Words(), Array{});  // 4095p
+}
+
+TEST(FieldElementTest, NormalizeBoundaryValuesAroundP) {
+  const Array p_limbs = P52();
+
+  Array p_minus_1 = p_limbs;
+  p_minus_1[0] -= 1;
+  EXPECT_EQ(Element{p_minus_1}.Normalize().Words(), p_minus_1);  // already canonical, bit-identical
+
+  EXPECT_EQ(Element{p_limbs}.Normalize().Words(), Array{});  // exactly p -> 0
+
+  Array p_plus_1 = p_limbs;
+  p_plus_1[0] += 1;
+  const Array one{1, 0, 0, 0, 0};
+  EXPECT_EQ(Element{p_plus_1}.Normalize().Words(), one);
+
+  // 2^256 - 1 (all lanes at max) -> c_p - 1.
+  const Array all_max{kM52, kM52, kM52, kM52, kM48};
+  const Array expected{kCp - 1, 0, 0, 0, 0};
+  EXPECT_EQ(Element{all_max}.Normalize().Words(), expected);
+}
+
+TEST(FieldElementTest, NormalizeTopOverflowPath) {
+  // Value 2^257 - 1: the weak-normalized form is 2^256 - 1 + c_p >= 2^256, the only way to
+  // drive Normalize's first overflow bit. Expected: (2^257 - 1) mod p = 2*c_p - 1.
+  const Array words{kM52, kM52, kM52, kM52, kTopBound + kM48};
+  const FieldElement<2> x{words};
+  const Array expected{2 * kCp - 1, 0, 0, 0, 0};
+  EXPECT_EQ(x.Normalize().Words(), expected);
+  EXPECT_EQ(ToInteger(x.Normalize()), ModP(ToInteger(x)).ZeroExtend<320>());
+}
+
+TEST(FieldElementTest, NormalizeAfterMultiplyMatchesOracle) {
+  std::mt19937_64 rng{60603};
+  for (int trial = 0; trial < 100; ++trial) {
+    const auto a = RandomElement<1>(rng);
+    const auto b = RandomElement<2>(rng);
+    EXPECT_EQ(ToInteger((a * b).Normalize()), ProductModP(a, b).ZeroExtend<320>());
+  }
+}
+
+// ---- NormalizesToZero (direction: not yet implemented) --------------------------------------------
+
+TEST(FieldElementTest, NormalizesToZeroReturnsBool) {
+  static_assert(std::is_same_v<decltype(std::declval<Element>().NormalizesToZero()), bool>);
+}
+
+TEST(FieldElementTest, NormalizesToZeroOnZeroRepresentations) {
+  EXPECT_TRUE(Element{}.NormalizesToZero());
+  EXPECT_TRUE(FieldElement<2>{}.NormalizesToZero());
+  EXPECT_TRUE((-FieldElement<0>{}).NormalizesToZero());     // p
+  EXPECT_TRUE((-FieldElement<1>{}).NormalizesToZero());     // 2p
+  EXPECT_TRUE((-FieldElement<4094>{}).NormalizesToZero());  // 4095p
+
+  // Every difference x - x is a computed zero (arrives as a multiple of p, never as zero limbs).
+  std::mt19937_64 rng{60604};
+  for (int trial = 0; trial < 100; ++trial) {
+    const auto x = RandomElement<2>(rng);
+    EXPECT_TRUE((x - x).NormalizesToZero());
+  }
+}
+
+TEST(FieldElementTest, NormalizesToZeroRejectsNonZero) {
+  EXPECT_FALSE(Element{1}.NormalizesToZero());
+
+  const Array p_limbs = P52();
+  Array p_minus_1 = p_limbs;
+  p_minus_1[0] -= 1;
+  EXPECT_FALSE(Element{p_minus_1}.NormalizesToZero());
+  Array p_plus_1 = p_limbs;
+  p_plus_1[0] += 1;
+  EXPECT_FALSE(Element{p_plus_1}.NormalizesToZero());
+
+  // Values congruent to c_p (nonzero): c_p itself, and 2^256 which folds to it.
+  EXPECT_FALSE(Element{kCp}.NormalizesToZero());
+  EXPECT_FALSE((FieldElement<2>{Array{0, 0, 0, 0, kTopBound}}).NormalizesToZero());
+
+  std::mt19937_64 rng{60605};
+  for (int trial = 0; trial < 100; ++trial) {
+    EXPECT_FALSE(RandomElement<2048>(rng).NormalizesToZero());  // random hits 0 mod p with prob ~2^-256
+  }
+}
+
+TEST(FieldElementTest, NormalizesToZeroAgreesWithNormalize) {
+  std::mt19937_64 rng{60606};
+  for (int trial = 0; trial < 200; ++trial) {
+    const auto x = RandomElement<90>(rng);
+    EXPECT_EQ(x.NormalizesToZero(), x.Normalize().Words() == Array{});
+    const auto y = RandomElement<2>(rng);
+    EXPECT_EQ((y - y).NormalizesToZero(), (y - y).Normalize().Words() == Array{});
+  }
+}
+
+// ---- Pack / Unpack and Fp differentials -----------------------------------------------------------
+
+UIntW<256> RandomCanonical(std::mt19937_64& rng) {
+  std::array<uint64_t, 4> words;
+  for (auto& w : words) w = rng();
+  return UIntW<256>{words}.Modulo(secp256k1::p);
+}
+
+TEST(FieldElementTest, UnpackSplitsCanonicalValuesExactly) {
+  static_assert(Element{UIntW<256>{7}}.Words()[0] == 7);  // unpack ctor is constexpr
+
+  // Single bits at every 52-bit chunk seam and 64-bit word seam catch shift/mask typos.
+  for (int bit : {0, 51, 52, 63, 64, 103, 104, 127, 128, 155, 156, 191, 192, 207, 208, 255}) {
+    const UIntW<256> value = UIntW<256>{1} << bit;
+    const Element x{value};
+    EXPECT_EQ(ToInteger(x), value.ZeroExtend<320>()) << "bit " << bit;
+    for (int i = 0; i < 4; ++i) EXPECT_LE(x.Words()[i], kM52);
+    EXPECT_LE(x.Words()[4], kM48);
+  }
+
+  std::mt19937_64 rng{70701};
+  for (int trial = 0; trial < 100; ++trial) {
+    const UIntW<256> value = RandomCanonical(rng);
+    EXPECT_EQ(ToInteger(Element{value}), value.ZeroExtend<320>());
+  }
+}
+
+TEST(FieldElementTest, PackUnpackRoundTripIsIdentity) {
+  const Array p_limbs = P52();
+  Array pm1 = p_limbs;
+  pm1[0] -= 1;
+  EXPECT_EQ(Element{pm1}.Pack(), secp256k1::p - UIntW<256>{1});
+
+  EXPECT_EQ(Element{}.Pack(), UIntW<256>{0});
+  EXPECT_EQ(Element{UIntW<256>{1}}.Pack(), UIntW<256>{1});
+
+  std::mt19937_64 rng{70702};
+  for (int trial = 0; trial < 100; ++trial) {
+    const UIntW<256> value = RandomCanonical(rng);
+    EXPECT_EQ(Element{value}.Pack(), value);
+  }
+}
+
+TEST(FieldElementTest, PackNormalizesNonCanonicalInputs) {
+  EXPECT_EQ((-FieldElement<0>{}).Pack(), UIntW<256>{0});     // p
+  EXPECT_EQ((-FieldElement<4094>{}).Pack(), UIntW<256>{0});  // 4095p
+
+  std::mt19937_64 rng{70703};
+  for (int trial = 0; trial < 100; ++trial) {
+    const auto x = RandomElement<4095>(rng);
+    EXPECT_EQ(x.Pack(), ModP(ToInteger(x)));
+    const auto a = RandomElement<1>(rng);
+    const auto b = RandomElement<2>(rng);
+    EXPECT_EQ((a * b).Pack(), ProductModP(a, b));
+  }
+}
+
+TEST(FieldElementTest, UnpackRequiresCanonicalInDebug) {
+  // Contract direction (Fp parity): unpack asserts value < p, keeping pack-unpack a bit identity.
+  // If instead >= p inputs should be accepted as weak representations, delete this test and
+  // document that Pack(Unpack(x)) == x mod p.
+  EXPECT_DEBUG_DEATH((void)Element{secp256k1::p}, "");
+  EXPECT_DEBUG_DEATH((void)Element{secp256k1::p + UIntW<256>{1}}, "");
+}
+
+// ---- Differentials against Fp, the canonical reference implementation -----------------------------
+
+using FpRef = Fp<secp256k1::kBits, secp256k1::p>;
+
+TEST(FieldElementTest, FieldOpsMatchFpReference) {
+  std::mt19937_64 rng{70704};
+  for (int trial = 0; trial < 200; ++trial) {
+    const UIntW<256> va = RandomCanonical(rng);
+    const UIntW<256> vb = RandomCanonical(rng);
+    const Element a{va}, b{vb};
+    const FpRef fa{va}, fb{vb};
+
+    EXPECT_EQ((a + b).Pack(), (fa + fb).x);
+    EXPECT_EQ((a - b).Pack(), (fa - fb).x);
+    EXPECT_EQ((-a).Pack(), (-fa).x);
+    EXPECT_EQ((a * b).Pack(), (fa * fb).x);
+    EXPECT_EQ(a.Squared().Pack(), fa.Squared().x);
+    EXPECT_EQ((3_c * a).Pack(), (3_c * fa).x);
+    EXPECT_EQ((a << 3_c).Pack(), (fa << 3_c).x);
+  }
+}
+
+// A formula-shaped chain in the style of the point doubling/add formulas: products of sums and
+// differences of scaled squarings. Written once, generically; FieldElement runs it with static
+// magnitudes (peaking at 52, products at 312), Fp runs it canonically. Any divergence in
+// magnitude bookkeeping, folds, or normalization shows up as a Pack mismatch.
+template <class F>
+auto FormulaChain(const F& x, const F& y, const F& z) {
+  const auto t0 = x.Squared();
+  const auto m = 3_c * t0;
+  const auto s = ((x + y).Squared() - t0 - y.Squared()) << 1_c;
+  const auto x3 = m.Squared() - (s << 1_c);
+  const auto y3 = m * (s - x3) - 8_c * y.Squared().Squared();
+  return y3 * z;
+}
+
+TEST(FieldElementTest, FormulaChainMatchesFpReference) {
+  std::mt19937_64 rng{70705};
+  for (int trial = 0; trial < 100; ++trial) {
+    const UIntW<256> vx = RandomCanonical(rng);
+    const UIntW<256> vy = RandomCanonical(rng);
+    const UIntW<256> vz = RandomCanonical(rng);
+    const auto element_result = FormulaChain(Element{vx}, Element{vy}, Element{vz});
+    const auto fp_result = FormulaChain(FpRef{vx}, FpRef{vy}, FpRef{vz});
+    EXPECT_EQ(element_result.Pack(), fp_result.x);
+  }
 }
 
 }  // namespace
