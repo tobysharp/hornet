@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 
+#include "hornetlib/crypto/fp.h"
 #include "hornetlib/crypto/secp256k1.h"
 #include "hornetlib/crypto/uintw.h"
 #include "hornetlib/util/assert.h"
@@ -12,6 +13,7 @@ namespace hornet::crypto::ecdsa {
 template <int kMagnitude = 1> class FieldElement {
  public:
   static constexpr int kWords = 5;
+  static constexpr int kMaxMagnitude = 1 << 12;  // 4096
   static constexpr int kMaxProductMagnitude = 8191;
   using Array = std::array<uint64_t, kWords>;
 
@@ -22,8 +24,8 @@ template <int kMagnitude = 1> class FieldElement {
     Assert((words_[4] >> 48) < kMagnitude);
   }
   constexpr FieldElement(uint64_t rhs) : words_{} {
-    Assert((rhs >> 52) < kMagnitude);
-    words_[0] = rhs;
+    words_[0] = rhs & kMask52;
+    words_[1] = rhs >> 52;
   }
   constexpr FieldElement(const Uint256& rhs) requires(kMagnitude == 1) {
     Assert(rhs < secp256k1::p);
@@ -40,6 +42,16 @@ template <int kMagnitude = 1> class FieldElement {
 
   constexpr FieldElement& operator=(const FieldElement& rhs) = default;
 
+  template <int kRMagnitude> requires (kMagnitude + kRMagnitude + 2 <= kMaxMagnitude)
+  constexpr bool operator==(const FieldElement<kRMagnitude>& rhs) const {
+    return (*this - rhs).NormalizesToZero();
+  }
+
+  constexpr bool operator==(uint64_t rhs) const requires (kMagnitude + 3 <= kMaxMagnitude) {
+    if (rhs == 0) return NormalizesToZero();
+    return operator==(FieldElement<1>{rhs});
+  }
+
   constexpr const Array& Words() const { return words_; }
 
   Uint256 Pack() const {
@@ -51,6 +63,10 @@ template <int kMagnitude = 1> class FieldElement {
     words[2] = (rwords[2] >> 24) | (rwords[3] << 28);  // r3[35..0] | r2[51..24]
     words[3] = (rwords[3] >> 36) | (rwords[4] << 16);  // r4[47..0] | r3[51..36]
     return Uint256{words};
+  }
+
+  FieldElement<1> Inverse() const {
+    return detail::InvertModuloOdd<256, secp256k1::p>(Pack());
   }
 
   template <int k> requires((kMagnitude << k) <= (1 << 12))
@@ -170,7 +186,9 @@ template <int kMagnitude = 1> class FieldElement {
     return result;
   }
 
-  constexpr FieldElement<2> NormalizeWeak() const {
+  constexpr FieldElement<std::min(kMagnitude, 2)> NormalizeWeak() const {
+    if constexpr (kMagnitude <= 1) return *this;
+
     // Requires words <= 2^64 - 2^12. 
     // for t=0..3, w_t < m.2^52 <= 2^64 - 2^12 => m <= 2^12 - 2^-40 => m <= 2^12 - 1.
     static_assert(kMagnitude < (1 << 12));
@@ -267,7 +285,7 @@ template <int kMagnitude = 1> class FieldElement {
     return words;
   }();
 
-  static_assert(kMagnitude <= (1 << 12));
+  static_assert(kMagnitude <= kMaxMagnitude);
   static_assert([] {
     UInt256 p = UInt256::Zero();
     for (int i = 0; i < kWords; ++i) p += UInt256{p52[i]} << (52 * i);

@@ -3,11 +3,13 @@
 // This file is part of the Hornet Node project. All rights reserved.
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <iomanip>
 #include <ostream>
 #include <random>
+#include <stdexcept>
 #include <type_traits>
 
 #include <gtest/gtest.h>
@@ -65,16 +67,25 @@ TEST(FieldElementTest, WordConstructorSetsLowWord) {
   EXPECT_EQ(x.Words()[0], 0xABCDEFull);
   for (int i = 1; i < kWords; ++i) EXPECT_EQ(x.Words()[i], 0u);
 
-  // The largest single word legal at magnitude 1.
+  // The largest value that stays entirely in word 0.
   const Element max{kLowBound - 1};
   EXPECT_EQ(max.Words()[0], kLowBound - 1);
 }
 
-TEST(FieldElementTest, WordConstructorEnforcesBoundInDebug) {
-  // 2^52 violates the magnitude-1 word bound but is legal at magnitude 2.
-  EXPECT_DEBUG_DEATH((void)Element{kLowBound}, "");
-  const FieldElement<2> ok{kLowBound};
-  EXPECT_EQ(ok.Words()[0], kLowBound);
+TEST(FieldElementTest, WordConstructorIsTotalAndSplitsAtTheSeam) {
+  // Any uint64 is a valid magnitude-1 element: the value splits across words 0/1 at the
+  // 52-bit seam, so no bound to enforce and no precondition.
+  const Element split{kLowBound};  // 2^52
+  EXPECT_EQ(split.Words()[0], 0u);
+  EXPECT_EQ(split.Words()[1], 1u);
+
+  const Element all_ones{~uint64_t{0}};
+  EXPECT_EQ(all_ones.Words()[0], kLowBound - 1);
+  EXPECT_EQ(all_ones.Words()[1], (uint64_t{1} << 12) - 1);
+  for (int i = 2; i < kWords; ++i) EXPECT_EQ(all_ones.Words()[i], 0u);
+  EXPECT_EQ(ToInteger(all_ones), UIntW<320>{~uint64_t{0}});
+
+  static_assert(Element{uint64_t{1} << 52}.Words()[1] == 1);  // split is constexpr
 }
 
 TEST(FieldElementTest, ArrayConstructorStoresWords) {
@@ -596,14 +607,14 @@ TEST(FieldElementTest, MultiplyWithMagnitudeZeroOperand) {
   EXPECT_EQ(ModP(ToInteger(FieldElement<0>{} * FieldElement<0>{})), kZero256);
 }
 
-TEST(FieldElementTest, WordConstructorBoundaryAtMagnitudeCap) {
-  // Magnitude 4096 admits any uint64 word; magnitude 2048 admits exactly words below 2^63.
-  const FieldElement<4096> all_ones{~uint64_t{0}};
-  EXPECT_EQ(all_ones.Words()[0], ~uint64_t{0});
+TEST(FieldElementTest, WordConstructorIsMagnitudeIndependent) {
+  // The split result is within magnitude-1 bounds, so the ctor is total at every magnitude.
+  const FieldElement<4096> x{~uint64_t{0}};
+  EXPECT_EQ(x.Words()[0], kLowBound - 1);
+  EXPECT_EQ(x.Words()[1], (uint64_t{1} << 12) - 1);
 
-  const FieldElement<2048> max_2048{(uint64_t{1} << 63) - 1};
-  EXPECT_EQ(max_2048.Words()[0], (uint64_t{1} << 63) - 1);
-  EXPECT_DEBUG_DEATH((void)FieldElement<2048>{uint64_t{1} << 63}, "");
+  const FieldElement<2048> y{uint64_t{1} << 63};
+  EXPECT_EQ(ToInteger(y), UIntW<320>{1} << 63);
 }
 
 TEST(FieldElementTest, AdditionAtMagnitudeCapWithMaxLimbs) {
@@ -654,7 +665,8 @@ TEST(FieldElementTest, SubtractionAtExtremeMagnitudes) {
 }
 
 // ---- Normalization family ------------------------------------------------------------------------
-// NormalizeWeak: value preserved mod p; all words in-lane except words[0] < 2^53. -> <2>
+// NormalizeWeak: value preserved mod p; all words in-lane except words[0] < 2^53. -> <min(m, 2)>;
+// magnitude 1 is already weak, so there it is the bitwise identity.
 // Normalize: THE canonical representative -- value < p, all words in-lane. -> <1>
 // NormalizesToZero: bool, true iff the value is congruent to 0 mod p. (Direction: not yet built.)
 
@@ -672,7 +684,8 @@ Array P52() {
 template <int kM>
 void ExpectNormalizeWeakContract(const FieldElement<kM>& x) {
   const auto weak = x.NormalizeWeak();
-  static_assert(std::is_same_v<std::remove_const_t<decltype(weak)>, FieldElement<2>>);
+  static_assert(std::is_same_v<std::remove_const_t<decltype(weak)>, FieldElement<std::min(kM, 2)>>);
+  if constexpr (kM == 1) EXPECT_EQ(weak.Words(), x.Words());  // already weak: bitwise identity
   EXPECT_LT(weak.Words()[0], 2 * kLowBound);
   for (int i = 1; i < 4; ++i) EXPECT_LE(weak.Words()[i], kM52);
   EXPECT_LE(weak.Words()[4], kM48);
@@ -824,6 +837,178 @@ TEST(FieldElementTest, NormalizesToZeroAgreesWithNormalize) {
   }
 }
 
+// ---- Direction: operator== and operator!= (not yet implemented) ----------------------------------
+// Contract: semantic field equality -- a == b iff both represent the same residue mod p, across
+// magnitudes and limb representations (never a limbwise compare; <1> does not imply canonical).
+// x == k for uint64 k compares against the small constant; k == 0 is the hot spelling. Only
+// operator== is declared; != and reversed operand orders come from C++20 rewriting. Admission is
+// bounded: the difference (magnitude m_a + m_b + 1) must be weak-normalizable, so magnitudes past
+// the cap are rejected at compile time; NormalizesToZero() remains the spelling above it.
+
+TEST(FieldElementTest, EqualityReturnsBoolAcrossMagnitudesAndAgainstWords) {
+  static_assert(std::is_same_v<decltype(std::declval<Element>() == std::declval<FieldElement<90>>()), bool>);
+  static_assert(std::is_same_v<decltype(std::declval<FieldElement<3>>() != std::declval<FieldElement<2>>()), bool>);
+  static_assert(std::is_same_v<decltype(std::declval<Element>() == uint64_t{0}), bool>);
+  static_assert(std::is_same_v<decltype(std::declval<Element>() != uint64_t{0}), bool>);
+}
+
+TEST(FieldElementTest, EqualityIsConstexpr) {
+  static_assert(Element{7} == Element{7});
+  static_assert(Element{7} != Element{8});
+  static_assert(Element{7} == 7);
+  static_assert(Element{7} != 0);
+}
+
+TEST(FieldElementTest, EqualityWithZeroAcrossRepresentations) {
+  EXPECT_TRUE(Element{} == 0);
+  EXPECT_TRUE(FieldElement<0>{} == 0);
+  EXPECT_TRUE(-FieldElement<0>{} == 0);     // p
+  EXPECT_TRUE(-FieldElement<4092>{} == 0);  // 4093p, the word-compare admission cap
+  EXPECT_TRUE(Element{P52()} == 0);         // p from raw limbs
+
+  std::mt19937_64 rng{60607};
+  for (int trial = 0; trial < 100; ++trial) {
+    const auto x = RandomElement<2>(rng);
+    EXPECT_TRUE((x - x) == 0);
+    EXPECT_FALSE(x == 0);  // random hits 0 mod p with prob ~2^-256
+  }
+}
+
+TEST(FieldElementTest, InequalityWithZeroOnNonZeroValues) {
+  EXPECT_TRUE(Element{1} != 0);
+  EXPECT_TRUE(Element{kCp} != 0);  // c_p, the fold constant
+
+  const Array p_limbs = P52();
+  Array p_minus_1 = p_limbs;
+  p_minus_1[0] -= 1;
+  EXPECT_TRUE(Element{p_minus_1} != 0);
+  Array p_plus_1 = p_limbs;
+  p_plus_1[0] += 1;
+  EXPECT_TRUE(Element{p_plus_1} != 0);
+}
+
+TEST(FieldElementTest, RewrittenComparisonSpellings) {
+  // Reversed operand order and != must both come from the rewritten operator== candidates.
+  const auto p_rep = -FieldElement<0>{};  // == 0 mod p
+  EXPECT_TRUE(0 == p_rep);
+  EXPECT_FALSE(0 != p_rep);
+  EXPECT_FALSE(p_rep != 0);
+
+  const Element one{1};
+  EXPECT_TRUE(one != 0);
+  EXPECT_TRUE(0 != one);
+  EXPECT_FALSE(0 == one);
+}
+
+TEST(FieldElementTest, EqualityWithSmallConstants) {
+  std::mt19937_64 rng{60608};
+  const auto y = RandomElement<1>(rng);
+  EXPECT_TRUE((Element{5} + (y - y)) == 5);  // 5 plus a multiple of p in the limbs
+
+  Array p_plus_5 = P52();
+  p_plus_5[0] += 5;
+  EXPECT_TRUE(Element{p_plus_5} == 5);
+
+  EXPECT_FALSE(Element{6} == 5);
+  EXPECT_TRUE(Element{6} != 5);
+  EXPECT_FALSE(Element{} == 5);
+}
+
+TEST(FieldElementTest, EqualityWithLargeWordConstants) {
+  // The word ctor is total, so the word compare covers the full uint64 domain.
+  EXPECT_TRUE(Element{kLowBound} == kLowBound);  // 2^52, the first two-limb value
+  EXPECT_TRUE(Element{~uint64_t{0}} == ~uint64_t{0});
+  EXPECT_TRUE(Element{~uint64_t{0}} != ~uint64_t{0} - 1);
+
+  std::mt19937_64 rng{60612};
+  const auto y = RandomElement<1>(rng);
+  const uint64_t word = rng();
+  EXPECT_TRUE((Element{word} + (y - y)) == word);
+}
+
+TEST(FieldElementTest, EqualityIsRepresentationIndependent) {
+  std::mt19937_64 rng{60609};
+  for (int trial = 0; trial < 100; ++trial) {
+    const auto x = RandomElement<1>(rng);
+    const auto y = RandomElement<1>(rng);
+
+    const auto offset = x + (y - y);  // same residue, limbs offset by a multiple of p
+    EXPECT_TRUE(x == offset);
+    EXPECT_TRUE(offset == x);
+    EXPECT_TRUE(x == -(-x));
+    EXPECT_TRUE(x == x.NormalizeWeak());
+    EXPECT_TRUE(x == x.Normalize());
+  }
+}
+
+TEST(FieldElementTest, EqualityMatchesResidueOracle) {
+  std::mt19937_64 rng{60610};
+  for (int trial = 0; trial < 200; ++trial) {
+    const auto a = RandomElement<2>(rng);
+    const auto b = RandomElement<90>(rng);
+    const bool expected = ModP(ToInteger(a)) == ModP(ToInteger(b));
+    EXPECT_EQ(a == b, expected);
+    EXPECT_EQ(b == a, expected);
+    EXPECT_EQ(a != b, !expected);
+    EXPECT_TRUE(a == a);
+  }
+}
+
+TEST(FieldElementTest, PointFormulaComparisonShapes) {
+  // The spellings the point layer uses: H == 0, lhs.x != rhs.x, lhs.y == -rhs.y, Y2 == X3 + bZ6.
+  std::mt19937_64 rng{60611};
+  for (int trial = 0; trial < 50; ++trial) {
+    const auto x1 = RandomElement<1>(rng);
+    const auto x2 = RandomElement<1>(rng);
+    const auto H = x2 - x1;
+    EXPECT_EQ(H == 0, ModP(ToInteger(x1)) == ModP(ToInteger(x2)));
+    EXPECT_TRUE((x1 - x1) == 0);
+    EXPECT_TRUE(x1 != x2);  // prob ~2^-256 of a false failure
+
+    // lhs.y == -rhs.y where rhs.y holds the canonical negation.
+    const auto neg = (-x1).Normalize();
+    EXPECT_TRUE(x1 == -neg);
+
+    // Equal values reached by different formulas: (a+b)^2 == a^2 + 2ab + b^2.
+    const auto lhs = (x1 + x2).Squared();
+    const auto rhs = x1.Squared() + ((x1 * x2) << 1_c) + x2.Squared();
+    EXPECT_TRUE(lhs == rhs);
+    EXPECT_FALSE(lhs != rhs);
+  }
+}
+
+template <int kMA, int kMB>
+concept CanCompare = requires(const FieldElement<kMA> a, const FieldElement<kMB> b) { a == b; };
+
+template <int kM>
+concept CanCompareWord = requires(const FieldElement<kM> x) { x == uint64_t{0}; };
+
+TEST(FieldElementTest, EqualityAdmissionBoundary) {
+  static_assert(CanCompare<1, 1>);
+  static_assert(CanCompare<2047, 2047>);  // difference magnitude 4095, exactly the cap
+  static_assert(!CanCompare<2047, 2048>);
+  static_assert(!CanCompare<2048, 2048>);
+  static_assert(CanCompare<1, 4093>);
+  static_assert(!CanCompare<1, 4094>);
+  // The word compare is the kR = 1 case of the general admission.
+  static_assert(CanCompareWord<4093>);
+  static_assert(!CanCompareWord<4094>);
+  static_assert(!CanCompareWord<4095>);
+}
+
+TEST(FieldElementTest, EqualityAtExtremeMagnitudes) {
+  // 2047 vs 2047: the difference-based equality lands on magnitude 4095, the normalize cap.
+  const auto x = MaxElement<2047>();
+  EXPECT_TRUE(x == x);
+  EXPECT_TRUE(x == MaxElement<2047>());
+
+  Array words = x.Words();
+  words[0] -= 1;
+  const FieldElement<2047> y{words};
+  EXPECT_TRUE(x != y);
+  EXPECT_FALSE(x == y);
+}
+
 // ---- Pack / Unpack and Fp differentials -----------------------------------------------------------
 
 UIntW<256> RandomCanonical(std::mt19937_64& rng) {
@@ -935,6 +1120,83 @@ TEST(FieldElementTest, FormulaChainMatchesFpReference) {
     const auto fp_result = FormulaChain(FpRef{vx}, FpRef{vy}, FpRef{vz});
     EXPECT_EQ(element_result.Pack(), fp_result.x);
   }
+}
+
+// ---- Inverse -------------------------------------------------------------------------------------
+// Contract: x * x.Inverse() == 1 mod p; result is FieldElement<1> and canonical (bit-identical to
+// unpacking the canonical residue). A boundary op: pack -> InvertModuloOdd -> unpack, so any
+// normalizable magnitude/representation is admissible. Zero (any representation of it) throws,
+// delegating to InvertModuloOdd's non-invertible check.
+
+TEST(FieldElementTest, InverseReturnsCanonicalMagnitudeOne) {
+  static_assert(std::is_same_v<decltype(std::declval<Element>().Inverse()), FieldElement<1>>);
+
+  std::mt19937_64 rng{80801};
+  const auto x = RandomElement<1>(rng);
+  const auto inv = x.Inverse();
+  // Canonical: normalizing again is a bitwise no-op, and pack-unpack round-trips exactly.
+  EXPECT_EQ(inv.Normalize().Words(), inv.Words());
+  EXPECT_EQ(Element{inv.Pack()}.Words(), inv.Words());
+}
+
+TEST(FieldElementTest, InverseTimesSelfIsOne) {
+  std::mt19937_64 rng{80802};
+  for (int trial = 0; trial < 50; ++trial) {
+    const auto x = RandomElement<1>(rng);
+    EXPECT_TRUE(x * x.Inverse() == 1);
+  }
+}
+
+TEST(FieldElementTest, InverseKnownAnswers) {
+  EXPECT_TRUE(Element{1}.Inverse() == 1);
+
+  // 2^-1 = (p+1)/2.
+  const UIntW<256> half = (secp256k1::p + UIntW<256>{1}) >> 1;
+  EXPECT_EQ(Element{2}.Inverse().Pack(), half);
+
+  // p-1 is its own inverse: (p-1)^2 == 1 (mod p).
+  const UIntW<256> p_minus_1 = secp256k1::p - UIntW<256>{1};
+  EXPECT_EQ(Element{p_minus_1}.Inverse().Pack(), p_minus_1);
+}
+
+TEST(FieldElementTest, InverseIsInvolution) {
+  std::mt19937_64 rng{80803};
+  for (int trial = 0; trial < 20; ++trial) {
+    const auto x = RandomElement<1>(rng);
+    EXPECT_TRUE(x.Inverse().Inverse() == x);
+  }
+}
+
+TEST(FieldElementTest, InverseIsRepresentationIndependent) {
+  std::mt19937_64 rng{80804};
+  for (int trial = 0; trial < 20; ++trial) {
+    const auto x = RandomElement<1>(rng);
+    const auto y = RandomElement<1>(rng);
+    const auto offset = x + (y - y);  // same residue, limbs offset by a multiple of p
+    EXPECT_EQ(offset.Inverse().Words(), x.Inverse().Words());  // canonical results bit-identical
+  }
+
+  // Highest normalizable magnitude admits Inverse via the same pack boundary.
+  const auto big = RandomElement<4095>(rng);
+  EXPECT_TRUE(big * big.Inverse() == 1);
+}
+
+TEST(FieldElementTest, InverseMatchesFpReference) {
+  std::mt19937_64 rng{80805};
+  for (int trial = 0; trial < 50; ++trial) {
+    const UIntW<256> v = RandomCanonical(rng);
+    if (v == UIntW<256>{0}) continue;
+    const auto inv = Element{v}.Inverse();
+    const FpRef ref = FpRef{v}.Inverse();
+    EXPECT_EQ(inv.Pack(), ref.x);
+    EXPECT_EQ(inv.Words(), Element{ref.x}.Words());  // bit-identity pins canonicality
+  }
+}
+
+TEST(FieldElementTest, InverseOfZeroThrows) {
+  EXPECT_THROW(static_cast<void>(Element{}.Inverse()), std::runtime_error);
+  // A computed zero: the limbs hold p, not zeros.
+  EXPECT_THROW(static_cast<void>((-FieldElement<0>{}).Inverse()), std::runtime_error);
 }
 
 }  // namespace
