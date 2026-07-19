@@ -19,9 +19,6 @@
 namespace hornet::crypto::ecdsa {
 namespace {
 
-// The concrete curve under test; the dual-instantiation gate lives in curve.h static_asserts.
-using Curve = hornet::crypto::ecdsa::Curve<FieldElement>;
-
 template <size_t kBits, std::unsigned_integral T>
 void PrintTo(const util::BigUint<kBits, T>& value, std::ostream* os) {
 	*os << "BigUint<" << kBits << ", " << sizeof(T) * 8 << ">{";
@@ -45,8 +42,7 @@ constexpr Curve::Affine ThreeG() {
 	        "388f7b0f632de8140fe337e62a37f3566500a99934c2231b6cb9fd7584b8e672"_h256};
 }
 
-template <typename CurveType>
-typename CurveType::Signature ParseDerSignature(const std::vector<uint8_t>& bytes) {
+Curve::Signature ParseDerSignature(const std::vector<uint8_t>& bytes) {
 	EXPECT_GE(bytes.size(), 8u);
 	EXPECT_EQ(bytes[0], 0x30);
 	EXPECT_EQ(static_cast<size_t>(bytes[1]) + 2, bytes.size());
@@ -70,13 +66,12 @@ typename CurveType::Signature ParseDerSignature(const std::vector<uint8_t>& byte
 	std::copy(bytes.begin() + s_index, bytes.end(), s_bytes.begin() + (32 - s_len));
 	std::reverse(r_bytes.begin(), r_bytes.end());
 	std::reverse(s_bytes.begin(), s_bytes.end());
-	return {typename CurveType::Wide{r_bytes}, typename CurveType::Wide{s_bytes}};
+	return {Curve::Wide{r_bytes}, Curve::Wide{s_bytes}};
 }
 
-template <typename CurveType>
-std::array<uint8_t, sizeof(typename CurveType::Wide)> ToBigEndianBytes(const typename CurveType::Wide& value) {
-	constexpr size_t kBytes = sizeof(typename CurveType::Wide);
-	constexpr size_t kBytesPerWord = sizeof(typename CurveType::Wide::Word);
+std::array<uint8_t, sizeof(Curve::Wide)> ToBigEndianBytes(const Curve::Wide& value) {
+	constexpr size_t kBytes = sizeof(Curve::Wide);
+	constexpr size_t kBytesPerWord = sizeof(Curve::Wide::Word);
 	std::array<uint8_t, kBytes> bytes{};
 	for (size_t word_index = 0; word_index < value.Words().size(); ++word_index) {
 		const auto word = value.Words()[word_index];
@@ -88,30 +83,25 @@ std::array<uint8_t, sizeof(typename CurveType::Wide)> ToBigEndianBytes(const typ
 	return bytes;
 }
 
-template <typename CurveType>
-
-std::array<uint8_t, 1 + 2 * sizeof(typename CurveType::Wide)> EncodeUncompressedPublicKey(
-		const typename CurveType::Point& point) {
-	constexpr size_t kBytes = sizeof(typename CurveType::Wide);
+std::array<uint8_t, 1 + 2 * sizeof(Curve::Wide)> EncodeUncompressedPublicKey(const Curve::Point& point) {
+	constexpr size_t kBytes = sizeof(Curve::Wide);
 	std::array<uint8_t, 1 + 2 * kBytes> bytes{};
 	bytes[0] = 0x04;
-	const typename CurveType::Affine affine = point;
-	const auto x_bytes = ToBigEndianBytes<CurveType>(affine.x.Pack());
-	const auto y_bytes = ToBigEndianBytes<CurveType>(affine.y.Pack());
+	const Curve::Affine affine = point;
+	const auto x_bytes = ToBigEndianBytes(affine.x.Pack());
+	const auto y_bytes = ToBigEndianBytes(affine.y.Pack());
 	std::copy(x_bytes.begin(), x_bytes.end(), bytes.begin() + 1);
 	std::copy(y_bytes.begin(), y_bytes.end(), bytes.begin() + 1 + kBytes);
 	return bytes;
 }
 
-template <typename CurveType>
-std::optional<typename CurveType::PublicKey> ParsePublicKey(const typename CurveType::Point& point) {
-	return CurveType::PublicKeyFromSEC1(EncodeUncompressedPublicKey<CurveType>(point));
+std::optional<Curve::PublicKey> ParsePublicKey(const Curve::Point& point) {
+	return Curve::PublicKeyFromSEC1(EncodeUncompressedPublicKey(point));
 }
 
-template <typename CurveType>
-void ExpectPublicKeyPointEq(const typename CurveType::PublicKey& actual, const typename CurveType::Point& expected) {
-	const typename CurveType::Affine& actual_affine = actual;
-	const typename CurveType::Affine expected_affine = expected;
+void ExpectPublicKeyPointEq(const Curve::PublicKey& actual, const Curve::Point& expected) {
+	const Curve::Affine& actual_affine = actual;
+	const Curve::Affine expected_affine = expected;
 	EXPECT_EQ(actual_affine.x, expected_affine.x);
 	EXPECT_EQ(actual_affine.y, expected_affine.y);
 }
@@ -325,7 +315,7 @@ TEST(CurveTest, Secp256k1PublicKeyFromSEC1ParsesAndValidatesUncompressedKeys) {
 	const auto public_key = Curve::PublicKeyFromSEC1(public_key_bytes);
 
 	ASSERT_TRUE(public_key.has_value());
-	ExpectPublicKeyPointEq<Curve>(*public_key, Curve::G);
+	ExpectPublicKeyPointEq(*public_key, Curve::G);
 
 	auto wrong_prefix = public_key_bytes;
 	wrong_prefix[0] = 0x03;
@@ -353,8 +343,8 @@ TEST(CurveTest, Secp256k1PublicKeyFromSEC1ParsesCompressedKeysWithEitherParity) 
 
 	ASSERT_TRUE(even_public_key.has_value());
 	ASSERT_TRUE(odd_public_key.has_value());
-	ExpectPublicKeyPointEq<Curve>(*even_public_key, Curve::G);
-	ExpectPublicKeyPointEq<Curve>(*odd_public_key, {generator_affine.x, -generator_affine.y});
+	ExpectPublicKeyPointEq(*even_public_key, Curve::G);
+	ExpectPublicKeyPointEq(*odd_public_key, {generator_affine.x, -generator_affine.y});
 
 	const std::array<uint8_t, 33> invalid_x = {
 			0x02,
@@ -367,7 +357,7 @@ TEST(CurveTest, Secp256k1PublicKeyFromSEC1ParsesCompressedKeysWithEitherParity) 
 }
 
 TEST(CurveTest, Secp256k1VerifiesKnownDeterministicSignatureExample) {
-	const auto public_key = ParsePublicKey<Curve>(Curve::G);
+	const auto public_key = ParsePublicKey(Curve::G);
 	const Curve::Signature signature{
 			"f73f5ad664342164c3997a266e1dc6b066aeddacf4e231cb024c9134dd4a6ab8"_h256,
 			"b8f4f7af604af853c210c202c328944c8fe64bd1001154efbaeb3715b3ec9257"_h256};
@@ -380,7 +370,7 @@ TEST(CurveTest, Secp256k1VerifiesKnownDeterministicSignatureExample) {
 }
 
 TEST(CurveTest, Secp256k1VerifyRejectsOutOfRangeScalars) {
-	const auto public_key = ParsePublicKey<Curve>(Curve::G);
+	const auto public_key = ParsePublicKey(Curve::G);
 	const auto digest = "69b595411d2e081915f237bdff5a0a293f32a1138f406f7e8b89984ec74093cd"_bytes;
 	const Curve::Wide one{1}, zero{};
 
@@ -424,7 +414,7 @@ TEST(CurveTest, Secp256k1VerifiesBitcoinExampleUsingRawDigestDerAndUncompressedP
 	};
 
 	const auto public_key = Curve::PublicKeyFromSEC1(public_key_bytes);
-	const auto signature = ParseDerSignature<Curve>(signature_bytes);
+	const auto signature = ParseDerSignature(signature_bytes);
 
 	ASSERT_TRUE(public_key.has_value());
 	EXPECT_TRUE(Curve::VerifySignature(*public_key, signature, hashed_commitment_bytes));
@@ -448,7 +438,7 @@ struct Secp256k1SignedMessage {
 Secp256k1SignedMessage MakeRandomSecp256k1Signature(std::mt19937_64& rng) {
 	const Curve::Mod_n private_key = RandomScalarModN(rng);
 	const Curve::Point public_point = private_key.x * Curve::Point{Curve::G};
-	const auto public_key = ParsePublicKey<Curve>(public_point);
+	const auto public_key = ParsePublicKey(public_point);
 	EXPECT_TRUE(public_key.has_value());
 
 	std::array<uint8_t, 32> digest{};
@@ -468,7 +458,7 @@ Secp256k1SignedMessage MakeSecp256k1SignatureForDigest(std::mt19937_64& rng,
                                                        const std::array<uint8_t, 32>& digest) {
 	const Curve::Mod_n private_key = RandomScalarModN(rng);
 	const Curve::Point public_point = private_key.x * Curve::Point{Curve::G};
-	const auto public_key = ParsePublicKey<Curve>(public_point);
+	const auto public_key = ParsePublicKey(public_point);
 	EXPECT_TRUE(public_key.has_value());
 
 	const Curve::Mod_n z{ReduceModuloN(Curve::Wide::FromBigEndianBytes(digest))};
@@ -489,7 +479,7 @@ TEST(CurveTest, Secp256k1VerifiesDigestsWithValuesAtOrAboveGroupOrder) {
 	all_ff.fill(0xFF);
 
 	// Exactly n: e reduces to 0, so u1 = 0 and R = u2*Q -- the zero G-term end to end.
-	const std::array<uint8_t, 32> exactly_n = ToBigEndianBytes<Curve>(secp256k1::n);
+	const std::array<uint8_t, 32> exactly_n = ToBigEndianBytes(secp256k1::n);
 
 	for (const auto& digest : {all_ff, exactly_n}) {
 		const auto [public_key, signature, unused] = MakeSecp256k1SignatureForDigest(rng, digest);
@@ -526,7 +516,7 @@ TEST(CurveTest, Secp256k1WnafVerifyMatchesJointNafOnRandomSignatures) {
 // The generator-table window width is configurable and must not affect the result. Sweep it,
 // including the previously-broken w >= 8 range, against a known-answer signature.
 TEST(CurveTest, Secp256k1WnafVerifyIsCorrectAcrossGeneratorTableWidths) {
-	const auto public_key = ParsePublicKey<Curve>(Curve::G);
+	const auto public_key = ParsePublicKey(Curve::G);
 	const Curve::Signature signature{
 			"f73f5ad664342164c3997a266e1dc6b066aeddacf4e231cb024c9134dd4a6ab8"_h256,
 			"b8f4f7af604af853c210c202c328944c8fe64bd1001154efbaeb3715b3ec9257"_h256};
@@ -665,7 +655,7 @@ TEST(CurveTest, LinearCombinationGlvMatchesJointNaf) {
 		const UIntW<256> u1 = RandomScalarModN(rng).x, u2 = RandomScalarModN(rng).x;
 		const Curve::Affine Q = RandomScalarModN(rng).x * Curve::G;
 
-		const GlvTerm<std::span<const Curve::Affine>, FieldElement> g_term{split(u1), g_base_span, g_phi_span};
+		const GlvTerm<std::span<const Curve::Affine>> g_term{split(u1), g_base_span, g_phi_span};
 		const auto q_term = MakeVariableGlvTerm(split(u2), Q);
 
 		const Curve::Affine glv = LinearCombination_GLV(g_term, q_term);
@@ -752,7 +742,7 @@ TEST(CurveTest, Secp256k1CompressedParseSelectsCorrectParityForAttackerChosenTin
 
 		std::array<uint8_t, 33> bytes{};
 		bytes[0] = static_cast<uint8_t>(0x02 + (y_value & 1));
-		const auto x_bytes = ToBigEndianBytes<Curve>(x.x);
+		const auto x_bytes = ToBigEndianBytes(x.x);
 		std::copy(x_bytes.begin(), x_bytes.end(), bytes.begin() + 1);
 
 		const auto parsed = Curve::PublicKeyFromSEC1(bytes);

@@ -37,8 +37,8 @@ using graph::Value;
 using graph::XCoord;
 using graph::YCoord;
 using graph::ZCoord;
-using AffF = AffinePoint<FieldElement>;
-using JacF = JacobianPoint<FieldElement>;
+using AffF = AffinePoint;
+using JacF = JacobianPoint;
 
 // Random element with words at the top of the given magnitude's range.
 FieldElement RandomAt(std::mt19937_64& rng, int magnitude) {

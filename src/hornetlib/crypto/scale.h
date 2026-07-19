@@ -35,11 +35,14 @@ constexpr Point Scale(const UInt256& scalar, const Point& pt) {
   return sum;
 }
 
-template <typename Element>
-constexpr JacobianPoint<Element> LinearCombination(const UInt256& u1, const AffinePoint<Element>& P, const UInt256& u2,
-                                          const AffinePoint<Element>& Q) {
-  using Affine = AffinePoint<Element>;
-  using Point = JacobianPoint<Element>;
+// Scalar multiplication operators, here rather than in point.h so they can follow Scale.
+inline AffinePoint operator*(const UInt256& scalar, const AffinePoint& pt) { return Scale(scalar, pt); }
+constexpr JacobianPoint operator*(const UInt256& scalar, const JacobianPoint& pt) { return Scale(scalar, pt); }
+
+constexpr JacobianPoint LinearCombination(const UInt256& u1, const AffinePoint& P, const UInt256& u2,
+                                          const AffinePoint& Q) {
+  using Affine = AffinePoint;
+  using Point = JacobianPoint;
   const auto naf1 = NonAdjacentForm(u1);
   const auto naf2 = NonAdjacentForm(u2);
   constexpr int kBitCount = std::ssize(naf1);
@@ -62,11 +65,10 @@ constexpr JacobianPoint<Element> LinearCombination(const UInt256& u1, const Affi
   return sum;
 }
 
-template <typename Element>
-constexpr JacobianPoint<Element> LinearCombination_NAF_Disjoint(const UInt256& u1, const AffinePoint<Element>& P, const UInt256& u2,
-                                                       const AffinePoint<Element>& Q) {
-  using Affine = AffinePoint<Element>;
-  using Point = JacobianPoint<Element>;
+constexpr JacobianPoint LinearCombination_NAF_Disjoint(const UInt256& u1, const AffinePoint& P, const UInt256& u2,
+                                                       const AffinePoint& Q) {
+  using Affine = AffinePoint;
+  using Point = JacobianPoint;
   const auto nafP = NonAdjacentForm(u1);
   const auto nafQ = NonAdjacentForm(u2);
   constexpr int kBitCount = std::ssize(nafP);
@@ -88,22 +90,21 @@ constexpr JacobianPoint<Element> LinearCombination_NAF_Disjoint(const UInt256& u
 // Computes u1*P + u2*Q with wNAF recoding. The fixed-base table P_table holds the odd
 // affine multiples of P (built once via PrecomputeTableAffine); its width is inferred from
 // the table size (2^{w-1} entries). The variable base Q gets a narrow per-call table.
-template <typename Element>
-inline JacobianPoint<Element> LinearCombination_wNAF(const UInt256& u1, std::span<const AffinePoint<Element>> P_table, const UInt256& u2,
-                                            const AffinePoint<Element>& Q) {
+inline JacobianPoint LinearCombination_wNAF(const UInt256& u1, std::span<const AffinePoint> P_table, const UInt256& u2,
+                                            const AffinePoint& Q) {
   constexpr int kQWidth = 5;
   const int kPWidth = std::bit_width(P_table.size());  // 2^{w-1} entries -> window width w
   const auto nafP = WindowedNonAdjacentForm(u1, kPWidth);
   const auto nafQ = WindowedNonAdjacentForm(u2, kQWidth);
   constexpr int kBitCount = std::ssize(nafP);
 
-  std::array<AffinePoint<Element>, 1 << (kQWidth - 1)> Q_table;
+  std::array<AffinePoint, 1 << (kQWidth - 1)> Q_table;
   const auto z = PrecomputeTableGlobalZ(Q, {Q_table.data(), Q_table.size()});
   const auto z2 = z.Squared();
   const auto z3 = z2 * z;
-  const auto scaled = [&](const AffinePoint<Element>& pt) -> AffinePoint<Element> { return { pt.x * z2, pt.y * z3 }; };
+  const auto scaled = [&](const AffinePoint& pt) -> AffinePoint { return { pt.x * z2, pt.y * z3 }; };
 
-  JacobianPoint<Element> sum;
+  JacobianPoint sum;
   const int kPOffset = std::ssize(P_table) - 1;
   constexpr int kQOffset = (1 << (kQWidth - 1)) - 1;
   for (int bitIndex = kBitCount - 1; bitIndex >= 0; --bitIndex) {
@@ -124,9 +125,9 @@ inline JacobianPoint<Element> LinearCombination_wNAF(const UInt256& u1, std::spa
 // (glv.h) carries a lambda split plus the odd-multiple tables for its base and phi(base), and yields
 // its wNAF digits (NonAdjacentFormDigits) and summands (Base/Phi). The accumulator is always
 // Jacobian; both tables are affine so all the point additions are mixed types.
-template <typename GTable, typename QTable, typename Element>
-JacobianPoint<Element> LinearCombination_GLV(const GlvTerm<GTable, Element>& g, const GlvTerm<QTable, Element>& q) {
-  using Point = JacobianPoint<Element>;
+template <typename GTable, typename QTable>
+JacobianPoint LinearCombination_GLV(const GlvTerm<GTable>& g, const GlvTerm<QTable>& q) {
+  using Point = JacobianPoint;
 
   Assert(g.global_z == 1);
 
@@ -139,7 +140,7 @@ JacobianPoint<Element> LinearCombination_GLV(const GlvTerm<GTable, Element>& g, 
   const auto& z = q.global_z;
   const auto z2 = z.Squared();
   const auto z3 = z2 * z;
-  const auto scaled = [&](const AffinePoint<Element>& pt) -> AffinePoint<Element> { return { pt.x * z2, pt.y * z3 }; };
+  const auto scaled = [&](const AffinePoint& pt) -> AffinePoint { return { pt.x * z2, pt.y * z3 }; };
 
   // SplitLambda guarantees |k_i| < 2^(kBits/2), so the top wNAF digit index is <= kBits/2.
   Point sum;

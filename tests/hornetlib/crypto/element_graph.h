@@ -140,10 +140,10 @@ inline constexpr int kJacobianYMag = kProductMag + 8 * kProductMag + 1;         
 inline constexpr int kJacobianZMag = (kProductMag + kProductMag + 1) + kProductMag + 1;  // 8
 
 // Entry views for point coordinates at their storage bounds, so formulas spell no literals.
-constexpr Source<kAffineXMag> XCoord(const AffinePoint<FieldElement>& p) { return {p.x}; }
-constexpr Source<kAffineYMag> YCoord(const AffinePoint<FieldElement>& p) { return {p.y}; }
-constexpr Source<kJacobianXMag> XCoord(const JacobianPoint<FieldElement>& p) { return {p.X}; }
-constexpr Source<kJacobianYMag> YCoord(const JacobianPoint<FieldElement>& p) { return {p.Y}; }
-constexpr Source<kJacobianZMag> ZCoord(const JacobianPoint<FieldElement>& p) { return {p.Z}; }
+constexpr Source<kAffineXMag> XCoord(const AffinePoint& p) { return {p.x}; }
+constexpr Source<kAffineYMag> YCoord(const AffinePoint& p) { return {p.y}; }
+constexpr Source<kJacobianXMag> XCoord(const JacobianPoint& p) { return {p.X}; }
+constexpr Source<kJacobianYMag> YCoord(const JacobianPoint& p) { return {p.Y}; }
+constexpr Source<kJacobianZMag> ZCoord(const JacobianPoint& p) { return {p.Z}; }
 
 }  // namespace hornet::crypto::ecdsa::graph

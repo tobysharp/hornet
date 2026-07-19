@@ -14,7 +14,7 @@ namespace hornet::crypto::ecdsa {
 namespace {
 
 // The concrete curve under test; the dual-instantiation gate lives in curve.h static_asserts.
-using Curve = hornet::crypto::ecdsa::Curve<FieldElement>;
+using Curve = hornet::crypto::ecdsa::Curve;
 
 constexpr std::array<uint8_t, 70> kStrictDERExample = {
 		0x30, 0x44, 0x02, 0x20, 0x4e, 0x45, 0xe1, 0x69,

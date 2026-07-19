@@ -25,7 +25,7 @@
 namespace hornet::consensus::rules {
 namespace {
 
-using Curve = crypto::ecdsa::Curve<crypto::ecdsa::FieldElement>;
+using Curve = crypto::ecdsa::Curve;
 using protocol::script::SpendContext;
 using protocol::script::SpendPath;
 using protocol::script::Writer;

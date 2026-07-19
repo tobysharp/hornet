@@ -145,13 +145,9 @@ Uint256 RandomNonZeroFieldElement(uint64_t& state) {
   return z;
 }
 
-// Runs Curve's projective x-compare under both element representations and checks they agree.
+// Runs Curve's projective x-compare on unpacked canonical elements.
 bool IsJacobianXEqual(const Uint256& X, const Uint256& z, const Uint256& r) {
-  using Fp4x64 = Fp<secp256k1::kBits, secp256k1::p>;
-  const bool fp = Curve<Fp4x64>::IsJacobianXEqual(Fp4x64{X}, Fp4x64{z}, r);
-  const bool fe = Curve<FieldElement>::IsJacobianXEqual(FieldElement{X}, FieldElement{z}, r);
-  EXPECT_EQ(fp, fe) << "element representations disagree";
-  return fe;
+  return Curve::IsJacobianXEqual(FieldElement{X}, FieldElement{z}, r);
 }
 
 TEST(IsJacobianXEqualTest, HandVerifiableSmallCases) {

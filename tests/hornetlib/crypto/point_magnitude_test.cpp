@@ -7,14 +7,14 @@
 //
 // Contract under test: every point operation must admit operands at the documented entry
 // magnitudes (the closure-analysis bounds below) -- the largest magnitudes production ever feeds
-// it. Each operation runs dual-instantiated at those bounds with max-limb and random-limb inputs,
-// and its outputs are compared coordinate-for-coordinate against the Fp instantiation on
-// semantically equal inputs (a formula is a polynomial map, so the results must agree mod p;
-// on-curve membership is irrelevant to the magnitude contract).
+// it. Each operation runs at those bounds with max-limb and random-limb inputs, and its outputs
+// are compared coordinate-for-coordinate against the same formula evaluated on canonical
+// (magnitude-1) representations of the same residues (a formula is a polynomial map, so the
+// results must agree mod p; on-curve membership is irrelevant to the magnitude contract).
 //
 // An insufficient formula annotation fails in BOTH build flavors: the checked build throws at the
 // exact Negate/admission site (naming the operation), and the unchecked build wraps limbs and
-// diverges from the Fp result on the deterministic max-limb inputs.
+// diverges from the canonical-input result on the deterministic max-limb inputs.
 
 #include <cstdint>
 #include <random>
@@ -24,7 +24,6 @@
 
 #include "hornetlib/crypto/curve.h"
 #include "hornetlib/crypto/element.h"
-#include "hornetlib/crypto/fp.h"
 #include "hornetlib/crypto/point.h"
 #include "hornetlib/crypto/secp256k1.h"
 
@@ -32,11 +31,8 @@ namespace hornet::crypto::ecdsa {
 namespace {
 
 using FE = FieldElement;
-using FpRef = Fp<secp256k1::kBits, secp256k1::p>;
-using JacF = JacobianPoint<FE>;
-using AffF = AffinePoint<FE>;
-using JacP = JacobianPoint<FpRef>;
-using AffP = AffinePoint<FpRef>;
+using JacF = JacobianPoint;
+using AffF = AffinePoint;
 using Array = FE::Array;
 
 constexpr int kWords = FE::kWords;
@@ -80,20 +76,20 @@ FE Inflate(const FE& canonical, int magnitude) {
   return {words, magnitude};
 }
 
-// Fp mirrors: semantically equal canonical operands for the reference instantiation.
-FpRef Mirror(const FE& x) { return FpRef{x.Pack()}; }
-JacP Mirror(const JacF& p) { return {Mirror(p.X), Mirror(p.Y), Mirror(p.Z)}; }
-AffP Mirror(const AffF& a) { return {Mirror(a.x), Mirror(a.y)}; }
+// Canonical mirrors: semantically equal magnitude-1 operands for the reference evaluation.
+FE Mirror(const FE& x) { return FE{x.Pack()}; }
+JacF Mirror(const JacF& p) { return {Mirror(p.X), Mirror(p.Y), Mirror(p.Z)}; }
+AffF Mirror(const AffF& a) { return {Mirror(a.x), Mirror(a.y)}; }
 
-void ExpectSameJacobian(const JacF& f, const JacP& p, const char* what) {
-  EXPECT_EQ(f.X.Pack(), p.X.x) << what << " X";
-  EXPECT_EQ(f.Y.Pack(), p.Y.x) << what << " Y";
-  EXPECT_EQ(f.Z.Pack(), p.Z.x) << what << " Z";
+void ExpectSameJacobian(const JacF& f, const JacF& p, const char* what) {
+  EXPECT_EQ(f.X.Pack(), p.X.Pack()) << what << " X";
+  EXPECT_EQ(f.Y.Pack(), p.Y.Pack()) << what << " Y";
+  EXPECT_EQ(f.Z.Pack(), p.Z.Pack()) << what << " Z";
 }
 
-void ExpectSameAffine(const AffF& f, const AffP& p, const char* what) {
-  EXPECT_EQ(f.x.Pack(), p.x.x) << what << " x";
-  EXPECT_EQ(f.y.Pack(), p.y.x) << what << " y";
+void ExpectSameAffine(const AffF& f, const AffF& p, const char* what) {
+  EXPECT_EQ(f.x.Pack(), p.x.Pack()) << what << " x";
+  EXPECT_EQ(f.y.Pack(), p.y.Pack()) << what << " y";
 }
 
 JacF RandomJacobian(std::mt19937_64& rng) {
@@ -187,7 +183,7 @@ TEST(PointOperationTest, AddWithZRatioAdmitsEntryMagnitudes) {
     const auto [rf, ratio_f] = p.AddWithZRatio(a);
     const auto [rp, ratio_p] = Mirror(p).AddWithZRatio(Mirror(a));
     ExpectSameJacobian(rf, rp, "AddWithZRatio");
-    EXPECT_EQ(FE{ratio_f}.Pack(), FpRef{ratio_p}.x) << "AddWithZRatio ratio";
+    EXPECT_EQ(ratio_f.Pack(), ratio_p.Pack()) << "AddWithZRatio ratio";
   }
 }
 
@@ -246,7 +242,6 @@ TEST(PointOperationTest, AffineUnaryMinusAdmitsEntryMagnitudesAndRoundTrips) {
 TEST(PointOperationTest, OnCurveAndInfinityHoldAtInflatedRepresentations) {
   // The generator, value-preserved but with every coordinate inflated to its entry magnitude:
   // semantic predicates must see through the representation.
-  const AffF g{FE{secp256k1::Gx}, FE{secp256k1::Gy}};
   const AffF g_inflated{Inflate(FE{secp256k1::Gx}, kAX), Inflate(FE{secp256k1::Gy}, kAY)};
   EXPECT_TRUE(g_inflated.IsOnCurve());
   EXPECT_FALSE(g_inflated.IsInfinity());
@@ -265,13 +260,13 @@ TEST(PointOperationTest, ConversionToAffineAdmitsEntryMagnitudes) {
   for (int trial = 0; trial < 10; ++trial) {
     const JacF p = RandomJacobian(rng);
     const AffF f = p;
-    const AffP r = Mirror(p);
+    const AffF r = Mirror(p);
     ExpectSameAffine(f, r, "operator Affine");
-    EXPECT_EQ(FE{p.NormalizedX()}.Pack(), FpRef{Mirror(p).NormalizedX()}.x) << "NormalizedX";
+    EXPECT_EQ(p.NormalizedX().Pack(), Mirror(p).NormalizedX().Pack()) << "NormalizedX";
   }
   const JacF max = MaxJacobian();
   const AffF f = max;
-  const AffP r = Mirror(max);
+  const AffF r = Mirror(max);
   ExpectSameAffine(f, r, "operator Affine(max)");
 }
 
@@ -280,11 +275,11 @@ TEST(PointOperationTest, IsJacobianXEqualAdmitsEntryMagnitudes) {
   for (int trial = 0; trial < 25; ++trial) {
     const FE x = RandomAt(rng, kJX);
     const FE z = RandomAt(rng, kJZ);
-    // The true normalized u = x / z^2 mod p, from the Fp side.
-    const auto u = (Mirror(x) * Mirror(z).Inverse().Squared()).x;
+    // The true normalized u = x / z^2 mod p, from canonical operands.
+    const auto u = (Mirror(x) * Mirror(z).Inverse().Squared()).Pack();
     if (u < secp256k1::n) {
-      EXPECT_TRUE(Curve<FE>::IsJacobianXEqual(x, z, u));
-      EXPECT_FALSE(Curve<FE>::IsJacobianXEqual(x, z, (u == UIntW<256>{0} ? u + UIntW<256>{1} : u - UIntW<256>{1})));
+      EXPECT_TRUE(Curve::IsJacobianXEqual(x, z, u));
+      EXPECT_FALSE(Curve::IsJacobianXEqual(x, z, (u == UIntW<256>{0} ? u + UIntW<256>{1} : u - UIntW<256>{1})));
     }
   }
 }

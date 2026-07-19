@@ -57,8 +57,7 @@ constexpr auto WindowedNonAdjacentForm(const UIntW<kBits>& x, int w, bool negati
   return naf;
 }
 
-template <typename Element>
-inline Element PrecomputeTableGlobalZ(const AffinePoint<Element>& P, std::span<AffinePoint<Element>> table) {
+inline FieldElement PrecomputeTableGlobalZ(const AffinePoint& P, std::span<AffinePoint> table) {
   // The table size is 2^(w-1) for window size w, to include both negative and positive odd multiples.
   // We compute the odd-multiple points, {..., -5P, -3P, -P, P, 3P, 5P, ... } to fill the table.
 
@@ -68,21 +67,21 @@ inline Element PrecomputeTableGlobalZ(const AffinePoint<Element>& P, std::span<A
   const int size = std::ssize(table);
   const int count = size >> 1;
 
-  AffinePoint<Element>* positives = &table[count];  // positives[i]  =  (2i + 1)P, i \in [0, count).
-  AffinePoint<Element>* negatives = positives - 1;  // negatives[-i] = -(2i + 1)P, i \in [0, count).
-  std::vector<JacobianPoint<Element>> sums(count);
-  std::vector<Element> ratios(count);
+  AffinePoint* positives = &table[count];  // positives[i]  =  (2i + 1)P, i \in [0, count).
+  AffinePoint* negatives = positives - 1;  // negatives[-i] = -(2i + 1)P, i \in [0, count).
+  std::vector<JacobianPoint> sums(count);
+  std::vector<FieldElement> ratios(count);
 
   // To allow us to perform the point additions as affine points rather than Jacobian points,
   // we map all points to the scaled curve, E_C: y^2 = x^3 + bC^6, using the map,
   // λ_C : (X, Y, Z) |-> (X, Y, Z/C), or equivalently,
   // λ_C : (X, Y, Z) |-> (C^2X, C^3Y, Z).
 
-  const JacobianPoint<Element> P2 = JacobianPoint<Element>{P}.Double();
+  const JacobianPoint P2 = JacobianPoint{P}.Double();
   const auto C = P2.Z;
   const auto C2 = C.Squared();
   const auto C3 = C * C2;
-  const AffinePoint<Element> a2P = {P2.X, P2.Y};  // λ_C(2P)
+  const AffinePoint a2P = {P2.X, P2.Y};  // λ_C(2P)
 
   // Perform affine additions on curve E_C, storing ratios[i] = Z_i / Z_{i-1}.
   sums[0] = {P.x * C2, P.y * C3, 1};                                                              // λ_C(P)
@@ -91,7 +90,7 @@ inline Element PrecomputeTableGlobalZ(const AffinePoint<Element>& P, std::span<A
   // Scale all points to a shared z coordinate on E_C, g_C = Z_last, and then apply the additional map,
   // λ_{g_C} to represent the points as affine, i.e. with an implicit Z=1 parameter.
   const auto g_C = sums[count - 1].Z;
-  Element scale = 1;  // scale = g_C / sums[count - 1].Z
+  FieldElement scale = 1;  // scale = g_C / sums[count - 1].Z
   positives[count - 1] = {sums[count - 1].X.NormalizeWeak(), sums[count - 1].Y.NormalizeWeak()};
   negatives[1 - count] = {positives[count - 1].x, -positives[count - 1].y};
   for (int i = count - 2; i >= 0; --i) {
@@ -113,8 +112,7 @@ inline Element PrecomputeTableGlobalZ(const AffinePoint<Element>& P, std::span<A
   return C * g_C;
 }
 
-template <typename Element>
-inline void PrecomputeTableJacobian(const AffinePoint<Element>& P, std::span<JacobianPoint<Element>> table) {
+inline void PrecomputeTableJacobian(const AffinePoint& P, std::span<JacobianPoint> table) {
   if (table.size() < 2u) return;
 
   // The table size is 2^(w-1) for window size w, to include both negative and positive odd multiples.
@@ -123,7 +121,7 @@ inline void PrecomputeTableJacobian(const AffinePoint<Element>& P, std::span<Jac
   const int count = size >> 1;
 
   // We compute the odd-multiple points, {..., -5P, -3P, -P, P, 3P, 5P, ... } to fill the table.
-  const auto P2 = JacobianPoint<Element>{P}.Double();
+  const auto P2 = JacobianPoint{P}.Double();
   table[count] = P;
   table[count - 1] = {P.x, -P.y};
   for (int i = 1; i < count; ++i) {
@@ -135,9 +133,8 @@ inline void PrecomputeTableJacobian(const AffinePoint<Element>& P, std::span<Jac
 // Builds the wide fixed-base odd-multiple table in affine form: { ..., -3P, -P, P, 3P, ... }.
 // Intended to be precomputed once for a fixed base (e.g. the generator) and passed into the
 // wNAF linear combination, so the per-table normalization cost is amortized across many calls.
-template <typename Element>
-inline void PrecomputeTableAffine(const AffinePoint<Element>& P, std::span<AffinePoint<Element>> table) {
-  std::vector<JacobianPoint<Element>> jacobian(table.size());
+inline void PrecomputeTableAffine(const AffinePoint& P, std::span<AffinePoint> table) {
+  std::vector<JacobianPoint> jacobian(table.size());
   PrecomputeTableJacobian(P, std::span{jacobian});
   for (int i = 0; i < std::ssize(table); ++i) table[i] = jacobian[i];  // Jacobian -> affine
 }

@@ -115,22 +115,6 @@ struct Fp {
 
   friend constexpr std::ostream& operator<<(std::ostream& s, const Fp& rhs) { return s << rhs.x; }
 
-  template <int> constexpr Fp Negate() const {
-    return -*this;
-  }
-
-  template <int> constexpr Fp Subtract(const Fp& rhs) const {
-    return *this - rhs;
-  }
-
-  constexpr const Fp& NormalizeWeak() const {
-    return *this;
-  }
-
-  constexpr const Uint256& Pack() const {
-    return x;
-  }
-
   Type x;
 };
 

@@ -23,15 +23,15 @@
 
 namespace hornet::crypto::ecdsa {
 
-template <typename Element> class Curve {
+class Curve {
  public:
   static constexpr int kBits = secp256k1::kBits;
-  using Affine = AffinePoint<Element>;
-  using Mod_p = Element;
+  using Affine = AffinePoint;
+  using Mod_p = FieldElement;
   using Mod_n = Fp<kBits, secp256k1::n>;
   using Wide = Uint256;
   using Signature = std::pair<Wide, Wide>;
-  using Point = JacobianPoint<Element>;
+  using Point = JacobianPoint;
   static_assert(secp256k1::p > secp256k1::n);
 
   class PublicKey {
@@ -53,7 +53,7 @@ template <typename Element> class Curve {
     g_table_.resize(std::size_t{1} << (width - 1));
     PrecomputeTableAffine(G, std::span{g_table_});
     phi_g_table_.resize(g_table_.size());
-    MakePhiTable<Affine>(std::span{g_table_}, std::span{phi_g_table_});
+    MakePhiTable(std::span{g_table_}, std::span{phi_g_table_});
   }
 
   inline static constexpr bool IsOnCurve(const Point& point) { return point.IsOnCurve(); }
@@ -100,7 +100,7 @@ template <typename Element> class Curve {
     // G/phi(G) tables. Halves the shared doublings (docs/secp256k1-performance-history.md).
     return VerifySignatureImpl(public_key, signature, HashToInt(hashed_message),
                                [](const Wide& u1, const Wide& u2, const Affine& Q) {
-                                 const GlvTerm<std::span<const Affine>, Element> g_term{
+                                 const GlvTerm<std::span<const Affine>> g_term{
                                      SplitLambda(u1), GeneratorTable(), PhiGeneratorTable()};
                                  return LinearCombination_GLV(g_term, MakeVariableGlvTerm(SplitLambda(u2), Q));
                                });
@@ -116,15 +116,15 @@ template <typename Element> class Curve {
   }
 
   // For u = x/z^2 (mod p), test whether u = r (mod n).
-  inline static constexpr bool IsJacobianXEqual(const Element& x, const Element& z, const Uint256& r) {
+  inline static constexpr bool IsJacobianXEqual(const Mod_p& x, const Mod_p& z, const Uint256& r) {
     // u == r (mod n) => x == r * z^2 (mod n)
     // Can have p < r + n, or r + n < p < r + 2n
-    // Need to test for x == r * z^2 (mod p), 
+    // Need to test for x == r * z^2 (mod p),
     // otherwise n <= r < p, so test x == (r + n) * z^2 (mod p).
     const auto z2 = z.Squared();
     if (x == z2 * r) return true;
 
-    if (r < secp256k1::p - secp256k1::n) return x == Element{r + secp256k1::n} * z2;
+    if (r < secp256k1::p - secp256k1::n) return x == Mod_p{r + secp256k1::n} * z2;
     return false;
   }
 
@@ -178,7 +178,6 @@ template <typename Element> class Curve {
 
 // Evaluated here (not in-class) because a non-template class is incomplete until its closing brace,
 // so its members can't be used in a constant expression inside the body.
-static_assert(Curve<Fp<secp256k1::kBits, secp256k1::p>>::IsOnCurve(Curve<Fp<secp256k1::kBits, secp256k1::p>>::G));
-static_assert(Curve<FieldElement>::IsOnCurve(Curve<FieldElement>::G));
+static_assert(Curve::IsOnCurve(Curve::G));
 
 }  // namespace hornet::crypto::ecdsa
