@@ -26,14 +26,12 @@ struct LambdaSplit {
 // A GLV term: a scalar's lambda split with the odd-multiple tables of its base P and of phi(P).
 // Table is the table storage -- a span viewing fixed tables (G) or an owning array (per-call, Q).
 // LinearCombination_GLV sums two of these -- the G-side and the Q-side.
-template <class Table>
+template <typename Table, typename Element>
 struct GlvTerm {
-  using Mod_p = Fp<secp256k1::kBits, secp256k1::p>;
-
   LambdaSplit scalar;
   Table base;  // odd multiples of P
   Table phi;   // odd multiples of phi(P)
-  Mod_p global_z = 1;
+  Element global_z = 1;
 
   // wNAF recodings of the split scalars (k1 for base, k2 for phi), sign folded in; width is
   // inferred from the table size (2^{w-1} entries).
@@ -96,16 +94,22 @@ inline LambdaSplit SplitLambda(const UInt256& k) {
   return {to_signed(k1), to_signed(k2)};
 }
 
+template <typename Point>
+inline void MakePhiTable(std::span<const Point> base, std::span<Point> phi) {
+  typename Point::ElementT beta{secp256k1::beta};
+  for (std::size_t i = 0; i < phi.size(); ++i)
+    phi[i] = { beta * base[i].x, base[i].y };
+}
+
 // Builds an owning Q-side GlvTerm: the odd-multiple tables of Q and phi(Q) (2^{kWidth-1} entries
 // each) packed with the scalar split. The term owns its tables, so no external storage is needed.
-template <int kWidth = 5>
-GlvTerm<std::array<AffinePoint, 1 << (kWidth - 1)>> MakeVariableGlvTerm(
-    const LambdaSplit& scalar, const AffinePoint& Q) {
-  GlvTerm<std::array<AffinePoint, 1 << (kWidth - 1)>> term;
+template <int kWidth = 5, typename Element>
+GlvTerm<std::array<AffinePoint<Element>, 1 << (kWidth - 1)>, Element> MakeVariableGlvTerm(
+    const LambdaSplit& scalar, const AffinePoint<Element>& Q) {
+  GlvTerm<std::array<AffinePoint<Element>, 1 << (kWidth - 1)>, Element> term;
   term.scalar = scalar;
   term.global_z = PrecomputeTableGlobalZ(Q, {term.base.data(), term.base.size()});
-  for (std::size_t i = 0; i < term.base.size(); ++i)
-    term.phi[i] = { secp256k1::beta * term.base[i].x, term.base[i].y };
+  MakePhiTable<AffinePoint<Element>>(std::span{term.base}, std::span{term.phi});
   return term;
 }
 

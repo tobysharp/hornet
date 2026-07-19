@@ -2,6 +2,7 @@
 
 #include "hornetlib/crypto/secp256k1.h"
 #include "hornetlib/crypto/uintw.h"
+#include "hornetlib/util/throw.h"
 
 namespace hornet::crypto::ecdsa {
 
@@ -67,12 +68,50 @@ inline constexpr auto ReduceModulo<256, secp256k1::p> = [](const auto& x) { retu
 template <>
 inline constexpr auto ReduceModulo<256, secp256k1::n> = [](const auto& x) { return ReduceModuloN(x); };
 
-// For t = x/z^2 (mod p), test whether t = r (mod n).
-constexpr bool IsJacobianXEqual(const Uint256& x, const Uint256& z, const Uint256& r) {
-  const Uint256 z2 = ReduceModuloP(z.Squared());
-  if (ReduceModuloP(r * z2) == x) return true;
-  constexpr Uint256 p_n = secp256k1::p - secp256k1::n;
-  return (r < p_n) && (ReduceModuloP((r + secp256k1::n) * z2) == x);
+namespace detail {
+
+template <int kBits>
+constexpr bool IsEven(const UIntW<kBits>& x) {
+  return (x.Words()[0] & 1) == 0;
 }
+
+template <int kBits, const UIntW<kBits>& p>
+constexpr UIntW<kBits> HalfModuloOdd(const UIntW<kBits>& x) {
+  if (IsEven<kBits>(x)) return x >> 1;
+  auto [sum, carry] = x.AddWithCarry(p);
+  sum >>= 1;
+  if (carry) sum.SetBit(kBits - 1);
+  return sum;
+}
+
+template <int kBits, const UIntW<kBits>& p>
+constexpr UIntW<kBits> InvertModuloOdd(const UIntW<kBits>& b) {
+  using Type = UIntW<kBits>;
+  Type aa = b, uu = 1, bb = p, vv = 0;
+  while (aa != 0) {
+    if (IsEven<kBits>(aa)) {
+      aa >>= 1;
+      uu = HalfModuloOdd<kBits, p>(uu);
+    } else {
+      if (aa < bb) {
+        std::swap(aa, bb);
+        std::swap(uu, vv);
+      }
+      aa = (aa - bb) >> 1;
+      const auto num = uu >= vv ? uu - vv : uu + p - vv;
+      uu = HalfModuloOdd<kBits, p>(num);
+    }
+  }
+  if (bb != 1) util::ThrowRuntimeError("Value not invertible mod p");
+  return vv;
+}
+
+template <int kBits, const UIntW<kBits>& p>
+constexpr UIntW<kBits> DivideModuloOdd(const UIntW<kBits>& a, const UIntW<kBits>& b) {
+  const auto s = InvertModuloOdd<kBits, p>(b);
+  return ReduceModulo<kBits, p>(s * a);
+}
+
+}  // namespace detail
 
 }  // namespace hornet::crypto::ecdsa

@@ -10,57 +10,12 @@
 
 namespace hornet::crypto::ecdsa {
 
-namespace detail {
-
-template <int kBits>
-constexpr bool IsEven(const UIntW<kBits>& x) {
-  return (x.Words()[0] & 1) == 0;
-}
-
-template <int kBits, const UIntW<kBits>& p>
-constexpr UIntW<kBits> HalfModuloOdd(const UIntW<kBits>& x) {
-  if (IsEven<kBits>(x)) return x >> 1;
-  auto [sum, carry] = x.AddWithCarry(p);
-  sum >>= 1;
-  if (carry) sum.SetBit(kBits - 1);
-  return sum;
-}
-
-template <int kBits, const UIntW<kBits>& p>
-constexpr UIntW<kBits> InvertModuloOdd(const UIntW<kBits>& b) {
-  using Type = UIntW<kBits>;
-  Type aa = b, uu = 1, bb = p, vv = 0;
-  while (aa != 0) {
-    if (IsEven<kBits>(aa)) {
-      aa >>= 1;
-      uu = HalfModuloOdd<kBits, p>(uu);
-    } else {
-      if (aa < bb) {
-        std::swap(aa, bb);
-        std::swap(uu, vv);
-      }
-      aa = (aa - bb) >> 1;
-      const auto num = uu >= vv ? uu - vv : uu + p - vv;
-      uu = HalfModuloOdd<kBits, p>(num);
-    }
-  }
-  if (bb != 1) util::ThrowRuntimeError("Value not invertible mod p");
-  return vv;
-}
-
-template <int kBits, const UIntW<kBits>& p>
-constexpr UIntW<kBits> DivideModuloOdd(const UIntW<kBits>& a, const UIntW<kBits>& b) {
-  const auto s = InvertModuloOdd<kBits, p>(b);
-  return ReduceModulo<kBits, p>(s * a);
-}
-
-}  // namespace detail
-
 // Represents an element of the finite field Fp for an odd prime p. The template parameter kBits is the bit width of the
 // underlying UIntW type, and must be large enough to represent p.
 template <int kBits, const UIntW<kBits>& p>
 struct Fp {
   using Type = UIntW<kBits>;
+  using Array = UIntW<kBits>::Array;
   static_assert(!detail::IsEven<kBits>(p));
 
   constexpr Fp() : x(Type::Zero()) {}
@@ -72,6 +27,8 @@ struct Fp {
   constexpr static bool HasSquareRoot() { return p.template Modulo<sizeof(typename Type::Word)*8>(4) == 3; }
   constexpr bool operator!=(const Fp& rhs) const { return x != rhs.x; }
   constexpr bool operator==(const Fp& rhs) const { return x == rhs.x; }
+
+  constexpr const auto& Words() const { return x.Words(); }
 
   constexpr Fp Squared() const { return ReduceModulo<kBits, p>(x.Squared()); }
   constexpr Fp Inverse() const { return detail::InvertModuloOdd<kBits, p>(x); }
@@ -157,6 +114,22 @@ struct Fp {
   }
 
   friend constexpr std::ostream& operator<<(std::ostream& s, const Fp& rhs) { return s << rhs.x; }
+
+  template <int> constexpr Fp Negate() const {
+    return -*this;
+  }
+
+  template <int> constexpr Fp Subtract(const Fp& rhs) const {
+    return *this - rhs;
+  }
+
+  constexpr const Fp& NormalizeWeak() const {
+    return *this;
+  }
+
+  constexpr const Uint256& Pack() const {
+    return x;
+  }
 
   Type x;
 };

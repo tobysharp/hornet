@@ -25,7 +25,7 @@
 namespace hornet::consensus::rules {
 namespace {
 
-using Curve = crypto::ecdsa::Curve;
+using Curve = crypto::ecdsa::Curve<crypto::ecdsa::FieldElement>;
 using protocol::script::SpendContext;
 using protocol::script::SpendPath;
 using protocol::script::Writer;
@@ -118,7 +118,7 @@ SignedDigest MakeSignature(const SpendContext& spend, std::span<const uint8_t> l
   const Curve::Wide private_key{1};
   const Curve::Wide nonce{1};
   const Curve::Point nonce_point = nonce * Curve::G;
-  const Curve::Mod_n r{nonce_point.NormalizedX().x.Modulo(crypto::ecdsa::secp256k1::n)};
+  const Curve::Mod_n r{nonce_point.NormalizedX().Pack().Modulo(crypto::ecdsa::secp256k1::n)};
   const Curve::Mod_n z{Curve::Wide::FromBigEndianBytes(digest)};
   const Curve::Mod_n d{private_key};
   const Curve::Mod_n s = (z + r * d) / Curve::Mod_n{nonce};
@@ -332,12 +332,12 @@ static void BM_PublicKeyFromSEC1_Compressed(benchmark::State& state) {
     state.SkipWithError("failed to build valid SEC1 pubkey input");
     return;
   }
-  auto pubkey_sink = PublicKeyPoint(*pubkey).x.x.Words()[0];
+  auto pubkey_sink = PublicKeyPoint(*pubkey).x.Words()[0];
   benchmark::DoNotOptimize(std::move(pubkey_sink));
 
   for (auto _ : state) {
     const auto loop_pubkey = Curve::PublicKeyFromSEC1(kCompressedPubkey);
-    auto loop_pubkey_sink = PublicKeyPoint(*loop_pubkey).x.x.Words()[0];
+    auto loop_pubkey_sink = PublicKeyPoint(*loop_pubkey).x.Words()[0];
     benchmark::DoNotOptimize(std::move(loop_pubkey_sink));
   }
 
@@ -370,7 +370,7 @@ static void BM_CheckSigSetup_P2PKH(benchmark::State& state) {
     const auto loop_pubkey = Curve::PublicKeyFromSEC1(kCompressedPubkey);
     auto loop_digest_sink = loop_digest.front();
     auto loop_signature_sink = loop_signature->first.Words()[0];
-    auto loop_pubkey_sink = PublicKeyPoint(*loop_pubkey).x.x.Words()[0];
+    auto loop_pubkey_sink = PublicKeyPoint(*loop_pubkey).x.Words()[0];
     benchmark::DoNotOptimize(std::move(loop_digest_sink));
     benchmark::DoNotOptimize(std::move(loop_signature_sink));
     benchmark::DoNotOptimize(std::move(loop_pubkey_sink));

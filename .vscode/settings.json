@@ -101,6 +101,10 @@
         "expected": "cpp",
         "format": "cpp"
     },
+    // Force semantic tokens from IntelliSense on top of the TextMate grammar. The bundled C++
+    // TextMate grammar mis-scopes trailing requires(...) clauses (parsed as a function named
+    // "requires"), which cascades into broken coloring below; semantic highlighting masks that.
+    "editor.semanticHighlighting.enabled": true,
     "C_Cpp.default.compilerPath": "/usr/bin/clang++-20",
     "C_Cpp.default.compileCommands": "${workspaceFolder}/build/clang20-debug/compile_commands.json",
     "C_Cpp.intelliSenseEngine": "default",

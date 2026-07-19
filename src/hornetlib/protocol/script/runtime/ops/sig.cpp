@@ -6,6 +6,7 @@
 #include <optional>
 
 #include "hornetlib/crypto/curve.h"
+#include "hornetlib/crypto/element.h"
 #include "hornetlib/crypto/signature.h"
 #include "hornetlib/encoding/writer.h"
 #include "hornetlib/protocol/transaction.h"
@@ -33,6 +34,8 @@ static void OnCheckSig(const Context& context) {
     // TODO: Tapscript path: EvalChecksigTapscript.
     // TODO: Check signature and pubkey encodings: CheckSignatureEncoding, CheckPubKeyEncoding.
 
+    using Curve = crypto::ecdsa::Curve<FieldElement>;
+  
     // Create the spend digest, which is a 32-byte hash of transaction bytes committing to the spend.
     const auto digest = BuildSpendDigest(*context.env.spend, sigblob, context.machine.script);
 

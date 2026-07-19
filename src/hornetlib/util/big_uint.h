@@ -40,6 +40,8 @@ class BigUint {
   static constexpr int kBitsPerWord = sizeof(T) * 8;
   static constexpr int kWords = kBits / kBitsPerWord;
   static_assert(kBits > 0 && kWords > 0);
+  using Array = std::array<T, kWords>;
+
   static consteval int Bits() { return kBits; }
 
   constexpr BigUint() = default;  // Uninitialized
@@ -592,7 +594,7 @@ class BigUint {
   }
 
 private:
-  std::array<T, kWords> words_;
+  Array words_;
 };
 
 }  // namespace hornet::util

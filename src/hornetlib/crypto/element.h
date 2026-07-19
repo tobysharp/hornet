@@ -2,15 +2,38 @@
 
 #include <array>
 #include <cstdint>
+#include <exception>
+#include <tuple>
 
-#include "hornetlib/crypto/fp.h"
+#include "hornetlib/crypto/reduce.h"
 #include "hornetlib/crypto/secp256k1.h"
 #include "hornetlib/crypto/uintw.h"
 #include "hornetlib/util/assert.h"
 
 namespace hornet::crypto::ecdsa {
 
-template <int kMagnitude = 1> class FieldElement {
+#ifdef HORNETLIB_CHECK_MAGNITUDES
+  static constexpr bool kCheckMagnitudes = HORNETLIB_CHECK_MAGNITUDES;
+#else
+  static constexpr bool kCheckMagnitudes = false;
+#endif
+
+template <bool kCheck = false> class Magnitude {
+ public:
+  constexpr int Get() const { return magnitude_; }
+  constexpr void Set(int magnitude) { magnitude_ = magnitude; }
+ private:
+  int magnitude_ = 1;
+};
+
+template <> 
+class Magnitude<false> {
+ public:
+  constexpr int Get() const { return 0; }
+  constexpr void Set(int) {}
+};
+
+class FieldElement {
  public:
   static constexpr int kWords = 5;
   static constexpr int kMaxMagnitude = 1 << 12;  // 4096
@@ -19,15 +42,16 @@ template <int kMagnitude = 1> class FieldElement {
 
   constexpr FieldElement() : words_{} {}
   constexpr FieldElement(const FieldElement& rhs) = default;
-  constexpr FieldElement(const Array& array) : words_{array} {
-    for (int i = 0; i < 4; ++i) Assert((words_[i] >> 52) < kMagnitude);
-    Assert((words_[4] >> 48) < kMagnitude);
+  constexpr FieldElement(const Array& array, [[maybe_unused]] int magnitude = 1) : words_{array} {
+    magnitude_.Set(magnitude);
+    if constexpr (kCheckMagnitudes) CheckMagnitudes();
   }
   constexpr FieldElement(uint64_t rhs) : words_{} {
     words_[0] = rhs & kMask52;
     words_[1] = rhs >> 52;
+    if constexpr (kCheckMagnitudes) CheckMagnitudes();
   }
-  constexpr FieldElement(const Uint256& rhs) requires(kMagnitude == 1) {
+  constexpr FieldElement(const Uint256& rhs) {
     Assert(rhs < secp256k1::p);
     const auto& rwords = rhs.Words();
     words_[0] = rwords[0] & kMask52;                                // r0[51..0]
@@ -35,26 +59,41 @@ template <int kMagnitude = 1> class FieldElement {
     words_[2] = ((rwords[1] >> 40) | (rwords[2] << 24)) & kMask52;  // r2[27..0] | r1[63..40]
     words_[3] = ((rwords[2] >> 28) | (rwords[3] << 36)) & kMask52;  // r3[15..0] | r2[63..28]
     words_[4] = rwords[3] >> 16;                                    // r3[63..16]   
+    if constexpr (kCheckMagnitudes) CheckMagnitudes();
   }
 
-  template <int kRMagnitude> requires(kRMagnitude < kMagnitude)
-  constexpr FieldElement(const FieldElement<kRMagnitude>& rhs) : words_(rhs.words_) {}
+  template <int kMagnitude>
+  constexpr FieldElement Negate() const {
+    if constexpr (kCheckMagnitudes) {
+      for (int i = 0; i < kWords; ++i)
+        if (words_[i] > p52[i] * (kMagnitude + 1))
+          throw std::out_of_range{"Insufficient static magnitude in FieldElement::Negate."};
+    }
+    Array result;
+    for (int i = 0; i < kWords; ++i) result[i] = p52[i] * (kMagnitude + 1) - words_[i];
+    return { result, kMagnitude + 1 };
+  }
+
+  template <int kMagnitude>
+  constexpr FieldElement Subtract(const FieldElement& rhs) const {
+    return *this + rhs.template Negate<kMagnitude>();
+  }
 
   constexpr FieldElement& operator=(const FieldElement& rhs) = default;
 
-  template <int kRMagnitude> requires (kMagnitude + kRMagnitude + 2 <= kMaxMagnitude)
-  constexpr bool operator==(const FieldElement<kRMagnitude>& rhs) const {
-    return (*this - rhs).NormalizesToZero();
+  constexpr bool operator==(const FieldElement& rhs) const {
+    return (*this + rhs.NormalizeWeak().template Negate<2>()).NormalizesToZero();
   }
 
-  constexpr bool operator==(uint64_t rhs) const requires (kMagnitude + 3 <= kMaxMagnitude) {
+  constexpr bool operator==(uint64_t rhs) const {
     if (rhs == 0) return NormalizesToZero();
-    return operator==(FieldElement<1>{rhs});
+    return operator==(FieldElement{rhs});
   }
 
   constexpr const Array& Words() const { return words_; }
 
   Uint256 Pack() const {
+    if constexpr (kCheckMagnitudes) CheckMagnitudes();
     std::array<uint64_t, 4> words;
     const auto normalized = Normalize();
     const auto& rwords = normalized.Words();
@@ -65,43 +104,50 @@ template <int kMagnitude = 1> class FieldElement {
     return Uint256{words};
   }
 
-  FieldElement<1> Inverse() const {
+  FieldElement Inverse() const {
+    if constexpr (kCheckMagnitudes) CheckMagnitudes();
     return detail::InvertModuloOdd<256, secp256k1::p>(Pack());
   }
 
-  template <int k> requires((kMagnitude << k) <= (1 << 12))
-  constexpr FieldElement<kMagnitude << k> LShift() const {
+  FieldElement operator /(const FieldElement& rhs) const {
+    if constexpr (kCheckMagnitudes) CheckMagnitudes(), rhs.CheckMagnitudes();
+    return detail::DivideModuloOdd<256, secp256k1::p>(Pack(), rhs.Pack());
+  }
+
+  template <int k> 
+  constexpr FieldElement LShift() const {
+    if constexpr (kCheckMagnitudes) CheckMagnitudes();
     Array result;
     for (int i = 0; i < kWords; ++i) result[i] = words_[i] << k;
-    return result;
+    return { result, magnitude_.Get() << k };
   }
 
-  constexpr FieldElement<kMagnitude + 1> operator-() const {
-    Array result;
-    for (int i = 0; i < kWords; ++i) result[i] = p52[i] * (kMagnitude + 1) - words_[i];
-    return result;
+  constexpr FieldElement operator-() const {
+    if constexpr (kCheckMagnitudes) CheckMagnitudes();
+    return Negate<2>();
   }
 
-  template <int kRMagnitude>
-  constexpr FieldElement<kMagnitude + kRMagnitude> operator+(const FieldElement<kRMagnitude>& rhs) const {
+  constexpr FieldElement operator+(const FieldElement& rhs) const {
+    if constexpr (kCheckMagnitudes) CheckMagnitudes();
     Array result;
     for (int i = 0; i < kWords; ++i) result[i] = words_[i] + rhs.words_[i];
-    return result;
+    return { result, magnitude_.Get() + rhs.magnitude_.Get() };
   }
 
-  template <int kRMagnitude> constexpr auto operator-(const FieldElement<kRMagnitude>& rhs) const {
+  constexpr FieldElement operator-(const FieldElement& rhs) const {
     return *this + (-rhs);
   }
 
-  template <int k> FieldElement < k<0 ? (1 - kMagnitude * k) : kMagnitude * k> constexpr Times() const {
+  template <int k> FieldElement constexpr Times() const {
+    if constexpr (kCheckMagnitudes) CheckMagnitudes();
     if constexpr (k < 0) return -Times<-k>();
-    if constexpr (k == 0) return FieldElement<0>{};
+    if constexpr (k == 0) return FieldElement{};
     if constexpr (k == 1) return *this;
     if constexpr (util::IsPowerOf2(k)) return LShift<util::Log2(k)>();
 
     Array result;
     for (int i = 0; i < kWords; ++i) result[i] = words_[i] * k;
-    return result;
+    return { result, magnitude_.Get() * k };
   }
 
   template <int k> constexpr auto operator*(std::integral_constant<int, k>) const { return Times<k>(); }
@@ -112,8 +158,17 @@ template <int kMagnitude = 1> class FieldElement {
 
   template <int k> constexpr auto operator<<(std::integral_constant<int, k>) const { return LShift<k>(); }
 
-  template <int kRMagnitude> requires(kMagnitude * kRMagnitude <= kMaxProductMagnitude)
-  constexpr FieldElement<2> operator*(const FieldElement<kRMagnitude>& rhs) const {
+  constexpr FieldElement& operator*=(const FieldElement& rhs) {
+    if constexpr (kCheckMagnitudes) CheckMagnitudes(), rhs.CheckMagnitudes();
+    return *this = *this * rhs;
+  }
+
+  constexpr FieldElement operator*(const FieldElement& rhs) const {
+    if constexpr (kCheckMagnitudes) {
+      CheckMagnitudes(), rhs.CheckMagnitudes();
+      if (magnitude_.Get() * rhs.magnitude_.Get() > kMaxProductMagnitude) 
+        util::ThrowOutOfRange("Exceeded product magnitude ", magnitude_.Get() * rhs.magnitude_.Get(), " in 5x52 FieldElement.");
+    }
     // Full 5x52 limb product with interleaved fold mod p.
     Array result;
 
@@ -183,15 +238,11 @@ template <int kMagnitude = 1> class FieldElement {
 
     Assert((residual >> 104) == 0);  // residual should be fully used up now.
 
-    return result;
+    return { result, 2 };
   }
 
-  constexpr FieldElement<std::min(kMagnitude, 2)> NormalizeWeak() const {
-    if constexpr (kMagnitude <= 1) return *this;
-
-    // Requires words <= 2^64 - 2^12. 
+  constexpr std::tuple<Array, uint64_t> CarryFold() const {
     // for t=0..3, w_t < m.2^52 <= 2^64 - 2^12 => m <= 2^12 - 2^-40 => m <= 2^12 - 1.
-    static_assert(kMagnitude < (1 << 12));
     Array result;
     uint64_t accumulator = 0;
     for (int t = 0; t < 4; ++t) {
@@ -202,13 +253,27 @@ template <int kMagnitude = 1> class FieldElement {
     result[4] = accumulator & kMask48;
     // Since m < 2^12, w_4 < m.2^48 < 2^60, so overflow < (2^60 + 2^12) >> 48 < 2^12 + 2^-36 < 4096.
     uint64_t overflow = accumulator >> 48;  // < 2^12 at bit position 256.
+    return { result, overflow };
+  }
+
+  constexpr FieldElement NormalizeWeak() const {
+    if constexpr (kCheckMagnitudes) {
+      // Requires words <= 2^64 - 2^12 = 2^12.2^52 - 2^12 <= magnitude <= 2^12 - 1 = 4,095.
+      if (magnitude_.Get() > 4095) throw std::out_of_range{"FieldElement::NormalizeWeak magnitude exceeded 4,095."};
+      CheckMagnitudes();
+    }
+    // TODO: Check normalization flag to verify we aren't re-normalizing unnecessarily?
+
+    // for t=0..3, w_t < m.2^52 <= 2^64 - 2^12 => m <= 2^12 - 2^-40 => m <= 2^12 - 1.
+    auto [result, overflow] = CarryFold();
     Assert(overflow < 4096);
     // overflow * c_p < 2^12 * 2^33 < 2^45
     result[0] += overflow * kFold256; // < 2^52 + 2^45 < 2^53.
-    return result;
+    return { result, 2 };
   }
 
-  constexpr FieldElement<1> Normalize() const {
+  constexpr FieldElement Normalize() const {
+    if constexpr (kCheckMagnitudes) CheckMagnitudes();
     const auto weak = NormalizeWeak();
     // Has w_0 < 2^53, w_1..w_3 < 2^52, w_4 < 2^48, so weak < 2^256 + 2^52.
     
@@ -217,19 +282,12 @@ template <int kMagnitude = 1> class FieldElement {
     // If 2^256 <= w < 2p, then overflow_0 = 1 and s = w + c_p - 2^256 = w - p < p, so overflow_1 = 0 => return s
     // i.e. return (overflow_0 | overflow_1) ? s : w
   
-    Array result;
-    uint64_t accumulator = 0;
-    for (int t = 0; t < 4; ++t) {
-      accumulator = (accumulator >> 52) + weak.words_[t];
-      result[t] = accumulator & kMask52;
-    }
-    accumulator = (accumulator >> 52) + weak.words_[4];
-    result[4] = accumulator & kMask48;
+    auto [result, overflow] = weak.CarryFold();
     // Since m = 2, w_4 < 2.2^48 < 2^49, so overflow < (2^49 + 2^12) >> 48 < 2 + 2^-36 < 2.
-    bool overflow_0 = (accumulator >> 48) != 0;  // 0 or 1 at bit position 256.
+    bool overflow_0 = overflow != 0;  // 0 or 1 at bit position 256.
     
     Array s;
-    accumulator = result[0] + kFold256;
+    uint64_t accumulator = result[0] + kFold256;
     for (int t = 0; t < 4; ++t) {
       s[t] = accumulator & kMask52;
       accumulator = (accumulator >> 52) + result[t+1];
@@ -237,25 +295,18 @@ template <int kMagnitude = 1> class FieldElement {
     s[4] = accumulator & kMask48;
     bool overflow_1 = (accumulator >> 48) != 0;
 
-    return (overflow_0 | overflow_1) ? s : result;
+    return { (overflow_0 | overflow_1) ? s : result, 1 };
   }
 
   constexpr bool NormalizesToZero() const {
-    if constexpr (kMagnitude == 0) return true;
+    if constexpr (kCheckMagnitudes) CheckMagnitudes();
 
     const auto weak = NormalizeWeak();
     // Has w_0 < 2^53, w_1..w_3 < 2^52, w_4 < 2^48, so weak < 2^256 + 2^52.
     
-    Array result;
-    uint64_t accumulator = 0;
-    for (int t = 0; t < 4; ++t) {
-      accumulator = (accumulator >> 52) + weak.words_[t];
-      result[t] = accumulator & kMask52;
-    }
-    accumulator = (accumulator >> 52) + weak.words_[4];
-    result[4] = accumulator & kMask48;
+    auto [result, overflow] = weak.CarryFold();
     // Since m = 2, w_4 < 2.2^48 < 2^49, so overflow < (2^49 + 2^12) >> 48 < 2 + 2^-36 < 2.
-    bool overflow_0 = (accumulator >> 48) != 0;  // 0 or 1 at bit position 256.
+    bool overflow_0 = overflow != 0;  // 0 or 1 at bit position 256.
     if (overflow_0) return false;  // p < 2^256 <= w < 2^256 + 2^52 < 2p
 
     // Zero if w==0 or w==p52.
@@ -267,13 +318,34 @@ template <int kMagnitude = 1> class FieldElement {
     return equal_zero | equal_p;
   }
 
-  constexpr FieldElement<2> Squared() const requires(kMagnitude * kMagnitude <= kMaxProductMagnitude) {
+  constexpr FieldElement Squared() const {
     // TODO: More efficient version.
     return *this * *this;
   }
 
+  constexpr std::optional<FieldElement> SquareRoot() const {
+    // We rely on p = 3 (mod 4) in this implementation, with p an odd prime, which guarantees that (p+1)/4 is an
+    // integer and for any quadratic residue x, x^((p+1)/4) (mod p) is a square root of x, via Euler's criterion.
+    static constexpr Uint256 kExponent = (secp256k1::p + 1) >> 2;
+    static constexpr int kExponentBits = kExponent.SignificantBits();
+    
+    FieldElement result = 1;
+    FieldElement power = *this;
+    for (int i = 0; i < kExponentBits; ++i)
+    {
+      if (kExponent.GetBit(i)) result *= power;
+      power = power.Squared();
+    }
+
+    // Now we need to check that result.Squared() == x, because otherwise x is a quadratic non-residue, and doesn't
+    // have a valid square root.
+    if (result.Squared() != *this) return std::nullopt;
+    return result.Normalize();
+  }
+
  private:
-  template <int> friend class FieldElement;
+  [[no_unique_address]] Magnitude<kCheckMagnitudes> magnitude_;
+
   static constexpr uint64_t kMask52 = (1ull << 52) - 1;
   static constexpr uint64_t kMask48 = (1ull << 48) - 1;
   static constexpr uint64_t kFold256 = secp256k1::c_p.Words()[0];  // < 2^33
@@ -285,12 +357,23 @@ template <int kMagnitude = 1> class FieldElement {
     return words;
   }();
 
-  static_assert(kMagnitude <= kMaxMagnitude);
   static_assert([] {
     UInt256 p = UInt256::Zero();
     for (int i = 0; i < kWords; ++i) p += UInt256{p52[i]} << (52 * i);
     return p == secp256k1::p;
   }());
+
+  constexpr void CheckMagnitudes() const {
+    if constexpr (!kCheckMagnitudes) return;
+    const int mag = magnitude_.Get();
+    if (mag > kMaxMagnitude)
+        throw std::out_of_range{"Invalid magnitude in 5x52 FieldElement."};
+
+    static constexpr int kBitLengths[kWords] = { 52, 52, 52, 52, 48 };
+    for (int i = 0; i < kWords; ++i) 
+      if ((words_[i] >> kBitLengths[i]) >= static_cast<uint64_t>(mag)) 
+        throw std::out_of_range{"Exceeded magnitude in 5x52 FieldElement."};
+  }
 
   // For kMagnitude > 0, words_[i] < kMagnitude * 2^52 for i<4, and words_[4] < kMagnitude * 2^48.
   // For kMagnitude == 0, words_[i] == 0 for all i.

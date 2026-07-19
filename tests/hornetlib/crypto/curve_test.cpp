@@ -19,6 +19,9 @@
 namespace hornet::crypto::ecdsa {
 namespace {
 
+// The concrete curve under test; the dual-instantiation gate lives in curve.h static_asserts.
+using Curve = hornet::crypto::ecdsa::Curve<FieldElement>;
+
 template <size_t kBits, std::unsigned_integral T>
 void PrintTo(const util::BigUint<kBits, T>& value, std::ostream* os) {
 	*os << "BigUint<" << kBits << ", " << sizeof(T) * 8 << ">{";
@@ -34,12 +37,12 @@ using Uint64 = util::BigUint<64, uint64_t>;
 // Reference multiples of the secp256k1 generator (computed independently), used to anchor the
 // point-arithmetic tests now that the point types are concrete secp256k1 (a = 0).
 constexpr Curve::Affine TwoG() {
-	return {Curve::Mod_p{"c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"_h256},
-	        Curve::Mod_p{"1ae168fea63dc339a3c58419466ceaeef7f632653266d0e1236431a950cfe52a"_h256}};
+	return {"c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"_h256,
+	        "1ae168fea63dc339a3c58419466ceaeef7f632653266d0e1236431a950cfe52a"_h256};
 }
 constexpr Curve::Affine ThreeG() {
-	return {Curve::Mod_p{"f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9"_h256},
-	        Curve::Mod_p{"388f7b0f632de8140fe337e62a37f3566500a99934c2231b6cb9fd7584b8e672"_h256}};
+	return {"f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9"_h256,
+	        "388f7b0f632de8140fe337e62a37f3566500a99934c2231b6cb9fd7584b8e672"_h256};
 }
 
 template <typename CurveType>
@@ -93,8 +96,8 @@ std::array<uint8_t, 1 + 2 * sizeof(typename CurveType::Wide)> EncodeUncompressed
 	std::array<uint8_t, 1 + 2 * kBytes> bytes{};
 	bytes[0] = 0x04;
 	const typename CurveType::Affine affine = point;
-	const auto x_bytes = ToBigEndianBytes<CurveType>(affine.x.x);
-	const auto y_bytes = ToBigEndianBytes<CurveType>(affine.y.x);
+	const auto x_bytes = ToBigEndianBytes<CurveType>(affine.x.Pack());
+	const auto y_bytes = ToBigEndianBytes<CurveType>(affine.y.Pack());
 	std::copy(x_bytes.begin(), x_bytes.end(), bytes.begin() + 1);
 	std::copy(y_bytes.begin(), y_bytes.end(), bytes.begin() + 1 + kBytes);
 	return bytes;
@@ -138,7 +141,7 @@ TEST(CurveTest, PointConstructionCopyMoveAndAssignmentPreserveCoordinates) {
 TEST(CurveTest, InfinityNegationAndOnCurveBehaveAsExpected) {
 	const Curve::Point infinity;
 	const Curve::Point generator{Curve::G};
-	const Curve::Affine off_curve{Curve::Mod_p{1}, Curve::Mod_p{1}};  // 1 != 1 + 7
+	const Curve::Affine off_curve{FieldElement{1}, FieldElement{1}};  // 1 != 1 + 7
 
 	EXPECT_TRUE(infinity.IsInfinity());
 	EXPECT_FALSE(generator.IsInfinity());
@@ -454,7 +457,7 @@ Secp256k1SignedMessage MakeRandomSecp256k1Signature(std::mt19937_64& rng) {
 
 	const Curve::Mod_n nonce = RandomScalarModN(rng);
 	const Curve::Point nonce_point = nonce.x * Curve::Point{Curve::G};
-	const Curve::Mod_n r{nonce_point.NormalizedX().x.Modulo(secp256k1::n)};
+	const Curve::Mod_n r{nonce_point.NormalizedX().Pack().Modulo(secp256k1::n)};
 	const Curve::Mod_n s = (z + r * private_key) / nonce;
 	return {*public_key, {r.x, s.x}, digest};
 }
@@ -471,7 +474,7 @@ Secp256k1SignedMessage MakeSecp256k1SignatureForDigest(std::mt19937_64& rng,
 	const Curve::Mod_n z{ReduceModuloN(Curve::Wide::FromBigEndianBytes(digest))};
 	const Curve::Mod_n nonce = RandomScalarModN(rng);
 	const Curve::Point nonce_point = nonce.x * Curve::Point{Curve::G};
-	const Curve::Mod_n r{nonce_point.NormalizedX().x.Modulo(secp256k1::n)};
+	const Curve::Mod_n r{nonce_point.NormalizedX().Pack().Modulo(secp256k1::n)};
 	const Curve::Mod_n s = (z + r * private_key) / nonce;
 	return {*public_key, {r.x, s.x}, digest};
 }
@@ -650,7 +653,7 @@ TEST(CurveTest, LinearCombinationGlvMatchesJointNaf) {
 	constexpr int kWidth = 8;
 	std::vector<Curve::Affine> g_base(1u << (kWidth - 1)), g_phi(1u << (kWidth - 1));
 	PrecomputeTableAffine(Curve::G, std::span{g_base});
-	const Curve::Mod_p beta{secp256k1::beta};
+	const FieldElement beta{secp256k1::beta};
 	for (size_t j = 0; j < g_base.size(); ++j) g_phi[j] = {beta * g_base[j].x, g_base[j].y};
 	const std::span<const Curve::Affine> g_base_span{g_base}, g_phi_span{g_phi};
 
@@ -662,13 +665,13 @@ TEST(CurveTest, LinearCombinationGlvMatchesJointNaf) {
 		const UIntW<256> u1 = RandomScalarModN(rng).x, u2 = RandomScalarModN(rng).x;
 		const Curve::Affine Q = RandomScalarModN(rng).x * Curve::G;
 
-		const GlvTerm<std::span<const Curve::Affine>> g_term{split(u1), g_base_span, g_phi_span};
+		const GlvTerm<std::span<const Curve::Affine>, FieldElement> g_term{split(u1), g_base_span, g_phi_span};
 		const auto q_term = MakeVariableGlvTerm(split(u2), Q);
 
 		const Curve::Affine glv = LinearCombination_GLV(g_term, q_term);
 		const Curve::Affine ref = LinearCombination(u1, Curve::G, u2, Q);
-		EXPECT_EQ(glv.x.x, ref.x.x) << "i=" << i;
-		EXPECT_EQ(glv.y.x, ref.y.x) << "i=" << i;
+		EXPECT_EQ(glv.x.Pack(), ref.x.Pack()) << "i=" << i;
+		EXPECT_EQ(glv.y.Pack(), ref.y.Pack()) << "i=" << i;
 	}
 }
 
@@ -693,14 +696,14 @@ TEST(CurveTest, PrecomputeTableGlobalZMatchesAffineTableAcrossWidths) {
 		const Curve::Affine P = RandomScalarModN(rng).x * Curve::G;
 
 		std::vector<Curve::Affine> globalz(size), affine(size);
-		const Curve::Mod_p g = PrecomputeTableGlobalZ(P, std::span{globalz});
+		const auto g = PrecomputeTableGlobalZ(P, std::span{globalz});
 		PrecomputeTableAffine(P, std::span{affine});
 
-		EXPECT_NE(g.x, UIntW<256>::Zero()) << "w=" << w;
+		EXPECT_FALSE(g == 0) << "w=" << w;
 		for (int k = 0; k < size; ++k) {
 			const Curve::Affine recovered = Curve::Point{globalz[k].x, globalz[k].y, g};  // (x/g², y/g³)
-			EXPECT_EQ(recovered.x.x, affine[k].x.x) << "w=" << w << " k=" << k;
-			EXPECT_EQ(recovered.y.x, affine[k].y.x) << "w=" << w << " k=" << k;
+			EXPECT_EQ(recovered.x.Pack(), affine[k].x.Pack()) << "w=" << w << " k=" << k;
+			EXPECT_EQ(recovered.y.Pack(), affine[k].y.Pack()) << "w=" << w << " k=" << k;
 		}
 	}
 }
@@ -710,15 +713,62 @@ TEST(CurveTest, PrecomputeTableGlobalZMatchesAffineTableAcrossWidths) {
 TEST(CurveTest, PrecomputeTableGlobalZAnchorsToKnownGeneratorMultiples) {
 	constexpr int w = 5, size = 1 << (w - 1), count = size >> 1;
 	std::vector<Curve::Affine> table(size);
-	const Curve::Mod_p g = PrecomputeTableGlobalZ(Curve::G, std::span{table});
+	const auto g = PrecomputeTableGlobalZ(Curve::G, std::span{table});
 	const auto recover = [&](int k) -> Curve::Affine { return Curve::Point{table[k].x, table[k].y, g}; };
 
-	EXPECT_EQ(recover(count).x.x, Curve::G.x.x);         // +1*G
-	EXPECT_EQ(recover(count).y.x, Curve::G.y.x);
-	EXPECT_EQ(recover(count + 1).x.x, ThreeG().x.x);     // +3*G
-	EXPECT_EQ(recover(count + 1).y.x, ThreeG().y.x);
-	EXPECT_EQ(recover(count - 1).x.x, (-Curve::G).x.x);  // -1*G  (negative half: y-flip, same g)
-	EXPECT_EQ(recover(count - 1).y.x, (-Curve::G).y.x);
+	EXPECT_EQ(recover(count).x.Pack(), Curve::G.x.Pack());         // +1*G
+	EXPECT_EQ(recover(count).y.Pack(), Curve::G.y.Pack());
+	EXPECT_EQ(recover(count + 1).x.Pack(), ThreeG().x.Pack());     // +3*G
+	EXPECT_EQ(recover(count + 1).y.Pack(), ThreeG().y.Pack());
+	EXPECT_EQ(recover(count - 1).x.Pack(), (-Curve::G).x.Pack());  // -1*G  (negative half: y-flip, same g)
+	EXPECT_EQ(recover(count - 1).y.Pack(), (-Curve::G).y.Pack());
+}
+
+// Cubing is 3-to-1 mod p (p = 1 mod 3), so about a third of tiny y values admit an on-curve
+// x = (y^2 - 7)^(1/3) -- an attacker searches a handful of candidates and cheaply constructs
+// points with tiny y. For those, decompression's SquareRoot may represent its result as y + p,
+// whose limb parity is flipped (p is odd): parity selection must read the canonical residue, or
+// this node parses a different point than other implementations for the same attacker-supplied
+// bytes -- a consensus divergence. p = 7 (mod 9) gives cube roots of cubic residues as
+// v^((p+2)/9); each candidate is verified by cubing, so the formula is not load-bearing.
+TEST(CurveTest, Secp256k1CompressedParseSelectsCorrectParityForAttackerChosenTinyY) {
+	using Ref = Fp<secp256k1::kBits, secp256k1::p>;
+	const UIntW<512> cube_root_exponent =
+	    (secp256k1::p.ZeroExtend<512>() + UIntW<512>{2}).QuotientRemainder(UIntW<512>{9}).first;
+	const auto pow = [](Ref base, const UIntW<512>& exponent) {
+		Ref result{1};
+		for (unsigned i = 0; i < exponent.SignificantBits(); ++i) {
+			if (exponent.GetBit(i)) result = result * base;
+			base = base.Squared();
+		}
+		return result;
+	};
+
+	// Tiny y with y^2 - 7 a cubic residue (both parities represented; found by the search above).
+	for (const uint64_t y_value : {1ull, 6ull, 11ull, 13ull, 17ull, 20ull}) {
+		const Ref y{y_value};
+		const Ref x = pow(y.Squared() - Ref{7}, cube_root_exponent);
+		ASSERT_EQ((x.Squared() * x + Ref{7}).x, y.Squared().x) << "construction sanity, y=" << y_value;
+
+		std::array<uint8_t, 33> bytes{};
+		bytes[0] = static_cast<uint8_t>(0x02 + (y_value & 1));
+		const auto x_bytes = ToBigEndianBytes<Curve>(x.x);
+		std::copy(x_bytes.begin(), x_bytes.end(), bytes.begin() + 1);
+
+		const auto parsed = Curve::PublicKeyFromSEC1(bytes);
+		ASSERT_TRUE(parsed.has_value()) << "y=" << y_value;
+		const Curve::Affine& point = *parsed;
+		EXPECT_EQ(point.x.Pack(), x.x) << "y=" << y_value;
+		EXPECT_EQ(point.y.Pack(), y.x) << "y=" << y_value;
+
+		// The opposite parity byte must select the complementary root p - y.
+		std::array<uint8_t, 33> flipped_bytes = bytes;
+		flipped_bytes[0] ^= 0x01;
+		const auto flipped = Curve::PublicKeyFromSEC1(flipped_bytes);
+		ASSERT_TRUE(flipped.has_value()) << "y=" << y_value;
+		const Curve::Affine& flipped_point = *flipped;
+		EXPECT_EQ(flipped_point.y.Pack(), (-y).x) << "y=" << y_value;
+	}
 }
 
 }  // namespace

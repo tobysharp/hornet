@@ -15,6 +15,7 @@ add_executable(hornetlib_tests
    crypto/element_test.cpp
    crypto/hash_test.cpp
    crypto/fp_test.cpp
+   crypto/point_magnitude_test.cpp
    crypto/reduce_test.cpp
    crypto/signature_test.cpp
    data/block_io_test.cpp
@@ -80,3 +81,18 @@ target_include_directories(hornetlib_tests PRIVATE ${PROJECT_SOURCE_DIR}/src ${P
 
 include(GoogleTest)
 gtest_discover_tests(hornetlib_tests)
+
+# Magnitude-checked build of the crypto test suites: every TU (including the util sources it
+# needs) is compiled with HORNETLIB_CHECK_MAGNITUDES so the runtime magnitude validation is live.
+# Deliberately does NOT link hornetlib: its TUs instantiate the same inline FieldElement code
+# unchecked, and mixing the two layouts in one binary is an ODR violation.
+add_executable(hornetlib_checked_tests
+   crypto/element_test.cpp
+   crypto/point_magnitude_test.cpp
+   crypto/curve_test.cpp
+   ${PROJECT_SOURCE_DIR}/src/hornetlib/util/notify.cpp
+)
+target_compile_definitions(hornetlib_checked_tests PRIVATE HORNETLIB_CHECK_MAGNITUDES=1)
+target_compile_features(hornetlib_checked_tests PRIVATE cxx_std_20)
+target_link_libraries(hornetlib_checked_tests PRIVATE gtest_main)
+target_include_directories(hornetlib_checked_tests PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/tests)

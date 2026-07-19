@@ -31,6 +31,16 @@
 namespace hornet::crypto::ecdsa {
 namespace {
 
+// Both element representations under test: canonical 4x64 Fp and lazy-reduction 5x52 FieldElement.
+// Suffixed _4x64/_5x52 benches instantiate both for comparison; unsuffixed benches run the
+// production element (FieldElement), preserving name continuity with the perf history.
+using Element4x64 = Fp<secp256k1::kBits, secp256k1::p>;
+using Element5x52 = FieldElement;
+using Curve4x64 = hornet::crypto::ecdsa::Curve<Element4x64>;
+using Curve5x52 = hornet::crypto::ecdsa::Curve<Element5x52>;
+using Curve = Curve5x52;
+using Mod_n = Fp<secp256k1::kBits, secp256k1::n>;
+
 constexpr std::size_t kCorpusSize = 256;
 static_assert((kCorpusSize & (kCorpusSize - 1)) == 0);
 
@@ -42,20 +52,23 @@ void BenchCheck(bool condition, const char* message) {
   std::abort();
 }
 
+template <class C>
 struct VerifySignatureBenchCase {
-  Curve::PublicKey public_key;
-  Curve::Signature signature;
+  typename C::PublicKey public_key;
+  typename C::Signature signature;
   std::array<uint8_t, 32> digest;
 };
 
+template <class C>
 struct PointAddBenchCase {
-  Curve::Point lhs;
-  Curve::Point rhs;
+  typename C::Point lhs;
+  typename C::Point rhs;
 };
 
+template <class C>
 struct PointMultiplyBenchCase {
-  Curve::Wide scalar;
-  Curve::Point point;
+  Uint256 scalar;
+  typename C::Point point;
 };
 
 uint64_t XorShift64(uint64_t& state) {
@@ -79,17 +92,18 @@ std::array<uint8_t, 32> ToBigEndianBytes(const UIntW<256>& value) {
   return bytes;
 }
 
-Curve::Mod_n RandomNonZeroScalar(uint64_t& state) {
+Mod_n RandomNonZeroScalar(uint64_t& state) {
   auto reduced = RandomUInt256(state).Modulo(secp256k1::n);
   if (reduced == UIntW<256>::Zero()) reduced = UIntW<256>{1};
-  return Curve::Mod_n{reduced};
+  return Mod_n{reduced};
 }
 
-std::array<uint8_t, 65> EncodeUncompressedPublicKey(const Curve::Affine& point) {
+template <class Element>
+std::array<uint8_t, 65> EncodeUncompressedPublicKey(const AffinePoint<Element>& point) {
   std::array<uint8_t, 65> bytes{};
   bytes[0] = 0x04;
-  const auto x = ToBigEndianBytes(point.x.x);
-  const auto y = ToBigEndianBytes(point.y.x);
+  const auto x = ToBigEndianBytes(point.x.Pack());
+  const auto y = ToBigEndianBytes(point.y.Pack());
   std::copy(x.begin(), x.end(), bytes.begin() + 1);
   std::copy(y.begin(), y.end(), bytes.begin() + 33);
   return bytes;
@@ -99,37 +113,39 @@ std::array<uint8_t, 65> EncodeUncompressedPublicKey(const Curve::Affine& point) 
 // public-key == G case): for each entry pick a private key d, form Q = d*G, sign a random
 // digest with a fresh nonce, and keep only valid (r, s). Every case is verified here, outside
 // any timed region, so the benchmark always times a computation known to be correct.
-std::vector<VerifySignatureBenchCase> MakeVerifySignatureBenchCorpus() {
-  std::vector<VerifySignatureBenchCase> corpus;
+template <class C>
+std::vector<VerifySignatureBenchCase<C>> MakeVerifySignatureBenchCorpus() {
+  std::vector<VerifySignatureBenchCase<C>> corpus;
   corpus.reserve(kCorpusSize);
 
   uint64_t state = 0x6c8e9cf570932bd5ull;
   while (corpus.size() < kCorpusSize) {
-    const Curve::Mod_n private_key = RandomNonZeroScalar(state);
-    const Curve::Affine public_point = private_key.x * Curve::G;
-    const auto public_key = Curve::PublicKeyFromSEC1(EncodeUncompressedPublicKey(public_point));
+    const Mod_n private_key = RandomNonZeroScalar(state);
+    const typename C::Affine public_point = private_key.x * C::G;
+    const auto public_key = C::PublicKeyFromSEC1(EncodeUncompressedPublicKey(public_point));
     BenchCheck(public_key.has_value(), "random public key failed validation");
 
-    const Curve::Mod_n nonce = RandomNonZeroScalar(state);
-    const Curve::Point nonce_point = nonce.x * Curve::G;
-    const Curve::Mod_n r{nonce_point.NormalizedX().x.Modulo(secp256k1::n)};
+    const Mod_n nonce = RandomNonZeroScalar(state);
+    const typename C::Point nonce_point = nonce.x * C::G;
+    const Mod_n r{nonce_point.NormalizedX().Pack().Modulo(secp256k1::n)};
     if (r.x == UIntW<256>::Zero()) continue;
 
     const auto digest = ToBigEndianBytes(RandomUInt256(state));
-    const Curve::Mod_n z{Curve::Wide::FromBigEndianBytes(digest)};
-    const Curve::Mod_n s = (z + r * private_key) / nonce;
+    const Mod_n z{ReduceModuloN(UIntW<256>::FromBigEndianBytes(std::span<const uint8_t>{digest}))};
+    const Mod_n s = (z + r * private_key) / nonce;
     if (s.x == UIntW<256>::Zero()) continue;
 
-    VerifySignatureBenchCase bench_case{*public_key, {r.x, s.x}, digest};
-    BenchCheck(Curve::VerifySignature(bench_case.public_key, bench_case.signature, bench_case.digest),
+    VerifySignatureBenchCase<C> bench_case{*public_key, {r.x, s.x}, digest};
+    BenchCheck(C::VerifySignature(bench_case.public_key, bench_case.signature, bench_case.digest),
                "generated signature did not verify");
     corpus.push_back(std::move(bench_case));
   }
   return corpus;
 }
 
-std::vector<PointAddBenchCase> MakePointAddBenchCorpus() {
-  std::vector<PointAddBenchCase> corpus;
+template <class C>
+std::vector<PointAddBenchCase<C>> MakePointAddBenchCorpus() {
+  std::vector<PointAddBenchCase<C>> corpus;
   corpus.reserve(kCorpusSize);
   uint64_t state = 0x31a158f4f6de2b19ull;
 
@@ -138,14 +154,14 @@ std::vector<PointAddBenchCase> MakePointAddBenchCorpus() {
     auto rhs_scalar = RandomNonZeroScalar(state);
     while (rhs_scalar == lhs_scalar) rhs_scalar = RandomNonZeroScalar(state);
 
-    const Curve::Point lhs = lhs_scalar.x * Curve::G;
-    const Curve::Point rhs = rhs_scalar.x * Curve::G;
+    const typename C::Point lhs = lhs_scalar.x * C::G;
+    const typename C::Point rhs = rhs_scalar.x * C::G;
 
-    PointAddBenchCase bench_case{lhs, rhs};
+    PointAddBenchCase<C> bench_case{lhs, rhs};
     Assert(!bench_case.lhs.IsInfinity());
     Assert(!bench_case.rhs.IsInfinity());
-    const Curve::Affine lhs_affine = bench_case.lhs;
-    const Curve::Affine rhs_affine = bench_case.rhs;
+    const typename C::Affine lhs_affine = bench_case.lhs;
+    const typename C::Affine rhs_affine = bench_case.rhs;
     Assert(lhs_affine.x != rhs_affine.x || lhs_affine.y != -rhs_affine.y);
     corpus.push_back(std::move(bench_case));
   }
@@ -153,15 +169,16 @@ std::vector<PointAddBenchCase> MakePointAddBenchCorpus() {
   return corpus;
 }
 
-std::vector<PointMultiplyBenchCase> MakePointMultiplyBenchCorpus() {
-  std::vector<PointMultiplyBenchCase> corpus;
+template <class C>
+std::vector<PointMultiplyBenchCase<C>> MakePointMultiplyBenchCorpus() {
+  std::vector<PointMultiplyBenchCase<C>> corpus;
   corpus.reserve(kCorpusSize);
   uint64_t state = 0x54f0d3bdc7a24e81ull;
 
   for (std::size_t i = 0; i < kCorpusSize; ++i) {
     const auto scalar = RandomNonZeroScalar(state);
     const auto point_scalar = RandomNonZeroScalar(state);
-    PointMultiplyBenchCase bench_case{scalar.x, point_scalar.x * Curve::G};
+    PointMultiplyBenchCase<C> bench_case{scalar.x, point_scalar.x * C::G};
     Assert(!bench_case.point.IsInfinity());
     corpus.push_back(std::move(bench_case));
   }
@@ -169,22 +186,24 @@ std::vector<PointMultiplyBenchCase> MakePointMultiplyBenchCorpus() {
   return corpus;
 }
 
+template <class C>
 struct LinCombBenchCase {
-  Curve::Wide u1;
-  Curve::Affine P;
-  Curve::Wide u2;
-  Curve::Affine Q;
+  Uint256 u1;
+  typename C::Affine P;
+  Uint256 u2;
+  typename C::Affine Q;
 };
 
-std::vector<LinCombBenchCase> MakeLinCombCorpus() {
-  std::vector<LinCombBenchCase> corpus;
+template <class C>
+std::vector<LinCombBenchCase<C>> MakeLinCombCorpus() {
+  std::vector<LinCombBenchCase<C>> corpus;
   corpus.reserve(kCorpusSize);
   uint64_t state = 0x123456789abcdef0ull;
   for (std::size_t i = 0; i < kCorpusSize; ++i) {
     const auto u1 = RandomNonZeroScalar(state);
     const auto u2 = RandomNonZeroScalar(state);
-    const Curve::Affine P = RandomNonZeroScalar(state).x * Curve::G;
-    const Curve::Affine Q = RandomNonZeroScalar(state).x * Curve::G;
+    const typename C::Affine P = RandomNonZeroScalar(state).x * C::G;
+    const typename C::Affine Q = RandomNonZeroScalar(state).x * C::G;
     corpus.push_back({u1.x, P, u2.x, Q});
   }
   return corpus;
@@ -250,9 +269,9 @@ void SetOpsPerSecondCounter(benchmark::State& state) {
 // Drives the full verify path (s^-1, the u1*G + u2*Q linear combination, and R normalization)
 // over the shared random-key corpus. `verify` selects the linear-combination strategy; every
 // corpus signature is checked to verify before timing, so a wrong path can never be timed.
-template <class Verify>
+template <class C, class Verify>
 static void RunVerifySignatureBench(benchmark::State& state, Verify verify) {
-  const auto corpus = MakeVerifySignatureBenchCorpus();
+  const auto corpus = MakeVerifySignatureBenchCorpus<C>();
   for (const auto& c : corpus)
     BenchCheck(verify(c.public_key, c.signature, c.digest), "corpus signature failed to verify");
 
@@ -273,19 +292,22 @@ static void RunVerifySignatureBench(benchmark::State& state, Verify verify) {
   SetOpsPerSecondCounter(state);
 }
 
-// Production verify: the default path, now wNAF over the fixed-base generator table (built once
-// by the pre-timing correctness pass / corpus construction, outside the timed region).
-static void BM_Secp256k1_VerifySignature(benchmark::State& state) {
-  RunVerifySignatureBench(state, [](const Curve::PublicKey& pk, const Curve::Signature& sig,
-                                    const std::array<uint8_t, 32>& digest) {
-    return Curve::VerifySignature(pk, sig, digest);
+// The production verify per element type; each instantiation owns its static generator
+// tables, built outside timing. Registered unsuffixed for the production element (perf-history
+// name continuity) and _GLV_4x64 for the comparison instantiation.
+template <class C>
+static void BM_VerifySignature_GLV(benchmark::State& state) {
+  C::BuildGeneratorTable();
+  RunVerifySignatureBench<C>(state, [](const typename C::PublicKey& pk, const typename C::Signature& sig,
+                                       const std::array<uint8_t, 32>& digest) {
+    return C::VerifySignature(pk, sig, digest);
   });
 }
 
 // Joint-NAF verify, kept for comparison now that GLV is the default path.
 static void BM_Secp256k1_VerifySignature_JointNAF(benchmark::State& state) {
-  RunVerifySignatureBench(state, [](const Curve::PublicKey& pk, const Curve::Signature& sig,
-                                    const std::array<uint8_t, 32>& digest) {
+  RunVerifySignatureBench<Curve>(state, [](const Curve::PublicKey& pk, const Curve::Signature& sig,
+                                           const std::array<uint8_t, 32>& digest) {
     return Curve::VerifySignatureWith(pk, sig, digest,
         [](const Curve::Wide& u1, const Curve::Wide& u2, const Curve::Affine& Q) {
           return LinearCombination(u1, Curve::G, u2, Q);
@@ -304,8 +326,8 @@ static void BM_Secp256k1_VerifySignature_wNAF(benchmark::State& state) {
   std::vector<Curve::Affine> g_table(1u << (kGWidth - 1));
   PrecomputeTableAffine(Curve::G, std::span{g_table});
   const std::span<const Curve::Affine> g_span{g_table};
-  RunVerifySignatureBench(state, [&](const Curve::PublicKey& pk, const Curve::Signature& sig,
-                                     const std::array<uint8_t, 32>& digest) {
+  RunVerifySignatureBench<Curve>(state, [&](const Curve::PublicKey& pk, const Curve::Signature& sig,
+                                            const std::array<uint8_t, 32>& digest) {
     return Curve::VerifySignatureWith(pk, sig, digest,
         [&](const Curve::Wide& u1, const Curve::Wide& u2, const Curve::Affine& Q) {
           return LinearCombination_wNAF(u1, g_span, u2, Q);
@@ -322,7 +344,7 @@ static void BM_Secp256k1_VerifySignature_wNAF(benchmark::State& state) {
 // the verify arithmetic, keeping the comparison apples-to-apples. The context is created once outside
 // timing; verify itself is context-light.
 static void BM_Secp256k1_VerifySignature_Libsecp256k1(benchmark::State& state) {
-  const auto corpus = MakeVerifySignatureBenchCorpus();
+  const auto corpus = MakeVerifySignatureBenchCorpus<Curve>();
 
   secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
   BenchCheck(ctx != nullptr, "libsecp256k1 context creation failed");
@@ -375,8 +397,9 @@ static void BM_Secp256k1_VerifySignature_Libsecp256k1(benchmark::State& state) {
 }
 #endif  // HORNET_HAVE_LIBSECP256K1
 
-static void BM_Secp256k1_PointAdd(benchmark::State& state) {
-  const auto corpus = MakePointAddBenchCorpus();
+template <class C>
+static void BM_PointAdd(benchmark::State& state) {
+  const auto corpus = MakePointAddBenchCorpus<C>();
   std::size_t index = 0;
 
   for (auto _ : state) {
@@ -394,8 +417,9 @@ static void BM_Secp256k1_PointAdd(benchmark::State& state) {
   SetOpsPerSecondCounter(state);
 }
 
-static void BM_Secp256k1_PointMultiply(benchmark::State& state) {
-  const auto corpus = MakePointMultiplyBenchCorpus();
+template <class C>
+static void BM_PointMultiply(benchmark::State& state) {
+  const auto corpus = MakePointMultiplyBenchCorpus<C>();
   std::size_t index = 0;
 
   for (auto _ : state) {
@@ -413,8 +437,9 @@ static void BM_Secp256k1_PointMultiply(benchmark::State& state) {
   SetOpsPerSecondCounter(state);
 }
 
-static void BM_Secp256k1_PointDouble(benchmark::State& state) {
-  const auto corpus = MakePointAddBenchCorpus();
+template <class C>
+static void BM_PointDouble(benchmark::State& state) {
+  const auto corpus = MakePointAddBenchCorpus<C>();
   std::size_t index = 0;
   for (auto _ : state) {
     auto lhs = corpus[index].lhs;
@@ -427,9 +452,10 @@ static void BM_Secp256k1_PointDouble(benchmark::State& state) {
   SetOpsPerSecondCounter(state);
 }
 
-static void BM_Secp256k1_PointAddMixed(benchmark::State& state) {
-  const auto corpus = MakePointAddBenchCorpus();
-  std::vector<Curve::Affine> rhs_affine;  // normalize outside the timed loop
+template <class C>
+static void BM_PointAddMixed(benchmark::State& state) {
+  const auto corpus = MakePointAddBenchCorpus<C>();
+  std::vector<typename C::Affine> rhs_affine;  // normalize outside the timed loop
   rhs_affine.reserve(corpus.size());
   for (const auto& c : corpus) rhs_affine.push_back(c.rhs);
   std::size_t index = 0;
@@ -446,9 +472,9 @@ static void BM_Secp256k1_PointAddMixed(benchmark::State& state) {
   SetOpsPerSecondCounter(state);
 }
 
-template <auto Fn>
+template <class C, auto Fn>
 static void BM_LinComb(benchmark::State& state) {
-  const auto corpus = MakeLinCombCorpus();
+  const auto corpus = MakeLinCombCorpus<C>();
   std::size_t index = 0;
   for (auto _ : state) {
     const auto& c = corpus[index];
@@ -466,19 +492,30 @@ static void BM_LinComb(benchmark::State& state) {
   SetOpsPerSecondCounter(state);
 }
 
+template <class C>
+static void BM_LinComb_JointNAF(benchmark::State& state) {
+  BM_LinComb<C, LinearCombination<typename C::Mod_p>>(state);
+}
+
+template <class C>
+static void BM_LinComb_DisjointNAF(benchmark::State& state) {
+  BM_LinComb<C, LinearCombination_NAF_Disjoint<typename C::Mod_p>>(state);
+}
+
 // wNAF mirrors the verify kernel: a fixed wide base (the generator) with a precomputed affine
 // table, plus a variable base Q. The table is built once, before the timed region, and a
 // differential check against the joint-NAF result gates correctness for every corpus entry.
+template <class C>
 static void BM_LinComb_wNAF(benchmark::State& state) {
   constexpr int kGWidth = 12;
-  std::array<Curve::Affine, (1 << (kGWidth - 1))> g_table;
-  PrecomputeTableAffine(Curve::G, {g_table.data(), g_table.size()});
-  const std::span<const Curve::Affine> g_span{g_table.data(), g_table.size()};
+  std::vector<typename C::Affine> g_table(1u << (kGWidth - 1));
+  PrecomputeTableAffine(C::G, std::span{g_table});
+  const std::span<const typename C::Affine> g_span{g_table};
 
-  const auto corpus = MakeLinCombCorpus();
+  const auto corpus = MakeLinCombCorpus<C>();
   for (const auto& c : corpus) {
-    const Curve::Affine reference = LinearCombination(c.u1, Curve::G, c.u2, c.Q);
-    const Curve::Affine actual = LinearCombination_wNAF(c.u1, g_span, c.u2, c.Q);
+    const typename C::Affine reference = LinearCombination(c.u1, C::G, c.u2, c.Q);
+    const typename C::Affine actual = LinearCombination_wNAF(c.u1, g_span, c.u2, c.Q);
     BenchCheck(reference.x == actual.x && reference.y == actual.y, "wNAF result disagrees with joint NAF");
   }
 
@@ -505,23 +542,24 @@ static void BM_LinComb_wNAF(benchmark::State& state) {
 // per-verify combiner runs them. A differential check against joint NAF gates correctness per entry.
 // This is the lincomb-level peer of BM_LinComb_wNAF / BM_LinComb_JointNAF for the "adopt only where
 // measured faster" comparison.
+template <class C>
 static void BM_LinComb_GLV(benchmark::State& state) {
-  constexpr int kGWidth = 12;  // matches BM_LinComb_wNAF and the verify default (BuildGeneratorTable)
-  std::vector<Curve::Affine> g_base(1u << (kGWidth - 1)), g_phi(1u << (kGWidth - 1));
-  PrecomputeTableAffine(Curve::G, std::span{g_base});
-  const Curve::Mod_p beta{secp256k1::beta};
-  for (std::size_t i = 0; i < g_base.size(); ++i) g_phi[i] = {beta * g_base[i].x, g_base[i].y};  // phi(G) = (beta*x, y)
-  const std::span<const Curve::Affine> g_base_span{g_base}, g_phi_span{g_phi};
+  using Element = typename C::Mod_p;
+  constexpr int kGWidth = 12;  // matches the BuildGeneratorTable default (curve.h)
+  std::vector<typename C::Affine> g_base(1u << (kGWidth - 1)), g_phi(1u << (kGWidth - 1));
+  PrecomputeTableAffine(C::G, std::span{g_base});
+  MakePhiTable<typename C::Affine>(std::span{g_base}, std::span{g_phi});
+  const std::span<const typename C::Affine> g_base_span{g_base}, g_phi_span{g_phi};
 
-  const auto glv = [&](const Curve::Wide& u1, const Curve::Wide& u2, const Curve::Affine& Q) {
-    const GlvTerm<std::span<const Curve::Affine>> g_term{SplitLambda(u1), g_base_span, g_phi_span};
+  const auto glv = [&](const Uint256& u1, const Uint256& u2, const typename C::Affine& Q) {
+    const GlvTerm<std::span<const typename C::Affine>, Element> g_term{SplitLambda(u1), g_base_span, g_phi_span};
     return LinearCombination_GLV(g_term, MakeVariableGlvTerm(SplitLambda(u2), Q));
   };
 
-  const auto corpus = MakeLinCombCorpus();
+  const auto corpus = MakeLinCombCorpus<C>();
   for (const auto& c : corpus) {
-    const Curve::Affine reference = LinearCombination(c.u1, Curve::G, c.u2, c.Q);
-    const Curve::Affine actual = glv(c.u1, c.u2, c.Q);
+    const typename C::Affine reference = LinearCombination(c.u1, C::G, c.u2, c.Q);
+    const typename C::Affine actual = glv(c.u1, c.u2, c.Q);
     BenchCheck(reference.x == actual.x && reference.y == actual.y, "GLV result disagrees with joint NAF");
   }
 
@@ -560,8 +598,7 @@ static void BM_GLV_SplitLambda(benchmark::State& state) {
 
   for (const auto& k : corpus) {
     const auto split = SplitLambda(k);
-    const Curve::Mod_n reconstructed =
-        Curve::Mod_n{residue(split.k1)} + Curve::Mod_n{residue(split.k2)} * Curve::Mod_n{lambda};
+    const Mod_n reconstructed = Mod_n{residue(split.k1)} + Mod_n{residue(split.k2)} * Mod_n{lambda};
     BenchCheck(reconstructed.x == k, "SplitLambda reconstruction != k");
   }
 
@@ -572,6 +609,108 @@ static void BM_GLV_SplitLambda(benchmark::State& state) {
     benchmark::DoNotOptimize(k);
     auto split = SplitLambda(k);
     benchmark::DoNotOptimize(split);
+    benchmark::ClobberMemory();
+  }
+  SetOpsPerSecondCounter(state);
+}
+
+// Element-level comparison benches: identical canonical inputs fed to both representations.
+// FieldElement inputs are magnitude 1 (fresh Unpack per case), matching the common post-normalize
+// state; its mul/add results are not re-normalized, exercising the lazy-reduction fast path.
+template <class Element>
+static void BM_FieldMul(benchmark::State& state) {
+  const auto raw = MakeMultiplyModuloBenchCorpus();
+  std::vector<std::pair<Element, Element>> corpus;
+  corpus.reserve(raw.size());
+  for (const auto& [x, y] : raw) corpus.emplace_back(Element{x}, Element{y});
+
+  std::size_t index = 0;
+  for (auto _ : state) {
+    auto [x, y] = corpus[index];
+    index = (index + 1) & (kCorpusSize - 1);
+    benchmark::DoNotOptimize(x);
+    benchmark::DoNotOptimize(y);
+    auto product = x * y;
+    benchmark::DoNotOptimize(product);
+    benchmark::ClobberMemory();
+  }
+  SetOpsPerSecondCounter(state);
+}
+
+template <class Element>
+static void BM_FieldSquare(benchmark::State& state) {
+  const auto raw = MakeFieldModuloPCorpus();
+  std::vector<Element> corpus;
+  corpus.reserve(raw.size());
+  for (const auto& x : raw) corpus.emplace_back(x);
+
+  std::size_t index = 0;
+  for (auto _ : state) {
+    auto x = corpus[index];
+    index = (index + 1) & (kCorpusSize - 1);
+    benchmark::DoNotOptimize(x);
+    auto squared = x.Squared();
+    benchmark::DoNotOptimize(squared);
+    benchmark::ClobberMemory();
+  }
+  SetOpsPerSecondCounter(state);
+}
+
+template <class Element>
+static void BM_FieldAdd(benchmark::State& state) {
+  const auto raw = MakeMultiplyModuloBenchCorpus();
+  std::vector<std::pair<Element, Element>> corpus;
+  corpus.reserve(raw.size());
+  for (const auto& [x, y] : raw) corpus.emplace_back(Element{x}, Element{y});
+
+  std::size_t index = 0;
+  for (auto _ : state) {
+    auto [x, y] = corpus[index];
+    index = (index + 1) & (kCorpusSize - 1);
+    benchmark::DoNotOptimize(x);
+    benchmark::DoNotOptimize(y);
+    auto sum = x + y;
+    benchmark::DoNotOptimize(sum);
+    benchmark::ClobberMemory();
+  }
+  SetOpsPerSecondCounter(state);
+}
+
+template <class Element>
+static void BM_FieldInverse(benchmark::State& state) {
+  const auto raw = MakeFieldModuloPCorpus();
+  std::vector<Element> corpus;
+  corpus.reserve(raw.size());
+  for (const auto& x : raw) corpus.emplace_back(x);
+
+  std::size_t index = 0;
+  for (auto _ : state) {
+    auto x = corpus[index];
+    index = (index + 1) & (kCorpusSize - 1);
+    benchmark::DoNotOptimize(x);
+    auto inverse = x.Inverse();
+    benchmark::DoNotOptimize(inverse);
+    benchmark::ClobberMemory();
+  }
+  SetOpsPerSecondCounter(state);
+}
+
+// 5x52-only: the deferred-reduction costs Fp pays inline. Inputs are magnitude-2 mul outputs,
+// the typical pre-normalize state in the point formulas.
+template <auto Normalize>
+static void BM_FieldNormalize5x52(benchmark::State& state) {
+  const auto raw = MakeMultiplyModuloBenchCorpus();
+  std::vector<Element5x52> corpus;
+  corpus.reserve(raw.size());
+  for (const auto& [x, y] : raw) corpus.push_back(Element5x52{x} * Element5x52{y});
+
+  std::size_t index = 0;
+  for (auto _ : state) {
+    auto x = corpus[index];
+    index = (index + 1) & (kCorpusSize - 1);
+    benchmark::DoNotOptimize(x);
+    auto normalized = (x.*Normalize)();
+    benchmark::DoNotOptimize(normalized);
     benchmark::ClobberMemory();
   }
   SetOpsPerSecondCounter(state);
@@ -698,21 +837,40 @@ static void BM_BigUint256_Squared(benchmark::State& state) {
   SetOpsPerSecondCounter(state);
 }
 
-BENCHMARK(BM_Secp256k1_VerifySignature);
+BENCHMARK(BM_VerifySignature_GLV<Curve5x52>)->Name("BM_Secp256k1_VerifySignature");
+BENCHMARK(BM_VerifySignature_GLV<Curve4x64>)->Name("BM_Secp256k1_VerifySignature_GLV_4x64");
 BENCHMARK(BM_Secp256k1_VerifySignature_JointNAF);
 BENCHMARK(BM_Secp256k1_VerifySignature_wNAF);
 #ifdef HORNET_HAVE_LIBSECP256K1
 BENCHMARK(BM_Secp256k1_VerifySignature_Libsecp256k1);
 #endif
-BENCHMARK(BM_Secp256k1_PointAdd);
-BENCHMARK(BM_Secp256k1_PointAddMixed);
-BENCHMARK(BM_Secp256k1_PointDouble);
-BENCHMARK(BM_Secp256k1_PointMultiply);
-BENCHMARK(BM_LinComb<LinearCombination>)->Name("BM_LinComb_JointNAF");
-BENCHMARK(BM_LinComb<LinearCombination_NAF_Disjoint>)->Name("BM_LinComb_DisjointNAF");
-BENCHMARK(BM_LinComb_wNAF);
-BENCHMARK(BM_LinComb_GLV);
+BENCHMARK(BM_PointAdd<Curve4x64>)->Name("BM_Secp256k1_PointAdd_4x64");
+BENCHMARK(BM_PointAdd<Curve5x52>)->Name("BM_Secp256k1_PointAdd_5x52");
+BENCHMARK(BM_PointAddMixed<Curve4x64>)->Name("BM_Secp256k1_PointAddMixed_4x64");
+BENCHMARK(BM_PointAddMixed<Curve5x52>)->Name("BM_Secp256k1_PointAddMixed_5x52");
+BENCHMARK(BM_PointDouble<Curve4x64>)->Name("BM_Secp256k1_PointDouble_4x64");
+BENCHMARK(BM_PointDouble<Curve5x52>)->Name("BM_Secp256k1_PointDouble_5x52");
+BENCHMARK(BM_PointMultiply<Curve4x64>)->Name("BM_Secp256k1_PointMultiply_4x64");
+BENCHMARK(BM_PointMultiply<Curve5x52>)->Name("BM_Secp256k1_PointMultiply_5x52");
+BENCHMARK(BM_LinComb_JointNAF<Curve4x64>)->Name("BM_LinComb_JointNAF_4x64");
+BENCHMARK(BM_LinComb_JointNAF<Curve5x52>)->Name("BM_LinComb_JointNAF_5x52");
+BENCHMARK(BM_LinComb_DisjointNAF<Curve4x64>)->Name("BM_LinComb_DisjointNAF_4x64");
+BENCHMARK(BM_LinComb_DisjointNAF<Curve5x52>)->Name("BM_LinComb_DisjointNAF_5x52");
+BENCHMARK(BM_LinComb_wNAF<Curve4x64>)->Name("BM_LinComb_wNAF_4x64");
+BENCHMARK(BM_LinComb_wNAF<Curve5x52>)->Name("BM_LinComb_wNAF_5x52");
+BENCHMARK(BM_LinComb_GLV<Curve4x64>)->Name("BM_LinComb_GLV_4x64");
+BENCHMARK(BM_LinComb_GLV<Curve5x52>)->Name("BM_LinComb_GLV_5x52");
 BENCHMARK(BM_GLV_SplitLambda);
+BENCHMARK(BM_FieldMul<Element4x64>)->Name("BM_Field_Mul_4x64");
+BENCHMARK(BM_FieldMul<Element5x52>)->Name("BM_Field_Mul_5x52");
+BENCHMARK(BM_FieldSquare<Element4x64>)->Name("BM_Field_Square_4x64");
+BENCHMARK(BM_FieldSquare<Element5x52>)->Name("BM_Field_Square_5x52");
+BENCHMARK(BM_FieldAdd<Element4x64>)->Name("BM_Field_Add_4x64");
+BENCHMARK(BM_FieldAdd<Element5x52>)->Name("BM_Field_Add_5x52");
+BENCHMARK(BM_FieldInverse<Element4x64>)->Name("BM_Field_Inverse_4x64");
+BENCHMARK(BM_FieldInverse<Element5x52>)->Name("BM_Field_Inverse_5x52");
+BENCHMARK(BM_FieldNormalize5x52<&Element5x52::NormalizeWeak>)->Name("BM_Field_NormalizeWeak_5x52");
+BENCHMARK(BM_FieldNormalize5x52<&Element5x52::Normalize>)->Name("BM_Field_Normalize_5x52");
 BENCHMARK(BM_MultiplyModP_256_Secp256k1P);
 BENCHMARK(BM_MultiplySelfModP_256_Secp256k1P);
 BENCHMARK(BM_SquareModP_256_Secp256k1P);
