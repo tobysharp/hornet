@@ -333,6 +333,30 @@ TEST(FieldElementTest, TimesMinusOneMatchesNegationOnCanonical) {
   EXPECT_EQ(ModP(ToInteger(x.Times<-1>()) + ToInteger(x)), kZero256);
 }
 
+TEST(FieldElementTest, LShiftRejectsMagnitudeCapWhenChecking) {
+  if constexpr (kCheckMagnitudes) {
+    // The shifted magnitude lands on the result constructor's class cap.
+    EXPECT_THROW((void)MaxElement(2049).LShift<1>(), std::out_of_range);
+    EXPECT_NO_THROW((void)MaxElement(2048).LShift<1>());
+  }
+}
+
+TEST(FieldElementTest, TimesRejectsMagnitudeCapWhenChecking) {
+  if constexpr (kCheckMagnitudes) {
+    EXPECT_THROW((void)MaxElement(1366).Times<3>(), std::out_of_range);  // 4098
+    EXPECT_NO_THROW((void)MaxElement(1365).Times<3>());                  // 4095
+  }
+}
+
+TEST(FieldElementTest, NegativeTimesValidatesLikeUnaryMinusWhenChecking) {
+  // Times<-k> routes through unary minus, i.e. Negate<2>: valid only to magnitude 2.
+  if constexpr (kCheckMagnitudes) {
+    EXPECT_THROW((void)MaxElement(3).Times<-1>(), std::out_of_range);
+    EXPECT_THROW((void)(-MaxElement(3)), std::out_of_range);
+    EXPECT_NO_THROW((void)(-MaxElement(2)));
+  }
+}
+
 // ---- Negation ------------------------------------------------------------------------------------
 // Negation is the one operation whose arithmetic consumes a magnitude (the dominating constant
 // (m+1)*p52): the bound is a template annotation, Negate<kM>, valid for true magnitude <= kM.
@@ -517,6 +541,15 @@ TEST(FieldElementTest, DirectionEqualityAdmitsSmallMagnitudeRhs) {
   EXPECT_TRUE(x == (x + (y - y)));
 }
 
+TEST(FieldElementTest, EqualityAdmissionBoundaryWhenChecking) {
+  // a == b costs +3 magnitude on the lhs (rhs weak-normalized then Negate<2>) before the
+  // NormalizesToZero weak pass admits <= 4095: lhs magnitude 4092 is the boundary.
+  if constexpr (kCheckMagnitudes) {
+    EXPECT_TRUE(MaxElement(4092) == MaxElement(4092).Normalize());
+    EXPECT_THROW((void)(MaxElement(4093) == MaxElement(1)), std::out_of_range);
+  }
+}
+
 TEST(FieldElementTest, EqualityMatchesResidueOracleAgainstCanonicalRhs) {
   std::mt19937_64 rng{60611};
   for (int trial = 0; trial < 200; ++trial) {
@@ -575,6 +608,16 @@ TEST(FieldElementTest, NormalizeWeakRejectsMagnitudeCapWhenChecking) {
     // class cap that CheckMagnitudes enforces.
     EXPECT_THROW((void)MaxElement(4096).NormalizeWeak(), std::out_of_range);
     EXPECT_NO_THROW((void)MaxElement(4095).NormalizeWeak());
+  }
+}
+
+TEST(FieldElementTest, NormalizeFamilyRejectsMagnitudeCapWhenChecking) {
+  // Normalize, Pack and x == 0 all route through NormalizeWeak's 4095 admission.
+  if constexpr (kCheckMagnitudes) {
+    EXPECT_THROW((void)MaxElement(4096).Normalize(), std::out_of_range);
+    EXPECT_THROW((void)MaxElement(4096).Pack(), std::out_of_range);
+    EXPECT_THROW((void)(MaxElement(4096) == 0), std::out_of_range);
+    EXPECT_NO_THROW((void)MaxElement(4095).Normalize());
   }
 }
 
@@ -738,6 +781,13 @@ TEST(FieldElementTest, MultiplyRejectsExcessiveProductsWhenChecking) {
     EXPECT_THROW((void)(MaxElement(3) * MaxElement(2731)), std::out_of_range);   // 8193
     EXPECT_THROW((void)(MaxElement(91) * MaxElement(91)), std::out_of_range);    // 8281
     EXPECT_NO_THROW((void)(MaxElement(90) * MaxElement(91)));                    // 8190
+  }
+}
+
+TEST(FieldElementTest, SquaredRejectsExcessiveProductWhenChecking) {
+  if constexpr (kCheckMagnitudes) {
+    EXPECT_THROW((void)MaxElement(91).Squared(), std::out_of_range);  // 8281
+    EXPECT_NO_THROW((void)MaxElement(90).Squared());                  // 8100
   }
 }
 
