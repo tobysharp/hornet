@@ -12,6 +12,7 @@ add_executable(hornetlib_tests
    consensus/validate_spending_transaction_test.cpp
    consensus/validate_transaction_test.cpp
    crypto/curve_test.cpp
+   crypto/element_graph_test.cpp
    crypto/element_test.cpp
    crypto/hash_test.cpp
    crypto/fp_test.cpp
@@ -87,6 +88,8 @@ gtest_discover_tests(hornetlib_tests)
 # Deliberately does NOT link hornetlib: its TUs instantiate the same inline FieldElement code
 # unchecked, and mixing the two layouts in one binary is an ODR violation.
 add_executable(hornetlib_checked_tests
+   crypto/checked_build_guard.cpp
+   crypto/element_graph_test.cpp
    crypto/element_test.cpp
    crypto/point_magnitude_test.cpp
    crypto/curve_test.cpp
@@ -96,3 +99,4 @@ target_compile_definitions(hornetlib_checked_tests PRIVATE HORNETLIB_CHECK_MAGNI
 target_compile_features(hornetlib_checked_tests PRIVATE cxx_std_20)
 target_link_libraries(hornetlib_checked_tests PRIVATE gtest_main)
 target_include_directories(hornetlib_checked_tests PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/tests)
+gtest_discover_tests(hornetlib_checked_tests TEST_SUFFIX ".checked")
