@@ -122,6 +122,23 @@ class FieldElement {
     return { result, magnitude_.Get() << k };
   }
 
+  constexpr FieldElement Half() const {
+    if constexpr (kCheckMagnitudes) {
+      // The limbwise +p needs headroom: w_i + p52_i < (m+1).2^52 must fit 64 bits => m <= 4095.
+      if (magnitude_.Get() > kMaxMagnitude - 1) throw std::out_of_range{"FieldElement::Half magnitude exceeded 4,095."};
+      CheckMagnitudes();
+    }
+    // Exact halving of the representative: t = w + (w odd ? p : 0) is even, and t/2 _= w.2^-1
+    // (mod p) in either case. Halve limbwise, carrying each limb's parity bit down as bit 51.
+    const uint64_t mask = uint64_t{0} - (words_[0] & 1);
+    Array t, result;
+    for (int i = 0; i < kWords; ++i) t[i] = words_[i] + (p52[i] & mask);  // < (m+1).2^52
+    for (int i = 0; i < kWords - 1; ++i) result[i] = (t[i] >> 1) + ((t[i + 1] & 1) << 51);
+    result[kWords - 1] = t[kWords - 1] >> 1;
+    // result_i < (m+2).2^51 and result_4 < (m+1).2^47, both within magnitude ((m+1)>>1)+1.
+    return { result, ((magnitude_.Get() + 1) >> 1) + 1 };
+  }
+
   constexpr FieldElement operator-() const {
     if constexpr (kCheckMagnitudes) CheckMagnitudes();
     return Negate<2>();

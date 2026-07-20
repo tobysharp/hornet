@@ -181,6 +181,8 @@ AffF AffineDoubleGraph(const AffF& p) {
 }
 
 // JacobianPoint operator+(Affine, Jacobian), both branches.
+JacF DoubleGraph(const JacF& p);  // Defined below; the add graphs delegate their doubling branches.
+
 JacF MixedAddGraph(const AffF& lhs, const JacF& rhs) {
   using namespace graph;
   if (lhs.IsInfinity()) return rhs;
@@ -194,33 +196,20 @@ JacF MixedAddGraph(const AffF& lhs, const JacF& rhs) {
   const auto r = YCoord(rhs) - S_1;
 
   if (H == 0) {
-    if (r == 0) {
-      // 1M, 5S doubling branch
-      const auto X2 = XCoord(lhs).Squared();
-      const auto M = 3_c * X2;
-      const auto Y2 = YCoord(lhs).Squared();
-      const auto Y4 = Y2.Squared();
-      const auto S = 2_c * ((XCoord(lhs) + Y2).Squared() - X2 - Y4);
-      const auto X_3 = M.Squared() - 2_c * S;
-      const auto Y_3 = M * (S - X_3) - 8_c * Y4;
-      const auto Z_3 = 2_c * YCoord(lhs);
-      static_assert(std::same_as<decltype(X_3), const Value<35>>);
-      static_assert(std::same_as<decltype(Y_3), const Value<19>>);
-      static_assert(std::same_as<decltype(Z_3), const Value<6>>);
-      return {X_3, Y_3, Z_3};
-    } else return {};
+    if (r == 0) return DoubleGraph(JacF{lhs});  // Coincident operands: the shallow doubling formula.
+    else return {};
   }
 
-  // 4M, 3S
+  // 5M, 2S
   const auto H2 = H.Squared();
   const auto H3 = H2 * H;
   const auto U_1H2 = U_1 * H2;
-  const auto X_3 = 4_c * (r.Squared() - H3 - 2_c * U_1H2);
-  const auto Y_3 = r * (8_c * U_1H2 - 2_c * X_3) - 8_c * (S_1 * H3);
-  const auto Z_3 = (ZCoord(rhs) + H).Squared() - rZ2 - H2;
-  static_assert(std::same_as<decltype(X_3), const Value<40>>);
-  static_assert(std::same_as<decltype(Y_3), const Value<19>>);
-  static_assert(std::same_as<decltype(Z_3), const Value<8>>);
+  const auto X_3 = r.Squared() - H3 - 2_c * U_1H2;
+  const auto Y_3 = r * (U_1H2 - X_3) - S_1 * H3;
+  const auto Z_3 = ZCoord(rhs) * H;
+  static_assert(std::same_as<decltype(X_3), const Value<10>>);
+  static_assert(std::same_as<decltype(Y_3), const Value<5>>);
+  static_assert(std::same_as<decltype(Z_3), const Value<2>>);
   return {X_3, Y_3, Z_3};
 }
 
@@ -241,31 +230,19 @@ JacF JacobianAddGraph(const JacF& lhs, const JacF& rhs) {
   const auto r = S_2 - S_1;
 
   if (H == 0) {
-    if (r == 0) {
-      // 2M, 5S doubling branch
-      const auto X2 = XCoord(lhs).Squared();
-      const auto M = 3_c * X2;
-      const auto Y2 = YCoord(lhs).Squared();
-      const auto S = 4_c * XCoord(lhs) * Y2;
-      const auto X_3 = M.Squared() - 2_c * S;
-      const auto Y_3 = M * (S - X_3) - 8_c * Y2.Squared();
-      const auto Z_3 = (YCoord(lhs) + ZCoord(lhs)).Squared() - Y2 - lZ2;
-      static_assert(std::same_as<decltype(X_3), const Value<7>>);
-      static_assert(std::same_as<decltype(Y_3), const Value<19>>);
-      static_assert(std::same_as<decltype(Z_3), const Value<8>>);
-      return {X_3, Y_3, Z_3};
-    } else return {};
+    if (r == 0) return DoubleGraph(lhs);  // Coincident operands: the shallow doubling formula.
+    else return {};
   }
 
-  // 5M, 3S
+  // 6M, 2S
   const auto H2 = H.Squared();
   const auto H3 = H2 * H;
   const auto U_1H2 = U_1 * H2;
-  const auto X_3 = 4_c * (r.Squared() - H3 - 2_c * U_1H2);
-  const auto Y_3 = r * (8_c * U_1H2 - 2_c * X_3) - 8_c * (S_1 * H3);
-  const auto Z_3 = H * ((ZCoord(lhs) + ZCoord(rhs)).Squared() - lZ2 - rZ2);
-  static_assert(std::same_as<decltype(X_3), const Value<40>>);
-  static_assert(std::same_as<decltype(Y_3), const Value<19>>);
+  const auto X_3 = r.Squared() - H3 - 2_c * U_1H2;
+  const auto Y_3 = r * (U_1H2 - X_3) - S_1 * H3;
+  const auto Z_3 = H * (ZCoord(lhs) * ZCoord(rhs));
+  static_assert(std::same_as<decltype(X_3), const Value<10>>);
+  static_assert(std::same_as<decltype(Y_3), const Value<5>>);
   static_assert(std::same_as<decltype(Z_3), const Value<2>>);
   return {X_3, Y_3, Z_3};
 }
@@ -287,24 +264,16 @@ JacF JacobianSubGraph(const JacF& lhs, const JacF& rhs) {
   const auto r = S_2 - S_1;
 
   if (H == 0) {
-    if (r == 0) {
-      const auto X2 = XCoord(lhs).Squared();
-      const auto M = 3_c * X2;
-      const auto Y2 = YCoord(lhs).Squared();
-      const auto S = 4_c * XCoord(lhs) * Y2;
-      const auto X_3 = M.Squared() - 2_c * S;
-      const auto Y_3 = M * (S - X_3) - 8_c * Y2.Squared();
-      const auto Z_3 = (YCoord(lhs) + ZCoord(lhs)).Squared() - Y2 - lZ2;
-      return {X_3, Y_3, Z_3};
-    } else return {};
+    if (r == 0) return DoubleGraph(lhs);  // Coincident operands: the shallow doubling formula.
+    else return {};
   }
 
   const auto H2 = H.Squared();
   const auto H3 = H2 * H;
   const auto U_1H2 = U_1 * H2;
-  const auto X_3 = 4_c * (r.Squared() - H3 - 2_c * U_1H2);
-  const auto Y_3 = r * (8_c * U_1H2 - 2_c * X_3) - 8_c * (S_1 * H3);
-  const auto Z_3 = H * ((ZCoord(lhs) + ZCoord(rhs)).Squared() - lZ2 - rZ2);
+  const auto X_3 = r.Squared() - H3 - 2_c * U_1H2;
+  const auto Y_3 = r * (U_1H2 - X_3) - S_1 * H3;
+  const auto Z_3 = H * (ZCoord(lhs) * ZCoord(rhs));
   return {X_3, Y_3, Z_3};
 }
 
@@ -315,19 +284,17 @@ JacF DoubleGraph(const JacF& p) {
   const auto X = XCoord(p);
   const auto Y = YCoord(p);
   const auto Z = ZCoord(p);
-  const auto X2 = X.Squared();
-  const auto Z2 = Z.Squared();
-  const auto M = 3_c * X2;
-  const auto Y2 = Y.Squared();
-  const auto Y4 = Y2.Squared();
-  const auto S = 2_c * ((X + Y2).Squared() - X2 - Y4);
-  const auto X_3 = M.Squared() - 2_c * S;
-  const auto Y_3 = M * (S - X_3) - 8_c * Y4;
-  const auto Z_3 = (Y + Z).Squared() - Y2 - Z2;
-  static_assert(std::same_as<decltype(S), const Value<16>>);
-  static_assert(std::same_as<decltype(X_3), const Value<35>>);
-  static_assert(std::same_as<decltype(Y_3), const Value<19>>);
-  static_assert(std::same_as<decltype(Z_3), const Value<8>>);
+  const auto S = Y.Squared();
+  const auto L = X.Squared().Times<3>().Half();
+  const auto T = -(X * S);
+  const auto X_3 = L.Squared() + 2_c * T;
+  const auto Y_3 = -(L * (X_3 + T) + S.Squared());
+  const auto Z_3 = Y * Z;
+  static_assert(std::same_as<decltype(L), const Value<4>>);
+  static_assert(std::same_as<decltype(T), const Value<3>>);
+  static_assert(std::same_as<decltype(X_3), const Value<8>>);
+  static_assert(std::same_as<decltype(Y_3), const Value<5>>);
+  static_assert(std::same_as<decltype(Z_3), const Value<2>>);
   return {X_3, Y_3, Z_3};
 }
 
@@ -344,15 +311,15 @@ std::tuple<JacF, FieldElement> AddWithZRatioGraph(const JacF& jac, const AffF& a
   const auto H2 = H.Squared();
   const auto H3 = H2 * H;
   const auto U_1H2 = U_1 * H2;
-  const auto X_3 = 4_c * (r.Squared() - H3 - 2_c * U_1H2);
-  const auto Y_3 = r * (8_c * U_1H2 - 2_c * X_3) - 8_c * (S_1 * H3);
-  const auto Z_3 = (ZCoord(jac) + H).Squared() - rZ2 - H2;
-  const auto ratio = 2_c * H;
+  const auto X_3 = r.Squared() - H3 - 2_c * U_1H2;
+  const auto Y_3 = r * (U_1H2 - X_3) - S_1 * H3;
+  const auto Z_3 = ZCoord(jac) * H;
+  const auto ratio = H;
   static_assert(std::same_as<decltype(H), const Value<43>>);
-  static_assert(std::same_as<decltype(ratio), const Value<86>>);
-  static_assert(std::same_as<decltype(X_3), const Value<40>>);
-  static_assert(std::same_as<decltype(Y_3), const Value<19>>);
-  static_assert(std::same_as<decltype(Z_3), const Value<8>>);
+  static_assert(std::same_as<decltype(ratio), const Value<43>>);
+  static_assert(std::same_as<decltype(X_3), const Value<10>>);
+  static_assert(std::same_as<decltype(Y_3), const Value<5>>);
+  static_assert(std::same_as<decltype(Z_3), const Value<2>>);
   return {{X_3, Y_3, Z_3}, ratio};
 }
 

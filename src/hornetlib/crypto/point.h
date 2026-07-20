@@ -148,30 +148,21 @@ class JacobianPoint {
     const auto r = S_2 - S_1;
 
     if (H == 0) {
-      if (r == 0) {
-        // a = 0: 2M, 5S
-        // Add a (non-infinity) point to itself
-        const auto X2 = lhs.X.Squared();
-        const auto M = 3_c * X2;
-        const auto Y2 = lhs.Y.Squared();
-        const auto S = 4_c * lhs.X * Y2;
-        const auto X_3 = M.Squared().Subtract<4>(2_c * S);
-        const auto Y_3 = (M * S.Subtract<7>(X_3)).Subtract<16>(8_c * Y2.Squared());
-        const auto Z_3 = (lhs.Y + lhs.Z).Squared() - Y2 - lZ2;
-        return {X_3, Y_3, Z_3};
-      } else return {};
+      if (r == 0) return lhs.Double();  // Coincident operands: the shallow doubling formula.
+      else return {};
     }
 
-    // 5M, 3S
+    // 6M, 2S. Z_3 = H.Z.Z' rather than the squared 2ZZ' form: one more mul, but X_3/Y_3 shed
+    // their 4x/8x scale factors and a Times level off the critical chain (see Double()).
     const auto H2 = H.Squared();
     const auto H3 = H2 * H;
     const auto U_1H2 = U_1 * H2;
-    const auto X_3 = 4_c * (r.Squared() - H3).Subtract<4>(2_c * U_1H2);
-    const auto Y_3 = (r * (8_c * U_1H2).Subtract<80>(2_c * X_3)).Subtract<16>(8_c * (S_1 * H3));
-    const auto Z_3 = H * ((lhs.Z + rhs.Z).Squared() - lZ2 - rZ2);
+    const auto X_3 = (r.Squared() - H3).Subtract<4>(2_c * U_1H2);
+    const auto Y_3 = (r * U_1H2.Subtract<10>(X_3)).Subtract<2>(S_1 * H3);
+    const auto Z_3 = H * (lhs.Z * rhs.Z);
     return {X_3, Y_3, Z_3};
   }
-  // a = 0. Double: 8M, 7S; Add: 11M, 5S.
+  // a = 0. Double: 3M, 4S, 1 half; Add: 12M, 4S.
 
   std::tuple<JacobianPoint, ZRatio> AddWithZRatio(const Affine& affine) const {
     // 3M, 1S
@@ -185,20 +176,22 @@ class JacobianPoint {
 
     Assert(H != 0);  // Implies invalid arguments for this function.
 
-    // 4M, 3S
+    // 5M, 2S. Z_3 = Z.H (see the mixed add): the returned ratio Z_3/Z becomes H itself.
     const auto H2 = H.Squared();
     const auto H3 = H2 * H;
     const auto U_1H2 = U_1 * H2;
-    const auto X_3 = 4_c * (r.Squared() - H3).Subtract<4>(2_c * U_1H2);
-    const auto Y_3 = (r * (8_c * U_1H2).Subtract<80>(2_c * X_3)).Subtract<16>(8_c * (S_1 * H3));
-    const auto Z_3 = (Z + H).Squared() - rZ2 - H2;
+    const auto X_3 = (r.Squared() - H3).Subtract<4>(2_c * U_1H2);
+    const auto Y_3 = (r * U_1H2.Subtract<10>(X_3)).Subtract<2>(S_1 * H3);
+    const auto Z_3 = Z * H;
 
-    return {{X_3, Y_3, Z_3}, 2_c * H};
+    return {{X_3, Y_3, Z_3}, H};
   }
 
   // Add two Jacobian points on the curve
-  friend constexpr JacobianPoint operator+(const Affine& lhs, const JacobianPoint& rhs) {
-    if (lhs.IsInfinity()) return rhs;
+  [[gnu::always_inline]] friend constexpr JacobianPoint operator+(const Affine& lhs, const JacobianPoint& rhs) {
+    // Affine operands are table entries or fixed points, never infinity by construction; the
+    // representation test costs two carry-folds per ladder add, so assert instead of branching.
+    Assert(!lhs.IsInfinity());
     if (rhs.IsInfinity()) return lhs;
 
     // 3M, 1S
@@ -211,49 +204,38 @@ class JacobianPoint {
     const auto r = S_2 - S_1;
 
     if (H == 0) {
-      if (r == 0) {
-        // 1M, 5S
-        // Add a (non-infinity) point to itself
-        const auto X2 = lhs.x.Squared();
-        const auto M = 3_c * X2;
-        const auto Y2 = lhs.y.Squared();
-        const auto Y4 = Y2.Squared();
-        // S = x * 4Y^2 = 2(2xY^2) = 2((x + Y^2)^2 - x^2 - Y^4)
-        const auto S = 2_c * ((lhs.x + Y2).Squared() - X2 - Y4);
-        const auto X_3 = M.Squared().Subtract<32>(2_c * S);
-        const auto Y_3 = (M * S.Subtract<35>(X_3)).Subtract<16>(8_c * Y4);
-        const auto Z_3 = 2_c * lhs.y;
-        return {X_3, Y_3, Z_3};
-      } else return {};
+      if (r == 0) return JacobianPoint{lhs}.Double();  // Coincident operands: the shallow doubling formula.
+      else return {};
     }
 
-    // 4M, 3S
+    // 5M, 2S. Z_3 = Z.H rather than the squared 2ZH form: one more mul, but X_3/Y_3 shed their
+    // 4x/8x scale factors and a Times level off the critical chain (see Double()).
     const auto H2 = H.Squared();
     const auto H3 = H2 * H;
     const auto U_1H2 = U_1 * H2;
-    const auto X_3 = 4_c * (r.Squared() - H3).Subtract<4>(2_c * U_1H2);
-    const auto Y_3 = (r * (8_c * U_1H2).Subtract<80>(2_c * X_3)).Subtract<16>(8_c * (S_1 * H3));
-    const auto Z_3 = (rhs.Z + H).Squared() - rZ2 - H2;
+    const auto X_3 = (r.Squared() - H3).Subtract<4>(2_c * U_1H2);
+    const auto Y_3 = (r * U_1H2.Subtract<10>(X_3)).Subtract<2>(S_1 * H3);
+    const auto Z_3 = rhs.Z * H;
     return {X_3, Y_3, Z_3};
   }
-  // a = 0. Double: 4M, 6S; Add: 7M, 4S.
+  // a = 0. Double: 3M, 4S, 1 half; Add: 8M, 3S.
 
-  constexpr JacobianPoint Double() const {
+  [[gnu::always_inline]] constexpr JacobianPoint Double() const {
     if (IsInfinity()) return {};
 
-    // Add a (non-infinity) point to itself
-    const auto X2 = X.Squared();
-    const auto Z2 = Z.Squared();
-    const auto M = X2.Times<3>();
-    const auto Y2 = Y.Squared();
-    const auto Y4 = Y2.Squared();
-    const auto S = 2_c * ((X + Y2).Squared() - X2 - Y4);
-    const auto X_3 = M.Squared().Subtract<32>(2_c * S);
-    const auto Y_3 = (M * S.Subtract<35>(X_3)).Subtract<16>(8_c * Y4);
-    const auto Z_3 = (Y + Z).Squared() - Y2 - Z2;
+    // Shallow-dependency doubling (a = 0):
+    //   L = (3/2).X², S = Y², T = -(X.S), X3 = L² + 2T, Y3 = -(L.(X3 + T) + S²), Z3 = Y.Z
+    // L and S start in parallel and the critical path is ~3 field ops (S -> T -> X3 -> Y3) vs ~5
+    // for the classic Y^4 chain; in the ladder's dependent double run, latency is throughput.
+    const auto S = Y.Squared();
+    const auto L = X.Squared().Times<3>().Half();
+    const auto T = (X * S).Negate<2>();
+    const auto X_3 = L.Squared() + 2_c * T;
+    const auto Y_3 = (L * (X_3 + T) + S.Squared()).Negate<4>();
+    const auto Z_3 = Y * Z;
     return {X_3, Y_3, Z_3};
   }
-  // a = 0. 1M, 7S
+  // a = 0. 3M, 4S, 1 half: more muls than the 1M+7S form but ~2 fewer levels of dependency.
 
   friend constexpr JacobianPoint operator+(const JacobianPoint& lhs, const Affine& rhs) { return rhs + lhs; }
   friend constexpr JacobianPoint operator-(const Affine& lhs, const JacobianPoint& rhs) { return lhs + (-rhs); }

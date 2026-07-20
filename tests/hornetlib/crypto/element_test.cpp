@@ -279,6 +279,49 @@ TEST(FieldElementTest, LeftShiftOperatorMatchesLShift) {
   EXPECT_EQ(ToInteger(x << 3_c), ToInteger(x) << 3);
 }
 
+// ---- Half ----------------------------------------------------------------------------------------
+// Half() claims magnitude ((m+1)>>1)+1; the even-m case meets that bound with equality, so these
+// run the exact worst case (all-ones limbs: maximal t_i AND every neighbor parity bit set) rather
+// than trusting the same expression replicated in the graph framework.
+
+TEST(FieldElementTest, HalfMatchesOracleAcrossMagnitudes) {
+  std::mt19937_64 rng{24601};
+  for (const int m : {1, 2, 5, 6, 90, 2048, 4095}) {
+    for (int trial = 0; trial < 25; ++trial) {
+      const auto x = RandomElement(rng, m);
+      const auto h = ToInteger(x.Half());
+      EXPECT_EQ(ModP(h + h), ModP(ToInteger(x))) << "magnitude " << m;
+    }
+    const auto max = MaxElement(m);
+    const auto h = ToInteger(max.Half());
+    EXPECT_EQ(ModP(h + h), ModP(ToInteger(max))) << "MaxElement magnitude " << m;
+  }
+}
+
+TEST(FieldElementTest, HalfOfEvenRepresentativeIsAPlainShift) {
+  // Even words, even value: the +p mask must not fire, so Half is exact bitwise halving.
+  const Element x{Array{4, 6, 8, 10, 12}, 1};
+  EXPECT_EQ(x.Half().Words(), (Array{2, 3, 4, 5, 6}));
+}
+
+TEST(FieldElementTest, HalfCarriesNeighborParityDownAsBit51) {
+  // Odd limb 1, even limb 0 and even value overall requires an even representative whose limb 1
+  // parity lands in limb 0: words {0, 3, 0, 0, 0} halves to {1<<51, 1, 0, 0, 0}.
+  const Element x{Array{0, 3, 0, 0, 0}, 1};
+  EXPECT_EQ(x.Half().Words(), (Array{uint64_t{1} << 51, 1, 0, 0, 0}));
+}
+
+TEST(FieldElementTest, HalfWorstCaseMagnitudesValidateWhenChecking) {
+  if constexpr (kCheckMagnitudes) {
+    // The result constructor validates the claimed ((m+1)>>1)+1 against the actual limbs; run it
+    // at the even-m equality boundary and the caps. MaxElement is all-ones limbs: odd, so the +p
+    // mask fires and every parity carry-down is exercised at once.
+    for (const int m : {1, 2, 6, 90, 2048, 4094, 4095}) EXPECT_NO_THROW((void)MaxElement(m).Half());
+    // The limbwise +p headroom bound: magnitude 4096 must be rejected, 4095 admitted.
+    EXPECT_THROW((void)MaxElement(4096).Half(), std::out_of_range);
+  }
+}
+
 TEST(FieldElementTest, PowerOfTwoTimesRoutesThroughShift) {
   std::mt19937_64 rng{2468};
   const auto x = RandomElement(rng);

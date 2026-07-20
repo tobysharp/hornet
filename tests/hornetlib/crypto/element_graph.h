@@ -55,6 +55,10 @@ struct Expression : NodeBase {
   constexpr auto NormalizeWeak() const requires (Derived::kMag <= FieldElement::kMaxMagnitude - 1) {
     return Value<2>{[&] { return Fe(Self()).NormalizeWeak(); }};
   }
+
+  constexpr auto Half() const requires (Derived::kMag <= FieldElement::kMaxMagnitude - 1) {
+    return Value<((Derived::kMag + 1) >> 1) + 1>{[&] { return Fe(Self()).Half(); }};
+  }
 };
 
 template <int M = kProductMag>
@@ -82,6 +86,7 @@ struct Value : FieldElement, Expression<Value<M>> {
   using Expression<Value<M>>::Squared;
   using Expression<Value<M>>::Times;
   using Expression<Value<M>>::NormalizeWeak;
+  using Expression<Value<M>>::Half;
 };
 
 template <class L, class R>
