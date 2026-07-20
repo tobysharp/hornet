@@ -14,5 +14,7 @@ set(CXX_LLVM_LIB "/usr/lib/llvm-20/lib")
 # set(CMAKE_CXX_FLAGS_INIT "-stdlib=libc++")
 
 # Explicit compile and link flags
-set(CMAKE_CXX_FLAGS_INIT "-nostdinc++ -isystem ${CXX_LLVM_CXXV1}")
+set(CMAKE_CXX_FLAGS_INIT "-nostdinc++ -isystem ${CXX_LLVM_CXXV1} -march=native")
+# RelWithDebInfo defaults to -O2; profile the same -O3 codegen that Release ships.
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO_INIT "-O3 -g -DNDEBUG")
 set(CMAKE_EXE_LINKER_FLAGS_INIT " -fuse-ld=lld -rtlib=compiler-rt -unwindlib=libunwind -L${CXX_LLVM_LIB} -Wl,-rpath,${CXX_LLVM_LIB} -lc++ -lc++abi -lunwind")

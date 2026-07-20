@@ -163,81 +163,86 @@ class FieldElement {
     return *this = *this * rhs;
   }
 
-  constexpr FieldElement operator*(const FieldElement& rhs) const {
+  [[gnu::always_inline]] constexpr FieldElement operator*(const FieldElement& rhs) const {
     if constexpr (kCheckMagnitudes) {
       CheckMagnitudes(), rhs.CheckMagnitudes();
       if (magnitude_.Get() * rhs.magnitude_.Get() > kMaxProductMagnitude) 
         util::ThrowOutOfRange("Exceeded product magnitude ", magnitude_.Get() * rhs.magnitude_.Get(), " in 5x52 FieldElement.");
     }
-    // Full 5x52 limb product with interleaved fold mod p.
+    // Rolling-fold 5x52 product. a * b = sum_{t=0}^8 S_t * 2^(52*t), with column sums
+    // S_t = sum_{i+j=t} a_i.b_j. Since p = 2^256 - c_p, 2^260 _= 16 c_p = kFold260 =: R (mod p),
+    // so high column t+5 folds into low column t by R. Two accumulators walk the column pairs in
+    // lockstep — c gathers column t, d gathers column t+5, and d's low 52 bits fold into c the
+    // moment they exist — so fold, carry propagation and limb extraction are one interleaved sweep
+    // and no column is ever stored. The sweep is rotated — (3,8), (4), (0,5), (1,6), (2,7) — so
+    // limb 4's 2^256 boundary is folded mid-stream and the tail needs no ripple.
+    //
+    // Bounds use m = m_a.m_b <= 8191 < 2^13, with a_i.b_j < m.2^104 (i,j < 4), < m.2^100 (one
+    // index 4), < m.2^96 (both). The largest accumulator is 4m.2^104 + 2^101 < 2^120, admissible
+    // up to m < 2^22, so the m <= 8191 contract is unchanged and now slack.
+    const auto& a = words_;
+    const auto& b = rhs.words_;
+
+    // Columns 3 and 8. S_8 = a4.b4 alone; its weight 2^416 = 2^260.2^156 folds into column 3 by R.
+    // R.S_8 needs up to 37+128 bits, so split: R.low64 here, high64 deferred one column up by
+    // R.2^12 (2^64.2^156 = 2^12.2^208).
+    __uint128_t d = __uint128_t{a[0]} * b[3] + __uint128_t{a[1]} * b[2] + __uint128_t{a[2]} * b[1] +
+                    __uint128_t{a[3]} * b[0];                           // < 4m.2^104
+    __uint128_t c = __uint128_t{a[4]} * b[4];                           // < m.2^96
+    d += __uint128_t{kFold260} * static_cast<uint64_t>(c);              // < 4m.2^104 + 2^101
+    const uint64_t s8_high = static_cast<uint64_t>(c >> 64);            // < m.2^32
+    const uint64_t t3 = static_cast<uint64_t>(d) & kMask52;
+    d >>= 52;                                                           // < 4m.2^52 + 2^49
+
+    // Column 4, plus the deferred high half of S_8.
+    d += __uint128_t{a[0]} * b[4] + __uint128_t{a[1]} * b[3] + __uint128_t{a[2]} * b[2] +
+         __uint128_t{a[3]} * b[1] + __uint128_t{a[4]} * b[0];           // + 3.2m.2^104
+    d += __uint128_t{kFold260 << 12} * s8_high;                         // + m.2^81 => < 3.3m.2^104
+    uint64_t t4 = static_cast<uint64_t>(d) & kMask52;
+    d >>= 52;                                                           // < 3.3m.2^52
+    const uint64_t tx = t4 >> 48;  // Limb 4's top 4 bits, weight 2^256.
+    t4 &= kMask48;
+
+    // Columns 0 and 5. Column 5's low 52 bits have weight 2^260 = 2^4.2^256, so glue them above tx
+    // and fold the combined 2^256 overflow into column 0 by c_p — absorbing the final overflow
+    // pass into the sweep.
+    c = __uint128_t{a[0]} * b[0];                                       // < m.2^104
+    d += __uint128_t{a[1]} * b[4] + __uint128_t{a[2]} * b[3] + __uint128_t{a[3]} * b[2] +
+         __uint128_t{a[4]} * b[1];                                      // + 2.2m.2^104 => < 2.3m.2^104
+    const uint64_t u0 = ((static_cast<uint64_t>(d) & kMask52) << 4) | tx;  // < 2^56, weight 2^256
+    d >>= 52;                                                           // < 2.3m.2^52
+    c += __uint128_t{u0} * kFold256;                                    // + 2^89 => < m.2^104 + 2^89
     Array result;
+    result[0] = static_cast<uint64_t>(c) & kMask52;
+    c >>= 52;                                                           // < m.2^52 + 2^37
 
-    // a * b = sum_{t=0}^8 S_t * 2^(52*t).
-    // a_i < m_a * 2^B_i (B_i = 2^52 for i = 0..3, B_4 = 2^48)
-    // b_i < m_b * 2^B_i.
+    // Columns 1 and 6.
+    c += __uint128_t{a[0]} * b[1] + __uint128_t{a[1]} * b[0];           // < 2m.2^104 + m.2^52 + 2^37
+    d += __uint128_t{a[2]} * b[4] + __uint128_t{a[3]} * b[3] +
+         __uint128_t{a[4]} * b[2];                                      // + 1.3m.2^104 => < 1.4m.2^104
+    c += __uint128_t{kFold260} * (static_cast<uint64_t>(d) & kMask52);  // + 2^89
+    d >>= 52;                                                           // < 1.4m.2^52
+    result[1] = static_cast<uint64_t>(c) & kMask52;
+    c >>= 52;                                                           // < 2m.2^52 + 2^38
 
-    // Accumulate 128-bit column products, S_t:
-    __uint128_t S[9] = {};
-    for (int t = 0; t <= 8; ++t) {
-      for (int i = std::max(0, t - 4); i <= std::min(t, 4); ++i) {
-        const int j = t - i;
-        S[t] += __uint128_t{words_[i]} * rhs.words_[j];  // S_t < 4m_a.m_b.2^104
-      }
-    }
+    // Columns 2 and 7.
+    c += __uint128_t{a[0]} * b[2] + __uint128_t{a[1]} * b[1] +
+         __uint128_t{a[2]} * b[0];                                      // < 3m.2^104 + 2m.2^52 + 2^38
+    d += __uint128_t{a[3]} * b[4] + __uint128_t{a[4]} * b[3];           // + 2m.2^100 => < m.2^101 + 1.4m.2^52
+    c += __uint128_t{kFold260} * (static_cast<uint64_t>(d) & kMask52);  // + 2^89
+    d >>= 52;                                                           // < m.2^49 + 1.4m < 2^62
+    result[2] = static_cast<uint64_t>(c) & kMask52;
+    c >>= 52;                                                           // < 3m.2^52 + 2^38
 
-    // Let L, H be s.t. a * b = L + 2^260 H.
-    // Then H = sum_{t=0}^3 S_{t+5} * 2^(52*t).
-    // We know p = 2^256 - c_p, so 2^260 _= 16 c_p (mod p).
-    // Let R = 16 c < 2^37. Then for t=5..8, S_t.2^260 _= R.S_t (mod p), which reduces S_t
-    // by about 260-37=223 bits. We can therefore fold R.S_t into column t-5.
+    // Close. Three shifts moved d from column 5 to column 8, so like S_8 it folds into column 3 by
+    // R; d < 2^62, so R.d fits without splitting. The stored t3 joins here.
+    Assert((d >> 62) == 0);
+    c += __uint128_t{kFold260} * static_cast<uint64_t>(d) + t3;         // < m.2^86 + 3m.2^52 + 2^52 < 2^100
+    result[3] = static_cast<uint64_t>(c) & kMask52;
+    c >>= 52;                                                           // < m.2^34 + 2^2 < 2^47 + eps
+    result[4] = static_cast<uint64_t>(c) + t4;                          // < 2^48 + 2^47 + eps
 
-    __uint128_t remainder = 0;
-    for (int t = 0; t <= 4; ++t) {
-      if (t < 4) remainder += S[t + 5];
-      // In this iteration, we can only pick up the low 64 bits of remainder, since after multiplying
-      // by R, we are already at 64+37=101 bits. We can safely leave any remaining bits in remainder until the
-      // next iteration, because at this stage each S_i is a 128-bit value at bit position 52*i, so the
-      // representation isn't tight yet.
-      const uint64_t low = static_cast<uint64_t>(remainder);
-      S[t] += __uint128_t{kFold260} * low;  // S_t < 4m_a.m_b.2^104 + 2^101
-      remainder = (remainder - low) >> 52;
-    }
-    Assert(remainder == 0);  // The whole remainder should have been used and folded into S[0..4].
-    // The above requires that the final iteration's remainder (t=4) fits in 64 bits, i.e. that the t=3
-    // remainder from S[8] was < 2^116.
-
-    // Now convert S[0..4] into the efficient representation of 64-bit result words, each < 2.2^B_i
-    __uint128_t accumulator = 0;
-    for (int t = 0; t < 4; ++t) {
-      accumulator = (accumulator >> 52) + S[t];                  // Requires 2^76 + S_t < 2^128
-      result[t] = static_cast<uint64_t>(accumulator) & kMask52;  // < 2^52
-    }
-    // S[4] < 2.m_a.m_b.2^48.2^52 + 3.m_a.m_b.2^52.2^52 + 2^101 < m_a.m_b.2^101 + 3.m_a.m_b.2^104 + 2^101 < (3.125)m_a.m_b.2^104 + 2^101 < m_a.m_b.2^106 + 2^101
-    accumulator = (accumulator >> 52) + S[4];  // < m.a.m_b.2^106 + 2^101 + 2^67.
-    result[4] = static_cast<uint64_t>(accumulator) & kMask48;
-    const __uint128_t overflow = accumulator >> 48;  // < m_a.m_b.2^58 + 2^53 + 2^19 < 2^13.2^58 + eps = 2^71. The remaining accumulator, at bit position 256.
-
-    // Still need to accumulate 2^256 * overflow into result, using
-    // 2^256 * overflow _= overflow * c_p (mod p), which we fold into bit position 0.
-    // c_p < 2^32 + 2^10.
-    __uint128_t residual = overflow * kFold256 + result[0];  // < 2^104
-    result[0] = static_cast<uint64_t>(residual) & kMask52;
-    result[1] += static_cast<uint64_t>(residual >> 52);  // < 2^52 + 2^52 < 2^53.
-    
-    // result[1] < 2.2^52 <= residual < 2^104 <= overflow < 2^71 <= accumulator < 2^119 
-    // <= 2^76 + S[4] < 2^119 <= S[4] < 2^119 - 2^76
-
-    // 119 - 52 = 67. So if S_t <= 2^119 - 2^67 for all t, then
-    // acc_0 < 2^119 => carry_1 = (acc_0 >> 52) < 2^67 => acc_1 < 2^119 => ...
-    // => all accumulators < 2^119 => result[1] < 2.2^52.
-
-    // So it is sufficient to require S_t <= 2^119 - 2^67, i.e.
-    // 4.m_a.m_b.2^104 + 2^101 <= 2^119 - 2^67 
-    // m_a.m_b <= (2^119 - 2^101 - 2^67) / 2^106 = 2^13 - 2^-5 - 2^-39 < 2^13 = 8192.
-    // So max(m_a.m_b) = 2^13 - 1 = 8191.
-
-    Assert((residual >> 104) == 0);  // residual should be fully used up now.
-
+    // Limbs 0..3 < 2^52; limb 4 < 1.5 * 2^48, so magnitude 2 (a true 1 would need limb 4 < 2^48).
     return { result, 2 };
   }
 
@@ -318,9 +323,75 @@ class FieldElement {
     return equal_zero | equal_p;
   }
 
-  constexpr FieldElement Squared() const {
-    // TODO: More efficient version.
-    return *this * *this;
+  [[gnu::always_inline]] constexpr FieldElement Squared() const {
+    if constexpr (kCheckMagnitudes) {
+      CheckMagnitudes();
+      if (magnitude_.Get() * magnitude_.Get() > kMaxProductMagnitude)
+        util::ThrowOutOfRange("Exceeded product magnitude ", magnitude_.Get() * magnitude_.Get(), " in 5x52 FieldElement.");
+    }
+    // Squaring specialization of operator*'s rolling-fold sweep (see there for the fold identities
+    // and per-step bound proofs, which carry over verbatim with m = m_a^2): symmetry halves the
+    // cross products, S_t = 2.sum_{i<j, i+j=t} a_i.a_j (+ a_{t/2}^2 for even t), so 15 limb
+    // products replace 25. Cross terms double by pre-shifting the low-index limb: the admission
+    // m_a^2 <= 8191 gives m_a <= 90, so a_i < 90.2^52 < 2^58.5 and a_i << 1 cannot overflow.
+    // Every column sum then meets the same S_t bound as in operator*.
+    const auto& a = words_;
+    const uint64_t a0_2 = a[0] << 1;
+    const uint64_t a1_2 = a[1] << 1;
+    const uint64_t a2_2 = a[2] << 1;
+    const uint64_t a3_2 = a[3] << 1;
+
+    // Columns 3 and 8.
+    __uint128_t d = __uint128_t{a0_2} * a[3] + __uint128_t{a1_2} * a[2];  // < 4m.2^104
+    __uint128_t c = __uint128_t{a[4]} * a[4];                             // < m.2^96
+    d += __uint128_t{kFold260} * static_cast<uint64_t>(c);                // < 4m.2^104 + 2^101
+    const uint64_t s8_high = static_cast<uint64_t>(c >> 64);              // < m.2^32
+    const uint64_t t3 = static_cast<uint64_t>(d) & kMask52;
+    d >>= 52;
+
+    // Column 4, plus the deferred high half of S_8.
+    d += __uint128_t{a0_2} * a[4] + __uint128_t{a1_2} * a[3] + __uint128_t{a[2]} * a[2];
+    d += __uint128_t{kFold260 << 12} * s8_high;                           // < 3.3m.2^104
+    uint64_t t4 = static_cast<uint64_t>(d) & kMask52;
+    d >>= 52;
+    const uint64_t tx = t4 >> 48;  // Limb 4's top 4 bits, weight 2^256.
+    t4 &= kMask48;
+
+    // Columns 0 and 5.
+    c = __uint128_t{a[0]} * a[0];
+    d += __uint128_t{a1_2} * a[4] + __uint128_t{a2_2} * a[3];             // < 2.3m.2^104
+    const uint64_t u0 = ((static_cast<uint64_t>(d) & kMask52) << 4) | tx;
+    d >>= 52;
+    c += __uint128_t{u0} * kFold256;
+    Array result;
+    result[0] = static_cast<uint64_t>(c) & kMask52;
+    c >>= 52;
+
+    // Columns 1 and 6.
+    c += __uint128_t{a0_2} * a[1];
+    d += __uint128_t{a2_2} * a[4] + __uint128_t{a[3]} * a[3];             // < 1.4m.2^104
+    c += __uint128_t{kFold260} * (static_cast<uint64_t>(d) & kMask52);
+    d >>= 52;
+    result[1] = static_cast<uint64_t>(c) & kMask52;
+    c >>= 52;
+
+    // Columns 2 and 7.
+    c += __uint128_t{a0_2} * a[2] + __uint128_t{a[1]} * a[1];
+    d += __uint128_t{a3_2} * a[4];                                        // < m.2^101 + 1.4m.2^52
+    c += __uint128_t{kFold260} * (static_cast<uint64_t>(d) & kMask52);
+    d >>= 52;                                                             // < 2^62
+    result[2] = static_cast<uint64_t>(c) & kMask52;
+    c >>= 52;
+
+    // Close, exactly as in operator*.
+    Assert((d >> 62) == 0);
+    c += __uint128_t{kFold260} * static_cast<uint64_t>(d) + t3;
+    result[3] = static_cast<uint64_t>(c) & kMask52;
+    c >>= 52;
+    result[4] = static_cast<uint64_t>(c) + t4;
+
+    // Same output bounds as operator*: limbs 0..3 < 2^52, limb 4 < 1.5 * 2^48 => magnitude 2.
+    return { result, 2 };
   }
 
   constexpr std::optional<FieldElement> SquareRoot() const {
