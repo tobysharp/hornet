@@ -1,0 +1,73 @@
+<svg viewBox="0 0 1200 600" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, system-ui, 'Segoe UI', sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#b0b0b0"/>
+    </marker>
+    <marker id="arrA" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#eba13c"/>
+    </marker>
+    <style>
+      .box    { fill:#1f1e1b; stroke:#6c6f73; stroke-width:1.6; }
+      .pool   { fill:#26241f; stroke:#eba13c; stroke-width:2.2; }
+      .thread { fill:#2c2a24; stroke:#eba13c; stroke-width:1.8; }
+      .chip   { fill:#232323; stroke:#8f9398; stroke-width:1.3; }
+      .title  { font-size:18px; font-weight:600; fill:#f5f5f2; text-anchor:middle; }
+      .mono   { font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:16px; fill:#f5f5f2; text-anchor:middle; }
+      .hgt    { font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:16px; font-weight:600; fill:#eba13c; text-anchor:middle; }
+      .chipt  { font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:15px; fill:#d3d6d8; text-anchor:middle; }
+      .edge   { stroke:#b0b0b0; stroke-width:2; fill:none; marker-end:url(#arr); }
+      .edgeA  { stroke:#eba13c; stroke-width:2.2; fill:none; marker-end:url(#arrA); }
+      .elabel { font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:15px; fill:#b9bcbf; text-anchor:middle; }
+      .alabel { font-size:15px; fill:#eba13c; text-anchor:middle; }
+      .note   { font-size:15px; fill:#9aa0a6; text-anchor:middle; }
+    </style>
+  </defs>
+
+  <text x="60" y="66" font-size="15" fill="#9aa0a6">Workers advance joiners one step and route by the returned Action.</text>
+
+  <!-- ready queue -->
+  <rect x="60" y="120" width="260" height="310" rx="10" class="box"/>
+  <text x="190" y="152" class="title">ready_queue_ (min-heap)</text>
+  <rect x="85" y="172" width="210" height="34" rx="6" class="chip"/><text x="190" y="195" class="chipt">h = 812</text>
+  <rect x="85" y="214" width="210" height="34" rx="6" class="chip"/><text x="190" y="237" class="chipt">h = 814</text>
+  <rect x="85" y="256" width="210" height="34" rx="6" class="chip"/><text x="190" y="279" class="chipt">h = 815</text>
+  <rect x="85" y="298" width="210" height="34" rx="6" class="chip"/><text x="190" y="321" class="chipt">h = 818</text>
+  <text x="190" y="362" class="note">served lowest height first</text>
+  <text x="190" y="390" class="note">(heights need not be consecutive)</text>
+
+  <!-- worker pool -->
+  <rect x="440" y="110" width="290" height="350" rx="10" class="pool"/>
+  <text x="585" y="142" class="title">worker threads</text>
+  <rect x="465" y="160" width="240" height="78" rx="9" class="thread"/><text x="585" y="194" class="mono">Advance()</text><text x="585" y="220" class="hgt">h = 813</text>
+  <rect x="465" y="252" width="240" height="78" rx="9" class="thread"/><text x="585" y="286" class="mono">Advance()</text><text x="585" y="312" class="hgt">h = 817</text>
+  <rect x="465" y="344" width="240" height="78" rx="9" class="thread"/><text x="585" y="378" class="mono">Advance()</text><text x="585" y="404" class="hgt">h = 824</text>
+
+  <!-- blocked list -->
+  <rect x="880" y="110" width="290" height="195" rx="10" class="box"/>
+  <text x="1025" y="142" class="title">blocked_list_</text>
+  <rect x="900" y="160" width="250" height="38" rx="6" class="chip"/><text x="1025" y="184" class="chipt">h = 819 &#183; awaiting prefix</text>
+  <rect x="900" y="206" width="250" height="38" rx="6" class="chip"/><text x="1025" y="230" class="chipt">h = 826 &#183; awaiting prefix</text>
+  <text x="1025" y="272" class="note">runs once the committed prefix</text>
+  <text x="1025" y="292" class="note">reaches the block's height</text>
+
+  <!-- consumer -->
+  <rect x="880" y="345" width="290" height="95" rx="10" class="box"/>
+  <text x="1025" y="388" class="mono">on_complete(joiner)</text>
+  <text x="1025" y="415" class="note">&#8594; DatabaseView / consumer</text>
+
+  <!-- arrows -->
+  <line x1="320" y1="265" x2="434" y2="265" class="edge"/>
+  <text x="377" y="252" class="elabel">pop()</text>
+
+  <path d="M 585 108 C 585 48, 190 48, 190 116" class="edge"/>
+  <text x="388" y="40" class="elabel">Action::Advance &#8658; re-enqueue</text>
+
+  <line x1="730" y1="200" x2="876" y2="200" class="edge"/>
+  <text x="803" y="188" class="elabel">Action::Wait</text>
+
+  <line x1="730" y1="390" x2="876" y2="390" class="edge"/>
+  <text x="803" y="378" class="elabel">Action::Consume</text>
+
+  <path d="M 1025 305 C 1025 552, 190 552, 190 432" class="edgeA"/>
+  <text x="590" y="572" class="alabel">parent reaches Appended &#8658; WakeBlockedJobs() &#8658; re-enqueue</text>
+</svg>

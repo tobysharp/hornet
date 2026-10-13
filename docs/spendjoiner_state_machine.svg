@@ -1,0 +1,58 @@
+<svg viewBox="0 0 1200 560" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, system-ui, 'Segoe UI', sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#b0b0b0"/>
+    </marker>
+    <style>
+      .node  { fill:#26241f; stroke:#eba13c; stroke-width:2.2; }
+      .aux   { fill:#232323; stroke:#8f9398; stroke-width:1.8; }
+      .state { font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:22px; font-weight:600; fill:#f5f5f2; text-anchor:middle; }
+      .saux  { font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:19px; fill:#d3d6d8; text-anchor:middle; }
+      .edge  { stroke:#b0b0b0; stroke-width:2; fill:none; marker-end:url(#arr); }
+      .tedge { font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:18px; fill:#e0e0d8; text-anchor:middle; }
+      .tag   { font-size:16px; fill:#eba13c; text-anchor:middle; }
+      .note  { font-size:16px; fill:#9aa0a6; }
+      .cont  { fill:none; stroke:#6c6f73; stroke-width:1.6; stroke-dasharray:7 6; }
+    </style>
+  </defs>
+
+  <text x="30" y="64" class="note">Advance() performs one state transition per call.</text>
+
+  <text x="204" y="104" class="tedge">Parse</text>
+  <text x="402" y="104" class="tedge">Append</text>
+  <text x="600" y="104" class="tedge">Query</text>
+  <text x="798" y="104" class="tedge">Fetch</text>
+  <text x="996" y="104" class="tedge">Join</text>
+
+  <line x1="180" y1="140" x2="222" y2="140" class="edge"/>
+  <line x1="378" y1="140" x2="420" y2="140" class="edge"/>
+  <line x1="576" y1="140" x2="618" y2="140" class="edge"/>
+  <line x1="774" y1="140" x2="816" y2="140" class="edge"/>
+  <line x1="972" y1="140" x2="1014" y2="140" class="edge"/>
+
+  <rect x="30"   y="110" width="150" height="60" rx="9" class="node"/><text x="105"  y="148" class="state">Init</text>
+  <rect x="228"  y="110" width="150" height="60" rx="9" class="node"/><text x="303"  y="148" class="state">Parsed</text>
+  <rect x="426"  y="110" width="150" height="60" rx="9" class="node"/><text x="501"  y="148" class="state">Appended</text>
+  <rect x="624"  y="110" width="150" height="60" rx="9" class="node"/><text x="699"  y="148" class="state">Queried</text>
+  <rect x="822"  y="110" width="150" height="60" rx="9" class="node"/><text x="897"  y="148" class="state">Fetched</text>
+  <rect x="1020" y="110" width="150" height="60" rx="9" class="node"/><text x="1095" y="148" class="state">Joined</text>
+
+  <text x="501"  y="194" class="tag">adds + tombstones written</text>
+  <text x="699"  y="194" class="tag">S02 / S03 resolved</text>
+  <text x="1095" y="194" class="tag">&#8594; Spends()</text>
+
+  <rect x="400" y="320" width="400" height="180" rx="12" class="cont"/>
+  <text x="600" y="350" class="note" text-anchor="middle">out-of-order hold: ancestors not yet committed</text>
+
+  <rect x="425" y="400" width="150" height="56" rx="9" class="aux"/><text x="500" y="434" class="saux">QueriedPart</text>
+  <rect x="625" y="400" width="150" height="56" rx="9" class="aux"/><text x="700" y="434" class="saux">FetchedPart</text>
+
+  <line x1="501" y1="170" x2="500" y2="396" class="edge"/>
+  <text x="460" y="300" class="tedge" text-anchor="end">partial Query</text>
+
+  <line x1="575" y1="428" x2="619" y2="428" class="edge"/>
+  <text x="597" y="414" class="tedge">Fetch while waiting</text>
+
+  <line x1="699" y1="320" x2="699" y2="176" class="edge"/>
+  <text x="714" y="262" class="tedge" text-anchor="start">ancestors arrive &#8658; residual Query</text>
+</svg>

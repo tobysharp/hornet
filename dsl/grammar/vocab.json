@@ -1,0 +1,16 @@
+{
+  "_comment": "Single source of truth for Hornet DSL syntax highlighting. Edit this, then run: node tools/grammar/generate.mjs",
+  "keywords": [
+    "Rule", "Let", "Require", "if", "otherwise", "in", "for",
+    "return", "throw", "assert", "builtin", "array", "map"
+  ],
+  "types": [
+    "void", "bool", "byte", "int", "int32", "int64", "uint32", "uint256",
+    "Hash", "Block", "BlockHeader", "Transaction", "Timestamp",
+    "OpCode", "OutPoint", "Bits"
+  ],
+  "operators": [
+    "|->", "->", "⎧", "⎨", "⎩", "≤", "≥", "⧺", "∈", "∀", "Σ", "↦", "←",
+    "==", "!=", "<=", ">="
+  ]
+}
