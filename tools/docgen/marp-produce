@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Render a Marp deck to HTML with Hornet syntax highlighting.
+#
+# The IDE "Export Slide Deck…" command runs marp-vscode's bundled engine, which
+# ignores marp.config.js's custom `engine:`. ```hornet fenced blocks therefore
+# only get tokenised when the deck is built through marp-cli — i.e. this script.
+#
+# Usage:  tools/docgen/marp-produce [deck.md]   (default: docs/brink.md)
+# Output: <deck>.html next to the input.
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+input="${1:-$repo_root/docs/brink.md}"
+output="${input%.md}.html"
+
+echo "Rendering $input -> $output (with Hornet highlighting)"
+exec npx --yes @marp-team/marp-cli@4 \
+  --config "$repo_root/marp.config.js" \
+  "$input" -o "$output"

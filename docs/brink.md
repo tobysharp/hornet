@@ -18,7 +18,7 @@ Second paragraph.-->
 <div class="content">
 <h1>A Minimal, Executable Specification<br/>for Bitcoin Consensus</h1>
 <div class="author">Toby Sharp</div>
-<div class="event">Brink Engineering Call · 12 June 2026</div>
+<div class="event">TABConf · 15 October 2026</div>
 </div>
 
 
