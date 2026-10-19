@@ -30,6 +30,10 @@ Copyright © 2026 Toby Sharp \
 
 Below is an auto-generated rendering of Hornet’s [declarative specification](../src/hornetlib/consensus/rules/spec.h) of Bitcoin block validity. It lists the semantic invariants that together determine whether a block is consensus-valid, with links to the corresponding Hornet validation functions that realize those invariants in executable form.
 
+The rules apply to a deserialized block, and its sizes and weights are those of its canonical serialization.
+
+Among chains whose blocks all satisfy these rules, the active chain is the one whose tip has the greatest cumulative work. A competing tip of equal work does not displace a node's current tip. Nodes may therefore hold different tips until a later block breaks the tie.
+
 ## Block Validation Rules
 
 | ID | Rule | Function |
@@ -45,9 +49,12 @@ Genesis|The *genesis* block is the first block in the Bitcoin timechain.
 Header|A *header* is a structured set of fields over the first 80 bytes in a block.
 Timechain|A *timechain* is a tree of validated blocks.
 Proof of Work|A 256-bit hash must be found that does not exceed a given target value. 
+Work|The work of a header with target T is ⌊2²⁵⁶ / (T + 1)⌋. The work of a chain is the sum over its headers.
 Preceding Transaction|A preceding transaction is one that appears in an ancestor block or earlier in the current block.
 Outpoint|An outpoint contains a transaction hash and output index. In a transaction input, it references the output of the most recent preceding transaction with the specified hash and index.
-Spent|An output is spent when it is referenced by a transaction input.
+Spent|An output is spent when its outpoint is referenced by a transaction input.
+Provably Unspendable|An output is provably unspendable if its locking script begins with 0x6a or exceeds 10,000 bytes, or if it is the genesis coinbase output.
+Admitted|An output is admitted if it is created in a preceding transaction and is not provably unspendable.
 Coinbase|A coinbase is a transaction with exactly one input whose outpoint is null.
 Witness|Witness data is segregated transaction input data committed separately under SegWit rules.
 Signature Operation|A signature operation is a script accounting unit associated with signature-checking opcodes.

@@ -25,6 +25,7 @@ add_executable(hornetlib_tests
    data/utxo/block_outputs_test.cpp
    data/utxo/database_test.cpp
    data/utxo/directory_test.cpp
+   data/utxo/duplicate_coinbase_test.cpp
    data/utxo/filter_test.cpp
    data/utxo/index_test.cpp
    data/utxo/joiner_test.cpp
@@ -50,6 +51,7 @@ add_executable(hornetlib_tests
    protocol/genesis_test.cpp
    protocol/handshake_test.cpp
    protocol/parser_test.cpp
+   protocol/transaction_test.cpp
    protocol/script/parser_test.cpp
    protocol/script/runtime/stack_call_test.cpp
    protocol/script/runtime/push_ops_test.cpp

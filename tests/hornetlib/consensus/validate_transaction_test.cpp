@@ -7,6 +7,7 @@
 
 #include "hornetlib/encoding/reader.h"
 #include "hornetlib/encoding/writer.h"
+#include "hornetlib/protocol/constants.h"
 #include "hornetlib/protocol/transaction.h"
 #include "testutil/round_trip.h"
 
@@ -32,6 +33,22 @@ TEST(ValidatorTest, AcceptsValidTransaction) {
 
   auto result = ValidateTransaction(RoundTrip(tx));
   EXPECT_TRUE(result);
+}
+
+TEST(ValidatorTest, RejectsGenesisCoinbaseSpend) {
+  protocol::Transaction tx;
+  tx.SetVersion(1);
+  tx.ResizeInputs(1);
+  tx.Input(0).previous_output.hash = protocol::kGenesisCoinbaseTxid;
+  tx.Input(0).previous_output.index = 0;
+  tx.Input(0).sequence = 0xffffffff;
+  tx.SetSignatureScript(0, std::vector<uint8_t>{0xaa, 0xbb});
+  tx.ResizeOutputs(1);
+  tx.Output(0).value = 50'000;
+  tx.SetPkScript(0, std::vector<uint8_t>{0xcc, 0xdd});
+  tx.SetLockTime(0);
+
+  EXPECT_EQ(ValidateTransaction(RoundTrip(tx)), Error::Transaction_GenesisCoinbaseSpend);
 }
 
 TEST(ValidatorTest, RejectsEmptyInputs) {

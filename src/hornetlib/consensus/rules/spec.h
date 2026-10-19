@@ -43,7 +43,8 @@ static constexpr auto kConsensusRules = All{
       Rule{ValidateOutputsSum},               // The sum of a transaction's output amounts MUST NOT exceed 21,000,000 coins.
       Rule{ValidateUniqueInputs},             // A transaction's inputs MUST NOT contain duplicate outpoints.
       Rule{ValidateCoinbaseSignatureSize},    // A coinbase's sig script size MUST be between 2 and 100 bytes inclusive.
-      Rule{ValidateInputsPrevout}             // A non-coinbase transaction's inputs MUST have non-null previous outputs.    
+      Rule{ValidateInputsPrevout},            // A non-coinbase transaction's inputs MUST have non-null previous outputs.
+      Rule{ValidateGenesisCoinbaseUnspent}    // The genesis coinbase output MUST NOT be spent.
     }}}, 
   All{                                        // ## Contextual Rules
     Rule{ValidateTransactionFinality},        // All transactions in the block MUST be final given the block height and locktime rules.
@@ -58,8 +59,8 @@ static constexpr auto kConsensusRules = All{
     }})
   }}},
   With{MakeBlockSpendContext, All{            // ## Spending Rules
-    Rule{ValidateOutPointsUnique},            // BIP30: Transaction outputs MUST NOT give rise to outpoints that reference existing unspent outputs, except in blocks listed in Table 2.
-    Rule{ValidateInputPrevoutsCreated},       // A non-coinbase input MUST reference an output created in a preceding transaction.
+    Rule{ValidateOutPointsUnique},            // BIP30: A transaction output MUST NOT duplicate the outpoint of an admitted unspent output, except in blocks listed in Table 2.
+    Rule{ValidateInputPrevoutsCreated},       // A non-coinbase input MUST reference an admitted output.
     Rule{ValidateInputPrevoutsUnspent},       // A non-coinbase input MUST NOT reference an output that was spent in a preceding transaction.
     Rule{ValidateSigOpCosts},                 // The total signature-operation cost over all transactions MUST NOT exceed 80,000.
     Rule{ValidateBlockSubsidy},               // The total amount in coinbase outputs MUST NOT exceed the block reward.

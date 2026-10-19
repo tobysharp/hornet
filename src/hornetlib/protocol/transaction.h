@@ -257,19 +257,21 @@ class TransactionDetail {
 
     // Witnesses
     if (witness) {
-      bool has_witness_data = false;
+      // A witness section is superfluous, and the encoding invalid, only when every input's stack is empty.
+      bool has_witness = false;
       const auto witness_start = reader.GetPos();
       data.ResizeWitnesses(witnesses, inputs.Size());
       for (Witness& witness : witnesses.Span(data.witnesses)) {
-        data.ResizeComponents(witness, reader.ReadVarInt<int>());
+        const int components = reader.ReadVarInt<int>();
+        has_witness |= components > 0;
+        data.ResizeComponents(witness, components);
         for (Component& component : witness.Span(data.components)) {
-          int script_size = reader.ReadVarInt<int>();
-          has_witness_data |= script_size > 0;
+          const int script_size = reader.ReadVarInt<int>();
           data.ResizeScriptBytes(component, script_size);
           reader.ReadBytes(component.Span(data.scripts));
         }
       }
-      if (!has_witness_data) util::ThrowRuntimeError("Invalid transaction format");
+      if (!has_witness) util::ThrowRuntimeError("Invalid transaction format");
       const int witness_bytes = reader.GetPos() - witness_start;
       witness_size_bytes += witness_bytes;
     }

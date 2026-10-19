@@ -56,6 +56,7 @@ TEST(GenesisTest, DeserializeMatchesFields) {
   EXPECT_EQ(block.GetTransactionCount(), 1);
 
   const auto tx = block.Transaction(0);
+  EXPECT_EQ(tx.GetHash(), kGenesisCoinbaseTxid);
   EXPECT_EQ(tx.Version(), 1);
   EXPECT_EQ(tx.InputCount(), 1);
   EXPECT_EQ(tx.Input(0).previous_output.hash, Hash{});
