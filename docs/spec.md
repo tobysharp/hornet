@@ -30,6 +30,10 @@ Copyright © 2026 Toby Sharp \
 
 Below is an auto-generated rendering of Hornet’s [declarative specification](../src/hornetlib/consensus/rules/spec.h) of Bitcoin block validity. It lists the semantic invariants that together determine whether a block is consensus-valid, with links to the corresponding Hornet validation functions that realize those invariants in executable form.
 
+The rules apply to a deserialized block, and its sizes and weights are those of its canonical serialization.
+
+Among chains whose blocks all satisfy these rules, the active chain is the one whose tip has the greatest cumulative work. A competing tip of equal work does not displace a node's current tip. Nodes may therefore hold different tips until a later block breaks the tie.
+
 ## Block Validation Rules
 
 | ID | Rule | Function |
@@ -51,14 +55,15 @@ L02|A block’s Merkle root field MUST equal the unique Merkle root of its trans
 L03|A block’s serialized size excluding witness flags and data MUST NOT exceed 1,000,000 bytes.|[`ValidateOriginalSizeLimit`](../src/hornetlib/consensus/rules/validate_local.h#L44)
 L04|A block's first transaction MUST be its only coinbase transaction.|[`ValidateCoinbase`](../src/hornetlib/consensus/rules/validate_local.h#L51)
 L05|The total legacy signature-operation count over all input and output scripts MUST NOT exceed 20,000.|[`ValidateSignatureOps`](../src/hornetlib/consensus/rules/validate_local.h#L58)
-L06|A transaction MUST contain at least one input.|[`ValidateInputCount`](../src/hornetlib/consensus/rules/validate_transaction.h#L13)
+L06|A transaction MUST contain at least one input.|[`ValidateInputCount`](../src/hornetlib/consensus/rules/validate_transaction.h#L14)
 L07|A transaction MUST contain at least one output.|[`ValidateOutputCount`](../src/hornetlib/consensus/rules/validate_transaction.h#L20)
-L08|A transaction's serialized size excluding witness flags and data MUST NOT exceed 1,000,000 bytes.|[`ValidateTransactionSize`](../src/hornetlib/consensus/rules/validate_transaction.h#L27)
-L09|All transaction output amounts MUST be non-negative.|[`ValidateOutputsNonNegative`](../src/hornetlib/consensus/rules/validate_transaction.h#L35)
-L10|The sum of a transaction's output amounts MUST NOT exceed 21,000,000 coins.|[`ValidateOutputsSum`](../src/hornetlib/consensus/rules/validate_transaction.h#L44)
-L11|A transaction's inputs MUST NOT contain duplicate outpoints.|[`ValidateUniqueInputs`](../src/hornetlib/consensus/rules/validate_transaction.h#L59)
-L12|A coinbase's sig script size MUST be between 2 and 100 bytes inclusive.|[`ValidateCoinbaseSignatureSize`](../src/hornetlib/consensus/rules/validate_transaction.h#L73)
-L13|A non-coinbase transaction's inputs MUST have non-null previous outputs.|[`ValidateInputsPrevout`](../src/hornetlib/consensus/rules/validate_transaction.h#L85)
+L08|A transaction's serialized size excluding witness flags and data MUST NOT exceed 1,000,000 bytes.|[`ValidateTransactionSize`](../src/hornetlib/consensus/rules/validate_transaction.h#L26)
+L09|All transaction output amounts MUST be non-negative.|[`ValidateOutputsNonNegative`](../src/hornetlib/consensus/rules/validate_transaction.h#L32)
+L10|The sum of a transaction's output amounts MUST NOT exceed 21,000,000 coins.|[`ValidateOutputsSum`](../src/hornetlib/consensus/rules/validate_transaction.h#L40)
+L11|A transaction's inputs MUST NOT contain duplicate outpoints.|[`ValidateUniqueInputs`](../src/hornetlib/consensus/rules/validate_transaction.h#L54)
+L12|A coinbase's sig script size MUST be between 2 and 100 bytes inclusive.|[`ValidateCoinbaseSignatureSize`](../src/hornetlib/consensus/rules/validate_transaction.h#L66)
+L13|A non-coinbase transaction's inputs MUST have non-null previous outputs.|[`ValidateInputsPrevout`](../src/hornetlib/consensus/rules/validate_transaction.h#L76)
+L14|The genesis coinbase output MUST NOT be spent.|[`ValidateGenesisCoinbaseUnspent`](../src/hornetlib/consensus/rules/validate_transaction.h#L85)
 |
 ||**Contextual Rules**
 |
@@ -72,16 +77,16 @@ C07|From BIP141: A post-SegWit block containing a witness commitment MUST commit
 |
 ||**Spending Rules**
 |
-S01|BIP30: Transaction outputs MUST NOT give rise to outpoints that reference existing unspent outputs, except in blocks listed in Table 2.|[`ValidateOutPointsUnique`](../src/hornetlib/consensus/rules/validate_spending.h#L147)
-S02|A non-coinbase input MUST reference an output created in a preceding transaction.|[`ValidateInputPrevoutsCreated`](../src/hornetlib/consensus/rules/validate_spending.h#L173)
-S03|A non-coinbase input MUST NOT reference an output that was spent in a preceding transaction.|[`ValidateInputPrevoutsUnspent`](../src/hornetlib/consensus/rules/validate_spending.h#L178)
-S04|The total signature-operation cost over all transactions MUST NOT exceed 80,000.|[`ValidateSigOpCosts`](../src/hornetlib/consensus/rules/validate_spending.h#L183)
-S05|The total amount in coinbase outputs MUST NOT exceed the block reward.|[`ValidateBlockSubsidy`](../src/hornetlib/consensus/rules/validate_spending.h#L197)
-S06|The sum of output values in a transaction MUST NOT exceed the sum of all input values being spent.|[`ValidateOutputsAtMostInputs`](../src/hornetlib/consensus/rules/validate_spending.h#L70)
-S07|From BIP68: Each input that signals a relative lock-time interval MUST have reached relative finality.|[`ValidateSequenceLocks`](../src/hornetlib/consensus/rules/validate_spending.h#L78)
-S08|A non-coinbase input MUST satisfy the spent output's locking script.|[`ValidateScripts`](../src/hornetlib/consensus/rules/validate_spending.h#L27)
-S09|A pre-Taproot script dependency of a non-coinbase input spend MUST NOT exceed 10,000 bytes.|[`ValidateScriptSize`](../src/hornetlib/consensus/rules/validate_spending.h#L45)
-S10|Coinbase outputs MUST NOT be spent before 100 blocks after their creation.|[`ValidateCoinbaseMaturity`](../src/hornetlib/consensus/rules/validate_spending.h#L56)
+S01|BIP30: A transaction output MUST NOT duplicate the outpoint of an admitted unspent output, except in blocks listed in Table 2.|[`ValidateOutPointsUnique`](../src/hornetlib/consensus/rules/validate_spending.h#L145)
+S02|A non-coinbase input MUST reference an admitted output.|[`ValidateInputPrevoutsCreated`](../src/hornetlib/consensus/rules/validate_spending.h#L165)
+S03|A non-coinbase input MUST NOT reference an output that was spent in a preceding transaction.|[`ValidateInputPrevoutsUnspent`](../src/hornetlib/consensus/rules/validate_spending.h#L170)
+S04|The total signature-operation cost over all transactions MUST NOT exceed 80,000.|[`ValidateSigOpCosts`](../src/hornetlib/consensus/rules/validate_spending.h#L175)
+S05|The total amount in coinbase outputs MUST NOT exceed the block reward.|[`ValidateBlockSubsidy`](../src/hornetlib/consensus/rules/validate_spending.h#L189)
+S06|The sum of output values in a transaction MUST NOT exceed the sum of all input values being spent.|[`ValidateOutputsAtMostInputs`](../src/hornetlib/consensus/rules/validate_spending.h#L68)
+S07|From BIP68: Each input that signals a relative lock-time interval MUST have reached relative finality.|[`ValidateSequenceLocks`](../src/hornetlib/consensus/rules/validate_spending.h#L76)
+S08|A non-coinbase input MUST satisfy the spent output's locking script.|[`ValidateScripts`](../src/hornetlib/consensus/rules/validate_spending.h#L25)
+S09|A pre-Taproot script dependency of a non-coinbase input spend MUST NOT exceed 10,000 bytes.|[`ValidateScriptSize`](../src/hornetlib/consensus/rules/validate_spending.h#L43)
+S10|Coinbase outputs MUST NOT be spent before 100 blocks after their creation.|[`ValidateCoinbaseMaturity`](../src/hornetlib/consensus/rules/validate_spending.h#L54)
 
 ## Definitions
 
@@ -92,9 +97,12 @@ Genesis|The *genesis* block is the first block in the Bitcoin timechain.
 Header|A *header* is a structured set of fields over the first 80 bytes in a block.
 Timechain|A *timechain* is a tree of validated blocks.
 Proof of Work|A 256-bit hash must be found that does not exceed a given target value. 
+Work|The work of a header with target T is ⌊2²⁵⁶ / (T + 1)⌋. The work of a chain is the sum over its headers.
 Preceding Transaction|A preceding transaction is one that appears in an ancestor block or earlier in the current block.
 Outpoint|An outpoint contains a transaction hash and output index. In a transaction input, it references the output of the most recent preceding transaction with the specified hash and index.
-Spent|An output is spent when it is referenced by a transaction input.
+Spent|An output is spent when its outpoint is referenced by a transaction input.
+Provably Unspendable|An output is provably unspendable if its locking script begins with 0x6a or exceeds 10,000 bytes, or if it is the genesis coinbase output.
+Admitted|An output is admitted if it is created in a preceding transaction and is not provably unspendable.
 Coinbase|A coinbase is a transaction with exactly one input whose outpoint is null.
 Witness|Witness data is segregated transaction input data committed separately under SegWit rules.
 Signature Operation|A signature operation is a script accounting unit associated with signature-checking opcodes.

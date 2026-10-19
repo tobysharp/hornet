@@ -35,7 +35,8 @@ class ConfigurableChainOutputsView : public ChainOutputsView {
   bool unique_;
 };
 
-test::Blockchain MakeLockingScriptSpendChain(std::span<const uint8_t> locking_script) {
+test::Blockchain MakeLockingScriptSpendChain(std::span<const uint8_t> locking_script,
+                                             std::span<const uint8_t> signature_script = {}) {
   test::Blockchain chain = test::LoadValidationPipelineChain();
 
   protocol::Block funding = chain.Sample(2, true, 1, 1);
@@ -57,6 +58,7 @@ test::Blockchain MakeLockingScriptSpendChain(std::span<const uint8_t> locking_sc
   tx.ResizeOutputs(1);
   tx.Input(0).previous_output = prevout;
   tx.Input(0).sequence = chain.UnspentSize() - 1;
+  if (!signature_script.empty()) tx.SetSignatureScript(0, signature_script);
   tx.Output(0).value = amount;
   tx.SetPkScript(0, std::vector<uint8_t>{0x51});
   tx.SetLockTime(0);
@@ -336,7 +338,7 @@ TEST(ValidateSpendingBlockTest, RejectsMalformedTrailingLockingScriptBytes) {
   test::ExpectValidationResult([script] { return MakeLockingScriptSpendChain(script); }, Error::Spending_ScriptLocked);
 }
 
-TEST(ValidateSpendingBlockTest, RejectsOversizedLockingScript) {
+std::vector<uint8_t> MakeOversizedScript() {
   constexpr int kPushCount = 20;
   constexpr int kPushSize = 520;
 
@@ -345,10 +347,285 @@ TEST(ValidateSpendingBlockTest, RejectsOversizedLockingScript) {
 
   protocol::script::Writer writer;
   for (int i = 0; i < kPushCount; ++i) writer.PushData(payload);
-  const auto script = writer.Release();
+  return writer.Release();
+}
 
+// An output whose locking script exceeds 10,000 bytes is not admitted, so spending it fails S02 before any script runs.
+TEST(ValidateSpendingBlockTest, RejectsOversizedLockingScriptAsNotAdmitted) {
+  const auto script = MakeOversizedScript();
   ASSERT_GT(script.size(), 10'000u);
-  test::ExpectValidationResult([script] { return MakeLockingScriptSpendChain(script); }, Error::Spending_OversizedScript);
+  test::ExpectValidationResult([script] { return MakeLockingScriptSpendChain(script); },
+                               Error::Spending_OutPointNotCreated);
+}
+
+TEST(ValidateSpendingBlockTest, RejectsOversizedSignatureScript) {
+  const auto script = MakeOversizedScript();
+  ASSERT_GT(script.size(), 10'000u);
+  test::ExpectValidationResult([script] { return MakeLockingScriptSpendChain(std::vector<uint8_t>{0x51}, script); },
+                               Error::Spending_OversizedScript);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// BIP30 search domain
+//
+// Core's coin set never receives a provably unspendable output (a script beginning with OP_RETURN, or longer than
+// 10,000 bytes), so such outputs do not count as existing unspent outputs in the BIP30 search. A byte-identical
+// duplicate of an earlier transaction is therefore permitted once its spendable outputs have all been spent.
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+using protocol::script::lang::Op;
+
+int FindUnspentIndex(const test::Blockchain& chain, const protocol::OutPoint& prevout) {
+  for (int i = 0; i < chain.UnspentSize(); ++i)
+    if (chain.Unspent(i).prevout == prevout) return i;
+  return -1;
+}
+
+// Builds a chain whose height-1 coinbase pays a spendable output and a second output locked by `second_script`, then
+// spends the spendable output once mature, optionally giving that spend a second output locked by `spend_script`. A
+// later coinbase copying the height-1 coinbase byte-for-byte is the pre-BIP34 duplicate-coinbase shape that BIP30
+// governs.
+test::Blockchain MakeSpentCoinbaseChain(std::span<const uint8_t> second_script,
+                                        std::span<const uint8_t> spend_script = {}) {
+  constexpr int kCoinbaseMaturity = 100;
+  test::Blockchain chain;
+
+  protocol::Block funding = chain.Sample(1);
+  auto coinbase = funding.Transaction(0);
+  coinbase.ResizeOutputs(2);
+  coinbase.Output(1).value = 0;
+  coinbase.SetPkScript(1, second_script);
+  chain.AppendFixed(std::move(funding));
+
+  for (int i = 0; i < kCoinbaseMaturity; ++i) chain.Append(chain.Sample(1));
+
+  const protocol::OutPoint prevout{chain[1]->Transaction(0).GetHash(), 0};
+  const int unspent_index = FindUnspentIndex(chain, prevout);
+  EXPECT_GE(unspent_index, 0);
+
+  protocol::Block spend = chain.Sample(1);
+  protocol::Transaction tx = MakeSpendTransaction(prevout, chain.Unspent(unspent_index).amount);
+  tx.Input(0).sequence = unspent_index;  // The test chain tracks spends by unspent index.
+  if (!spend_script.empty()) {
+    tx.ResizeOutputs(2);
+    tx.Output(1).value = 0;
+    tx.SetPkScript(1, spend_script);
+  }
+  spend.AddTransaction(tx);
+  chain.AppendFixed(std::move(spend));
+
+  return chain;
+}
+
+// Returns the BIP30 verdict for a candidate block whose coinbase duplicates the height-1 coinbase.
+Result EvaluateDuplicateCoinbase(test::Blockchain chain) {
+  protocol::Block candidate = chain.Sample(1);
+  candidate.Transaction(0).CopyFrom(chain[1]->Transaction(0));
+  test::FixMerkleRoot(candidate);
+  return EvaluateCandidateSpendingBlock(
+      chain, candidate, [](const BlockSpendContext& context) { return ValidateOutPointsUnique(context); });
+}
+
+TEST(ValidateSpendingBlockTest, AcceptsDuplicateOfSpentCoinbaseWithUnspentOpReturnOutput) {
+  const std::vector<uint8_t> script = {+Op::Return, 0x04, 'H', 'N', 'E', 'T'};
+  EXPECT_EQ(EvaluateDuplicateCoinbase(MakeSpentCoinbaseChain(script)), Result{});
+}
+
+TEST(ValidateSpendingBlockTest, AcceptsDuplicateOfSpentCoinbaseWithUnspentOversizedOutput) {
+  const std::vector<uint8_t> script(10'001, +Op::PushConst1);
+  EXPECT_EQ(EvaluateDuplicateCoinbase(MakeSpentCoinbaseChain(script)), Result{});
+}
+
+TEST(ValidateSpendingBlockTest, RejectsDuplicateOfSpentCoinbaseWithUnspentMaximumSizeOutput) {
+  const std::vector<uint8_t> script(10'000, +Op::PushConst1);
+  EXPECT_EQ(EvaluateDuplicateCoinbase(MakeSpentCoinbaseChain(script)), Error::Spending_OutPointDuplicate);
+}
+
+TEST(ValidateSpendingBlockTest, RejectsDuplicateOfSpentCoinbaseWithUnspentNonLeadingOpReturnOutput) {
+  const std::vector<uint8_t> script = {+Op::PushConst1, +Op::Return};
+  EXPECT_EQ(EvaluateDuplicateCoinbase(MakeSpentCoinbaseChain(script)), Error::Spending_OutPointDuplicate);
+}
+
+TEST(ValidateSpendingBlockTest, RejectsDuplicateOfSpentCoinbaseWithUnspentEmptyScriptOutput) {
+  const std::vector<uint8_t> script;
+  EXPECT_EQ(EvaluateDuplicateCoinbase(MakeSpentCoinbaseChain(script)), Error::Spending_OutPointDuplicate);
+}
+
+// A non-coinbase duplicate needs its inputs recreated by a duplicate of its funder, so every duplicate chain is rooted
+// in a duplicate coinbase. Here the coinbase and its child both carry an OP_RETURN output, the child's spendable output
+// is spent, and the candidate replays both. Core accepts the replay since neither OP_RETURN output is a coin.
+TEST(ValidateSpendingBlockTest, AcceptsReplayedDuplicateChainWhoseOnlyUnspentOutputsAreOpReturn) {
+  const std::vector<uint8_t> op_return = {+Op::Return};
+  test::Blockchain chain = MakeSpentCoinbaseChain(op_return, op_return);
+
+  const int funding_height = chain.Length() - 1;
+  const protocol::OutPoint prevout{chain[funding_height]->Transaction(1).GetHash(), 0};
+  const int unspent_index = FindUnspentIndex(chain, prevout);
+  EXPECT_GE(unspent_index, 0);
+
+  protocol::Block spend = chain.Sample(1);
+  protocol::Transaction tx = MakeSpendTransaction(prevout, chain.Unspent(unspent_index).amount);
+  tx.Input(0).sequence = unspent_index;
+  spend.AddTransaction(tx);
+  chain.AppendFixed(std::move(spend));
+
+  protocol::Block candidate = chain.Sample(1);
+  candidate.Transaction(0).CopyFrom(chain[1]->Transaction(0));
+  candidate.AddTransaction(chain[funding_height]->Transaction(1));
+  test::FixMerkleRoot(candidate);
+
+  EXPECT_EQ(EvaluateCandidateSpendingBlock(
+                chain, candidate, [](const BlockSpendContext& context) { return ValidateOutPointsUnique(context); }),
+            Result{});
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// BIP30 skip window
+//
+// Core skips the BIP30 search once the block at the BIP34 height is mainnet's, because BIP34 makes new duplicates
+// impossible, and resumes it from height 1,983,702, the first height a pre-BIP34 coinbase could legally be repeated.
+// On any chain with a different block at the BIP34 height the search runs at every height.
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+class FixedHashAncestryView : public HeaderAncestryView {
+ public:
+  explicit FixedHashAncestryView(protocol::Hash hash) : hash_(hash) {}
+  int Length() const override { return 1; }
+  const protocol::Hash& HashAt(int) const override { return hash_; }
+  uint32_t TimestampAt(int) const override { return 0; }
+  std::vector<uint32_t> LastNTimestamps(int, int) const override { return {0}; }
+
+ private:
+  protocol::Hash hash_;
+};
+
+Result EvaluateOutPointsUniqueAt(int height, const protocol::Hash& bip34_block_hash) {
+  const protocol::Block block;
+  const FixedHashAncestryView ancestry{bip34_block_hash};
+  const ConfigurableChainOutputsView duplicates{true, true, false};
+  return ValidateOutPointsUnique({block, ancestry, duplicates, height});
+}
+
+constexpr auto kMainnetBIP34Hash = "000000000000024b89b42a942fe0d9fea3bb44ab7bd1b19115dd6a759c0808b8"_sha256;
+constexpr auto kOtherBIP34Hash = "000000000000024b89b42a942fe0d9fea3bb44ab7bd1b19115dd6a759c0808b9"_sha256;
+
+TEST(ValidateSpendingBlockTest, SkipsBIP30AboveMainnetBIP34Block) {
+  EXPECT_EQ(EvaluateOutPointsUniqueAt(227'932, kMainnetBIP34Hash), Result{});
+  EXPECT_EQ(EvaluateOutPointsUniqueAt(300'000, kMainnetBIP34Hash), Result{});
+  EXPECT_EQ(EvaluateOutPointsUniqueAt(1'983'701, kMainnetBIP34Hash), Result{});
+}
+
+TEST(ValidateSpendingBlockTest, EnforcesBIP30AtAndBelowBIP34Height) {
+  EXPECT_EQ(EvaluateOutPointsUniqueAt(227'931, kMainnetBIP34Hash), Error::Spending_OutPointDuplicate);
+  EXPECT_EQ(EvaluateOutPointsUniqueAt(100'000, kMainnetBIP34Hash), Error::Spending_OutPointDuplicate);
+}
+
+TEST(ValidateSpendingBlockTest, EnforcesBIP30OnChainWithoutMainnetBIP34Block) {
+  EXPECT_EQ(EvaluateOutPointsUniqueAt(300'000, kOtherBIP34Hash), Error::Spending_OutPointDuplicate);
+}
+
+TEST(ValidateSpendingBlockTest, ResumesBIP30From1983702) {
+  EXPECT_EQ(EvaluateOutPointsUniqueAt(1'983'702, kMainnetBIP34Hash), Error::Spending_OutPointDuplicate);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Duplicated coinbase outputs
+//
+// When a BIP30-exempt duplicate coinbase is connected (blocks 91842 and 91880), Core overwrites the earlier coin, so
+// one coin remains at the newer height, and a spend of it leaves nothing behind. Both such coins are unspent on
+// mainnet.
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Builds a chain whose height-1 and height-2 coinbases are byte-identical, as the UTXO layer must store them.
+test::Blockchain MakeDuplicatedCoinbaseChain() {
+  test::Blockchain chain;
+  chain.Append(chain.Sample(1));
+
+  protocol::Block duplicate = chain.Sample(1);
+  duplicate.Transaction(0).CopyFrom(chain[1]->Transaction(0));
+  chain.AppendFixed(std::move(duplicate));
+  return chain;
+}
+
+TEST(ValidateSpendingBlockTest, DuplicatedCoinbaseOutputResolvesToNewestFunding) {
+  const test::Blockchain chain = MakeDuplicatedCoinbaseChain();
+  const protocol::OutPoint prevout{chain[1]->Transaction(0).GetHash(), 0};
+
+  protocol::Block candidate;
+  candidate.AddTransaction(MakeCoinbaseLikeTransaction());
+  candidate.AddTransaction(MakeSpendTransaction(prevout, 1));
+  test::FixMerkleRoot(candidate);
+
+  EXPECT_EQ(EvaluateCandidateSpendingBlock(chain, candidate,
+                                           [](const BlockSpendContext& context) {
+                                             const auto spends = context.unspent.Spends(context.block);
+                                             if (!spends) return Result{Error::Spending_OutPointNotCreated};
+                                             for (const JoinedSpend spend : *spends)
+                                               EXPECT_EQ(spend.spends[0].funding_height, 2);
+                                             return Result{};
+                                           }),
+            Result{});
+}
+
+TEST(ValidateSpendingBlockTest, RejectsSecondSpendOfDuplicatedCoinbaseOutput) {
+  test::Blockchain chain = MakeDuplicatedCoinbaseChain();
+  const protocol::OutPoint prevout{chain[1]->Transaction(0).GetHash(), 0};
+  const int unspent_index = FindUnspentIndex(chain, prevout);
+  EXPECT_GE(unspent_index, 0);
+
+  protocol::Block spend = chain.Sample(1);
+  protocol::Transaction tx = MakeSpendTransaction(prevout, chain.Unspent(unspent_index).amount);
+  tx.Input(0).sequence = unspent_index;
+  spend.AddTransaction(tx);
+  chain.AppendFixed(std::move(spend));
+
+  protocol::Block candidate;
+  candidate.AddTransaction(MakeCoinbaseLikeTransaction());
+  candidate.AddTransaction(MakeSpendTransaction(prevout, 1));
+  test::FixMerkleRoot(candidate);
+
+  EXPECT_EQ(
+      EvaluateCandidateSpendingBlock(
+          chain, candidate, [](const BlockSpendContext& context) { return ValidateInputPrevoutsUnspent(context); }),
+      Error::Spending_OutPointSpent);
+
+  // With the coin gone, a further copy of the coinbase no longer collides under BIP30.
+  EXPECT_EQ(EvaluateDuplicateCoinbase(chain), Result{});
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Genesis coinbase
+//
+// Core never connects the genesis block's transactions, so its coinbase output is neither spendable nor part of the
+// BIP30 search domain.
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+TEST(ValidateSpendingBlockTest, RejectsGenesisCoinbaseSpendAsNotCreated) {
+  const test::Blockchain chain = test::LoadValidationPipelineChain();
+  const protocol::OutPoint genesis_prevout{protocol::Block::Genesis().Transaction(0).GetHash(), 0};
+
+  protocol::Block candidate;
+  candidate.AddTransaction(MakeCoinbaseLikeTransaction());
+  candidate.AddTransaction(MakeSpendTransaction(genesis_prevout, 1));
+  test::FixMerkleRoot(candidate);
+
+  EXPECT_EQ(
+      EvaluateCandidateSpendingBlock(
+          chain, candidate, [](const BlockSpendContext& context) { return ValidateInputPrevoutsCreated(context); }),
+      Error::Spending_OutPointNotCreated);
+}
+
+TEST(ValidateSpendingBlockTest, AcceptsGenesisCoinbaseDuplicateAsUnique) {
+  const test::Blockchain chain = test::LoadValidationPipelineChain();
+
+  protocol::Block genesis = protocol::Block::Genesis();
+  protocol::Block candidate;
+  candidate.AddTransaction(genesis.Transaction(0));
+  test::FixMerkleRoot(candidate);
+
+  EXPECT_EQ(EvaluateCandidateSpendingBlock(
+                chain, candidate, [](const BlockSpendContext& context) { return ValidateOutPointsUnique(context); }),
+            Result{});
 }
 
 }  // namespace
