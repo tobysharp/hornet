@@ -7,6 +7,7 @@ add_executable(hornetlib_tests
    consensus/validate_sigop_costs_test.cpp
    consensus/validate_block_test.cpp
    consensus/validate_chain_harness.cpp
+   consensus/validate_header_test.cpp
    consensus/validate_spending_block_test.cpp
    consensus/validate_spending_input_test.cpp
    consensus/validate_spending_transaction_test.cpp

@@ -21,7 +21,7 @@ static constexpr auto kHeaderRules = All{
   Rule{ValidateProofOfWork},              // A header's hash MUST achieve its own proof-of-work target.
   Rule{ValidateDifficultyAdjustment},     // A header's proof-of-work target MUST satisfy the difficulty adjustment formula for the timechain.
   Rule{ValidateMedianTimePast},           // A header timestamp MUST be strictly greater than the median of its 11 ancestors' timestamps.
-  Rule{ValidateTimestampCurrent},         // A header timestamp MUST be less than or equal to network-adjusted time plus 2 hours.
+  Rule{ValidateTimestampCurrent},         // A header timestamp MUST be less than or equal to system time plus 2 hours.
   Rule{ValidateVersion}                   // A header's version number MUST NOT have been retired by any activated soft fork.
 };
 

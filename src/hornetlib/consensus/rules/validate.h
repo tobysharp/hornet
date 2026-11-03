@@ -13,7 +13,7 @@ namespace hornet::consensus::rules {
 [[nodiscard]] inline Result ValidateHeader(const protocol::BlockHeader& header,
                                            const protocol::BlockHeader& parent,
                                            const HeaderAncestryView& view,
-                                           const int64_t current_time) {
+                                           const std::chrono::seconds current_time) {
   return Validate(kHeaderRules,
       HeaderValidationContext{header, parent, view, current_time, view.Length()});
 }
@@ -47,7 +47,7 @@ namespace hornet::consensus::rules {
 [[nodiscard]] inline Result ValidateBlock(const protocol::Block& block,
                                         const protocol::BlockHeader& parent,
                                         const HeaderAncestryView& view,
-                                        const int64_t current_time,
+                                        const std::chrono::seconds current_time,
                                         const UnspentOutputsView& unspent) {
   const BlockValidationContext context{block, parent, view, current_time, unspent};
   return Validate(kBlockRules, context);
