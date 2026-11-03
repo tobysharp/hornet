@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 
 #include "hornetlib/consensus/bips.h"
@@ -21,7 +22,7 @@ struct BlockValidationContext {
   const protocol::Block& block;
   const protocol::BlockHeader& parent;
   const HeaderAncestryView& view;
-  const int64_t current_time;
+  const std::chrono::seconds current_time;  // Wall-clock time (epoch seconds) for the future-timestamp rule.
   const UnspentOutputsView& unspent;
 };
 
@@ -29,7 +30,7 @@ struct HeaderValidationContext {
   const protocol::BlockHeader& header;
   const protocol::BlockHeader& parent;
   const HeaderAncestryView& view;
-  const int64_t current_time;
+  const std::chrono::seconds current_time;  // Wall-clock time (epoch seconds) for the future-timestamp rule.
   const int height;
 };
 
