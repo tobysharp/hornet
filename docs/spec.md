@@ -41,7 +41,7 @@ H01|A header MUST reference the hash of a valid parent block.|[`ValidatePrevious
 H02|A header's hash MUST achieve its own proof-of-work target.|[`ValidateProofOfWork`](../src/hornetlib/consensus/rules/validate_header.h#L39)
 H03|A header's proof-of-work target MUST satisfy the difficulty adjustment formula for the timechain.|[`ValidateDifficultyAdjustment`](../src/hornetlib/consensus/rules/validate_header.h#L47)
 H04|A header timestamp MUST be strictly greater than the median of its 11 ancestors' timestamps.|[`ValidateMedianTimePast`](../src/hornetlib/consensus/rules/validate_header.h#L54)
-H05|A header timestamp MUST be less than or equal to network-adjusted time plus 2 hours.|[`ValidateTimestampCurrent`](../src/hornetlib/consensus/rules/validate_header.h#L60)
+H05|A header timestamp MUST be less than or equal to system time plus 2 hours.|[`ValidateTimestampCurrent`](../src/hornetlib/consensus/rules/validate_header.h#L60)
 H06|A header's version number MUST NOT have been retired by any activated soft fork.|[`ValidateVersion`](../src/hornetlib/consensus/rules/validate_header.h#L68)
 |
 ||**Local Rules**

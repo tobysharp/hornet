@@ -34,7 +34,7 @@ void PeerNegotiator::OnMessage(const protocol::message::Verack& verack) {
 void PeerNegotiator::OnMessage(const protocol::message::Version& v) {
   if (v.version < protocol::kMinSupportedVersion)
     util::ThrowRuntimeError("Received unsupported protocol version number ", v.version, ".");
-  
+
   // The peer's version number is sent to the minimum of the two exchanged versions.
   if (const auto peer = GetPeer(v)) {
     peer->GetCapabilities().SetVersion(std::min(protocol::kCurrentVersion, v.version));
