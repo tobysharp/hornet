@@ -8,6 +8,7 @@
 #include <span>
 #include <vector>
 
+#include "hornetlib/consensus/utxo.h"
 #include "hornetlib/data/utxo/atomic_vector.h"
 #include "hornetlib/data/utxo/block_outputs.h"
 #include "hornetlib/data/utxo/flusher.h"
@@ -176,11 +177,11 @@ inline int Table::FetchImpl(std::span<const OutputId> rids, std::span<OutputDeta
 
 inline int Table::AppendOutputs(const protocol::Block& block, int height,
                                 TiledVector<OutputKV>* entries) {
-  // Calculates the number of bytes requires for this block's outputs.
+  // Calculates the number of bytes required for this block's admitted outputs.
   size_t bytes = 0;
   for (const auto tx : block.Transactions())
     for (int i = 0; i < tx.OutputCount(); ++i)
-      bytes += sizeof(OutputHeader) + tx.PkScript(i).size();
+      if (consensus::IsOutputAdmissible(tx.PkScript(i))) bytes += sizeof(OutputHeader) + tx.PkScript(i).size();
 
   // Builds a local buffer holding the outputs.
   int count = 0;
@@ -188,10 +189,12 @@ inline int Table::AppendOutputs(const protocol::Block& block, int height,
   data.reserve(bytes);
   const uint64_t offset = next_offset_.fetch_add(bytes);
   for (const auto tx : block.Transactions()) {
-    for (int output = 0; output < tx.OutputCount(); ++output, ++count) {
+    for (int output = 0; output < tx.OutputCount(); ++output) {
+      const auto pk_script = tx.PkScript(output);
+      if (!consensus::IsOutputAdmissible(pk_script)) continue;  // Provably unspendable outputs never enter the set.
+      ++count;
       const protocol::OutPoint prevout{tx.GetHash(), static_cast<uint32_t>(output)};
       const OutputHeader header{height, tx.IsCoinBase(), tx.Output(output).value};
-      const auto pk_script = tx.PkScript(output);
       const uint8_t* pheader = reinterpret_cast<const uint8_t*>(&header);
       const uint64_t address = offset + data.size();
       data.insert(data.end(), pheader, pheader + sizeof(header));

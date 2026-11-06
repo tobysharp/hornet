@@ -62,4 +62,7 @@ inline constexpr int64_t kSatoshisPerCoin = 100'000'000;
 inline constexpr Hash kGenesisHash =
     "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"_hash;
 
+// The txid of the genesis coinbase, whose output is never spendable.
+inline constexpr Hash kGenesisCoinbaseTxid = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"_hash;
+
 }  // namespace hornet::protocol
