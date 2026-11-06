@@ -35,7 +35,7 @@ enum class Error {
   Structure_WitnessDataWithoutCommitment,
   Structure_WitnessDataPreSegwit,
   Structure_BadBlockWeight,
-  
+
   // Transactions
   Transaction_EmptyInputs,
   Transaction_EmptyOutputs,
@@ -45,6 +45,7 @@ enum class Error {
   Transaction_DuplicatedInput,
   Transaction_NullPreviousOutput,
   Transaction_BadCoinBaseSigScriptSize,
+  Transaction_GenesisCoinbaseSpend,
 
   // Spending
   Spending_OutPointDuplicate,

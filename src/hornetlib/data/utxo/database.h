@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hornetlib/consensus/bip30.h"
+#include "hornetlib/consensus/utxo.h"
 #include "hornetlib/data/utxo/index.h"
 #include "hornetlib/data/utxo/table.h"
 #include "hornetlib/data/utxo/tiled_vector.h"
@@ -49,7 +51,7 @@ class Database {
   int Fetch(std::span<const uint64_t> ids, std::span<OutputDetail> outputs,
             std::vector<uint8_t>* scripts) const;
 
-  // Appends all spendable outputs of the given block at the given height.
+  // Appends all admitted outputs of the given block at the given height, retiring any outputs they supersede.
   Pin Append(const protocol::Block& block, int height);
 
   // Removes all outputs at heights greater than or equal to the given height. The given height
@@ -71,6 +73,7 @@ class Database {
   }
   static void AppendSpends(const protocol::Block& block, int height,
                            TiledVector<OutputKV>* entries);
+  static void AppendSupersededOutputs(const protocol::Block& block, int height, TiledVector<OutputKV>* entries);
 
   Table table_;
   Index index_;
@@ -120,6 +123,7 @@ inline Database::Pin Database::Append(const protocol::Block& block, int height) 
   auto entries = index_.MakeAppendBuffer();
   table_.AppendOutputs(block, height, &entries);
   AppendSpends(block, height, &entries);
+  AppendSupersededOutputs(block, height, &entries);
 #if UTXO_LOG
   for (const auto& entry : entries)
     LogDebug() << "Append {" << entry.key.hash << ", " << entry.key.index << "}, height "
@@ -152,6 +156,18 @@ inline void Database::EraseSince(int height) {
       if (!prevout.IsNull()) entries->PushBack(OutputKV::Spent(prevout, height));
     }
   }
+}
+
+// A block listed in Table 2 repeats an earlier coinbase whose output is still unspent. Core overwrites that coin in
+// place, so a single coin remains at the new height. Here the superseded output is retired at the height below the
+// repeat: lookups then resolve to the new output, and compaction annihilates the old one.
+/* static */ inline void Database::AppendSupersededOutputs(const protocol::Block& block, int height,
+                                                           TiledVector<OutputKV>* entries) {
+  if (!consensus::IsBIP30ExceptionBlock(height, block.Header())) return;
+  const auto coinbase = block.Transaction(0);
+  for (int i = 0; i < coinbase.OutputCount(); ++i)
+    if (consensus::IsOutputAdmissible(coinbase.PkScript(i)))
+      entries->PushBack(OutputKV::Spent({coinbase.GetHash(), static_cast<uint32_t>(i)}, height - 1));
 }
 
 inline void Database::SetMutableWindow(int heights) {

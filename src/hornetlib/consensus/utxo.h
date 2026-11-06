@@ -7,9 +7,20 @@
 
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/protocol/block.h"
+#include "hornetlib/protocol/script/lang/op.h"
 #include "hornetlib/protocol/transaction.h"
 
 namespace hornet::consensus {
+
+// An output is admitted if it is created in a preceding transaction and is not provably unspendable. This predicate
+// decides the second condition from the locking script alone: a script beginning with OP_RETURN or exceeding 10,000
+// bytes can never be satisfied, so such outputs never enter the output set. The genesis coinbase output is excluded by
+// the output set itself, which holds nothing from the genesis block.
+[[nodiscard]] inline bool IsOutputAdmissible(std::span<const uint8_t> pk_script) {
+  constexpr int kMaxScriptBytes = 10'000;
+  if (!pk_script.empty() && pk_script.front() == +protocol::script::lang::Op::Return) return false;
+  return std::ssize(pk_script) <= kMaxScriptBytes;
+}
 
 struct SpendRecord {
   int funding_height;
@@ -81,12 +92,10 @@ class ChainOutputsView {
  public:
   virtual ~ChainOutputsView() = default;
 
-  // [S01] Returns success iff no output in this block duplicates an unspent outpoint created by a preceding transaction
-  // (BIP30).
+  // [S01] Returns success iff no output in this block duplicates the outpoint of an admitted unspent output (BIP30).
   virtual bool QueryOutPointsUnique(const protocol::Block& block) const = 0;
 
-  // [S02] Returns success iff every spending input in this block references an output created by a preceding
-  // transaction.
+  // [S02] Returns success iff every spending input in this block references an admitted output.
   virtual bool QueryPreviousOutputsCreated(const protocol::Block& block) const = 0;
 
   // [S03] Returns success iff no spending input in this block references an output spent by a preceding transaction.

@@ -1,8 +1,6 @@
 #pragma once
 
-#include <array>
-#include <tuple>
-
+#include "hornetlib/consensus/bip30.h"
 #include "hornetlib/consensus/bips.h"
 #include "hornetlib/consensus/rules/context.h"
 #include "hornetlib/consensus/rules/scripts/patterns.h"
@@ -142,17 +140,11 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
   return {rhs.block, rhs.view, rhs.unspent, rhs.view.Length(), GetScriptFeatureFlags(rhs)};
 }
 
-// BIP30: Transaction outputs MUST NOT give rise to outpoints that reference existing unspent outputs, except in blocks
-// listed in Table 2.
+// BIP30: A transaction output MUST NOT duplicate the outpoint of an admitted unspent output, except in blocks listed
+// in Table 2.
 [[nodiscard]] inline Result ValidateOutPointsUnique(const BlockSpendContext& context) {
-  // Skip this rule for two specific historical blocks that are known to violate it.
-  static constexpr auto kKnownExceptions =
-      std::array{std::tuple{91842, "00000000000a4d0a398161ffc163c503763b1f4360639393e0e4c8e300e0caec"_sha256},
-                 std::tuple{91880, "00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721"_sha256}};
-  const auto hash = context.block.Header().ComputeHash();
-  for (const auto& known : kKnownExceptions) {
-    if (context.height == std::get<int>(known) && hash == std::get<protocol::Hash>(known)) return {};
-  }
+  // Skip this rule for the two historical blocks listed in Table 2.
+  if (IsBIP30ExceptionBlock(context.height, context.block.Header())) return {};
 
   // Note that we can apply an optimization to skip this check for a common case where certain constraints hold.
   // Here we have to guarantee that (1) no new duplicates can be created, and (2) there are no unspent duplicates
@@ -169,7 +161,7 @@ inline BlockSpendContext MakeBlockSpendContext(const BlockValidationContext& rhs
   return context.unspent.QueryOutPointsUnique(context.block) ? Result::Ok : Error::Spending_OutPointDuplicate;
 }
 
-// A non-coinbase input MUST reference an output created in a preceding transaction.
+// A non-coinbase input MUST reference an admitted output.
 [[nodiscard]] inline Result ValidateInputPrevoutsCreated(const BlockSpendContext& context) {
   return context.unspent.QueryPreviousOutputsCreated(context.block) ? Result::Ok : Error::Spending_OutPointNotCreated;
 }

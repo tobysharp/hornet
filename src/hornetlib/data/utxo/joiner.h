@@ -213,7 +213,8 @@ inline void SpendJoiner::QueryPrevoutsIntraBlock() {
       }
     }
     for (int j = 0; j < tx.OutputCount(); ++j)
-      map.emplace(OutputKey{tx.GetHash(), static_cast<uint32_t>(j)}, IntraBlockUTXO{i, false});
+      if (consensus::IsOutputAdmissible(tx.PkScript(j)))
+        map.emplace(OutputKey{tx.GetHash(), static_cast<uint32_t>(j)}, IntraBlockUTXO{i, false});
   }
 }
 
