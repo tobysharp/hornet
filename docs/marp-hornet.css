@@ -291,8 +291,9 @@ pre code {                     /* cancel the inline-pill styling for blocks */
 .hljs-title.function_                      { color: #d2a8ff; }   /* function & class names */
 .hljs-attr, .hljs-attribute, .hljs-literal,
 .hljs-meta, .hljs-number, .hljs-operator,
-.hljs-variable, .hljs-selector-attr,
-.hljs-selector-class, .hljs-selector-id    { color: #79c0ff; }   /* numbers, attributes, [[nodiscard]] */
+.hljs-selector-attr,
+.hljs-selector-class, .hljs-selector-id    { color: #79c0ff; }   /* numbers, operators, attributes */
+.hljs-variable                             { color: #c9d1d9; }   /* identifiers — match editor default fg */
 .hljs-regexp, .hljs-string,
 .hljs-meta .hljs-string                    { color: #a5d6ff; }   /* strings */
 .hljs-built_in, .hljs-symbol               { color: #ffa657; }

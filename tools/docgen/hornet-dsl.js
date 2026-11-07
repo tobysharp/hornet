@@ -14,7 +14,7 @@ module.exports = function (hljs) {
     contains: [
       hljs.COMMENT('//', '$'),
       { className: 'number', begin: /\b\d{1,3}(?:,\d{3})*\b/ },
-      { className: 'operator', begin: /\|->|->|==|!=|<=|>=|⎧|⎨|⎩|≤|≥|⧺|∈|∀|Σ|↦|←/ },
+      { className: 'operator', begin: /\|->|->|==|!=|<=|>=|⎧|⎨|⎩|≤|≥|≠|⧺|∈|∀|∃|∅|Σ|↦|←/ },
       // function-call names: CamelCase immediately before '('
       { className: 'title.function', begin: /\b[A-Z][A-Za-z0-9_]*(?=\s*\()/ },
       { className: 'property', begin: /\.[a-z][A-Za-z0-9_]*/ },
