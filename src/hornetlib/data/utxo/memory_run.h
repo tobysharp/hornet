@@ -134,16 +134,14 @@ inline QueryResult MemoryRun::QueryImpl(std::span<const OutputKey> keys, std::sp
     upper = entries_.begin() + hi;                   // while upper bound resets for each key.
 
     // Binary search in the remaining range for the first item that's ordered >= the query key.
-    auto it = std::lower_bound(lower, upper, key);
+    OutputKV probe{key, {before - 1, OutputKV::Delete}, kNullOutputId};
+    auto it = std::lower_bound(lower, upper, probe);
   
-    // Check at most two equal-key entries (the lower_bound result and its immediate successor) for an exact match.
-    for (int i = 0; i < 2 && it != upper && it->key == key; ++i, ++it) {
-      if ((since <= it->data.height && it->data.height < before)) {
-        if (rids[index] != kNullOutputId) --adds;  // A Delete overwriting an Add.
-        rids[index] = it->IsAdd() ? it->rid : kSpentOutputId;
-        ++(it->IsAdd() ? adds : deletes);
-        break;
-      }
+    // If there is an exact match, it is the most recent key-matching event within our query window.
+    if (it != upper && it->key == key && since <= it->data.height && it->data.height < before) {
+      if (rids[index] != kNullOutputId) --adds;  // Overwriting a previous Add.
+      rids[index] = it->IsAdd() ? it->rid : kSpentOutputId;
+      ++(it->IsAdd() ? adds : deletes);
     }
   }
 #if UTXO_LOG
