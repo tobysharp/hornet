@@ -18,14 +18,14 @@ Second paragraph.-->
 <div class="content">
 <h1>A Minimal, Executable Specification<br/>for Bitcoin Consensus</h1>
 <div class="author">Toby Sharp</div>
-<div class="event">TABConf · 15 October 2026</div>
+<div class="event">Brink Engineering Call · 12 June 2026</div>
 </div>
 
 
 <!-- Another comment. -->
 
 ---
-<!-- 0:01 -->
+
 # Every major protocol has a technical specification.
 
 | Category | Protocols |
@@ -42,7 +42,7 @@ Second paragraph.-->
 **Bitcoin** |  `bitcoin/src/*` ?
 
 ---
-<!-- 0:02 -->
+
 # The brittleness problem
 
 <div class="bar-item">
@@ -66,7 +66,7 @@ Second paragraph.-->
 </div>
 
 ---
-<!-- 0:04 -->
+
 # What is Hornet?
 
 **A specification of Bitcoin consensus**
@@ -78,11 +78,8 @@ Evaluating whether a block meets the consensus specification.
 **An experimental IBD client**
 Able to sync and validate mainnet to tip.
 
-<!-- 0:06 Demo -->
-
 ---
 
-<!-- 0:07 -->
 # Two approaches to sharing consensus
 
 ## Both share the consensus rules. The question is what comes attached.
@@ -105,7 +102,7 @@ Able to sync and validate mainnet to tip.
 </div>
 
 ---
-<!-- 0:09 -->
+
 # Properties of a specification
 
 <div class="bar-item">
@@ -129,7 +126,7 @@ Able to sync and validate mainnet to tip.
 </div>
 
 ---
-<!-- 0:12 -->
+
 # Hornet's roadmap
  
 <div class="step step-active"><div class="step-num">1</div><div class="step-text"><div class="step-title">English semantic spec <span class="badge badge-done">DONE</span></div><div class="step-note">The readable view: 35 named rules for block validation</div></div></div>
@@ -145,7 +142,7 @@ Able to sync and validate mainnet to tip.
 # The Readable View of Specification
 
 ---
-<!-- 0:13 -->
+
 # Block Validation Rules
 
 ## Semantic: <span class="grey">Each rule is a <span class="white"><i>single meaningful invariant</i></span> property.</span> 
@@ -168,7 +165,7 @@ Full specification at https://hornetnode.org/spec.html.
 
 
 ---
-<!-- 0:15 -->
+
 # 1. Header Rules
  
 <br>
@@ -186,7 +183,7 @@ Full specification at https://hornetnode.org/spec.html.
 **H06.** A header's version number MUST NOT have been retired by any activated soft fork. (See Table 1.)
 
 ---
-<!-- 0:17 -->
+
 # 2. Local Rules
 
 **L01.** A block MUST contain at least one transaction.
@@ -204,7 +201,7 @@ Full specification at https://hornetnode.org/spec.html.
 **L13.** A non-coinbase transaction's inputs MUST have non-null previous outputs.
 
 ---
-<!-- 0:18 -->
+
 # 3. Contextual Rules
 
 **C01.** All transactions in the block MUST be final given the block height and locktime rules.
@@ -217,7 +214,7 @@ Full specification at https://hornetnode.org/spec.html.
 
 
 ---
-<!-- 0:19 -->
+
 # 4. Spending Rules
 
 **S01.** <span class="small">Transaction outputs MUST NOT give rise to outpoints that reference existing unspent outputs, except in blocks listed in Table 2.</span>
@@ -235,7 +232,7 @@ Full specification at https://hornetnode.org/spec.html.
 # The Executable View of Specification
 
 ---
-<!-- 0:23 -->
+
 # Rule functions
 
 > Each semantic rule is enforced by one pure validation function, with its own unique error code.
@@ -257,7 +254,7 @@ Full specification at https://hornetnode.org/spec.html.
 ```
 
 ---
-<!-- 0:24 -->
+
 > Consensus rules have no dependencies on the timechain data representation.
 
 
@@ -287,7 +284,7 @@ class HeaderAncestryView {
 ```
 
 ---
-<-- 0:25 -->
+
 ### Static Validation Rule Composition
 
 > Rules are statically composed into a compute graph using a simple compile-time algebra.
@@ -315,7 +312,7 @@ static constexpr auto kHeaderRules = All{
 ```
 
 ---
-<!-- 0:26 -->
+
 ### Static Validation Graph Algebra
 
 `Rule`: Names a pure validation function that is executed to enforce one semantic invariant.
@@ -337,7 +334,7 @@ static constexpr auto kSpendingTransactionRules = All{
 ```
 
 ---
-<!-- 0:27 -->
+
 ### A Static Declarative Executable Specification
 
 This statically typed declarative graph is the **executable specification** of the semantic invariants that determine consensus validity of a block in the Bitcoin network. Each `Rule` leaf node names a validation function that returns a unique error code if and only if that property fails to hold.
@@ -364,7 +361,7 @@ static constexpr auto kBlockRules = All{
 ```
 
 ---
-<!-- 0:27 -->
+
 <!-- _class: code-full -->
 <style scoped>
 section.code-full pre { --fill: 0.50; }
@@ -431,7 +428,7 @@ static constexpr auto kConsensusRules = All{
 # From Specification to Implementation
 
 ---
-<!-- 0:29 -->
+
 
 # UTXOs: Resolving spent prevouts
 
@@ -455,7 +452,7 @@ class ChainOutputsView {                // Consensus sees only this pure interfa
 <!--Presenter: this interface is the boundary between specification and implementation. The spec fixes the validity conditions; everything below this line is unconstrained — which is what permits the design that follows.-->
 
 ---
-<!-- 0:31 -->
+
 # UTXO(1): A custom UTXO database
 
 > One concrete instance of the interface, in a separate data layer.
@@ -481,7 +478,7 @@ Specification `->` Interface `->` Implementation `->` Testing
 <span class="footnote">$^*$Details on delvingbitcoin.org</span>
 
 ---
-<!-- 0:35 -->
+
 # Script Execution
 
 ```cpp
@@ -508,7 +505,7 @@ table[Op::Within] = &OnWithin;
 <!-- Presenter: It's another example of modern C++ structured to be declarative to implement the semantics of a specification, rather than getting bogged down in the plumbing of script parsing and stack handling.-->
 
 --- 
-<!-- 0:37 -->
+
 # Arithmetic Opcode Handlers
 
 ```cpp
@@ -537,7 +534,7 @@ table[Op::Subtract]           = OnBinaryInt <std::minus{}>;
 # The Pure View of Specification
 
 ---
-<!-- 0:38 -->
+
 # Hornet DSL
 
 ## A pure functional language for consensus specification
@@ -561,7 +558,7 @@ Rule ValidateLocalRules(block ∈ Block)
   ```
 
 ---
-<!-- 0:40 -->
+
 # Language features
 - `Rule`s compose; each `Require` statement is named and must return true.
 - Compact mathematical sets and operators `∃ ∀ Σ ∈ ⧺`
@@ -586,7 +583,7 @@ Rule SigOpLimit(block ∈ Block)
 ```
 
 ---
-<!-- 0:42 -->
+
 # Future work
 
 - Minor changes to rule numbering / naming / grouping
@@ -601,7 +598,7 @@ Rule SigOpLimit(block ∈ Block)
 <!-- Personal part-time project alongside full-time employment -->
 
 ---
-<!-- 0:45 -->
+
 # Conclusion
 
 - Consensus rules can be defined **explicitly** in a **formal specification**.
@@ -616,11 +613,21 @@ Rule SigOpLimit(block ∈ Block)
 
 
 ---
-<!-- 0:46 -->
 
-# Hornet Node:
+<!-- _class: title -->
 
-# Spec https://hornetnode.org/spec.html
-# Paper https://hornetnode.org/paper.html
-# Code https://github.com/tobysharp/hornet
+<img class="banner" src="banner.png" />
 
+<br/>
+<br/>
+
+<div class="orange">
+<center>Bitcoin consensus is a protocol.</center><br/>
+<center>Hornet gives it a specification.</center>
+</div>
+
+<br/>
+<div class="footnote">
+https://hornetnode.org<br/>
+https://github.com/tobysharp/hornet
+</div>
