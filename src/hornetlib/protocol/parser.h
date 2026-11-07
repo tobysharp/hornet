@@ -61,7 +61,7 @@ class Parser {
     const auto payload = buffer.subspan(kHeaderLength, header.bytes);
 
     // Validate checksum
-    const auto hash = crypto::DoubleSha256(payload);
+    const auto hash = crypto::Hash256(payload);
     if (!std::equal(header.checksum.begin(), header.checksum.end(), hash.begin())) {
       throw Error("Checksum mismatch");
     }

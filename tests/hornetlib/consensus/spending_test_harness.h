@@ -8,6 +8,7 @@
 #include "hornetlib/consensus/rules/validate_spending.h"
 #include "hornetlib/data/header_timechain.h"
 #include "hornetlib/data/utxo/database.h"
+#include "hornetlib/data/utxo/database_view.h"
 #include "hornetlib/data/utxo/joiner.h"
 #include "hornetlib/model/header_context.h"
 
@@ -38,12 +39,17 @@ consensus::Result WithCandidateSpendState(const Blockchain& chain, const protoco
   auto joiner = std::make_shared<data::utxo::SpendJoiner>(db, std::make_shared<const protocol::Block>(block), height);
 
   while (joiner->IsAdvanceReady()) joiner->Advance();
-  if (!joiner->IsJoinReady()) return consensus::Error::Spending_PrevoutNotUnspent;
+  if (!joiner->IsJoinReady()) {
+    const data::utxo::DatabaseView utxo{joiner};
+    if (!utxo.QueryPreviousOutputsCreated(*joiner->GetBlock())) return consensus::Error::Spending_OutPointNotCreated;
+    if (!utxo.QueryPreviousOutputsUnspent(*joiner->GetBlock())) return consensus::Error::Spending_OutPointSpent;
+    return consensus::Error::Spending_OutPointSpent;
+  }
 
   return std::forward<Callback>(callback)(*ancestry, joiner, height);
 }
 
-class StaticUnspentOutputsView : public consensus::UnspentOutputsView {
+class StaticChainOutputsView : public consensus::ChainOutputsView {
  public:
   struct Entry {
     protocol::Transaction tx;
@@ -54,8 +60,9 @@ class StaticUnspentOutputsView : public consensus::UnspentOutputsView {
     entries_.push_back({std::move(tx), std::move(spends)});
   }
 
-  consensus::Result QueryPrevoutsUnspent(const protocol::Block&) const override { return {}; }
-  consensus::Result QueryOutPointsUnique(const protocol::Block&) const override { return {}; }
+  bool QueryPreviousOutputsCreated(const protocol::Block&) const override { return true; }
+  bool QueryPreviousOutputsUnspent(const protocol::Block&) const override { return true; }
+  bool QueryOutPointsUnique(const protocol::Block&) const override { return true; }
 
   std::optional<consensus::JoinedSpendRange> Spends(const protocol::Block&) const override {
     return *this;
@@ -72,10 +79,11 @@ class StaticUnspentOutputsView : public consensus::UnspentOutputsView {
   std::vector<Entry> entries_;
 };
 
-class NullSpendsUnspentOutputsView : public consensus::UnspentOutputsView {
+class NullSpendsChainOutputsView : public consensus::ChainOutputsView {
  public:
-  consensus::Result QueryPrevoutsUnspent(const protocol::Block&) const override { return {}; }
-  consensus::Result QueryOutPointsUnique(const protocol::Block&) const override { return {}; }
+  bool QueryPreviousOutputsCreated(const protocol::Block&) const override { return true; }
+  bool QueryPreviousOutputsUnspent(const protocol::Block&) const override { return true; }
+  bool QueryOutPointsUnique(const protocol::Block&) const override { return true; }
 
   std::optional<consensus::JoinedSpendRange> Spends(const protocol::Block&) const override {
     return std::nullopt;

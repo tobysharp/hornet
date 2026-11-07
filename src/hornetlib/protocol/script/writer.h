@@ -10,6 +10,7 @@
 
 #include "hornetlib/protocol/script/lang/minimal.h"
 #include "hornetlib/protocol/script/lang/op.h"
+#include "hornetlib/protocol/script/lang/types.h"
 #include "hornetlib/util/abs.h"
 #include "hornetlib/util/assert.h"
 
@@ -17,6 +18,10 @@ namespace hornet::protocol::script {
 
 class Writer {
  public:
+  Writer(size_t reserve_bytes = 0) {
+    bytes_.reserve(reserve_bytes);
+  }
+
   operator std::span<const uint8_t>() const {
     return bytes_;
   }
@@ -53,6 +58,10 @@ class Writer {
 
   Writer& Then(lang::Op opcode) {
     return *this << opcode;
+  }
+
+  Writer& Write(lang::Bytes bytes) {
+    return *this << bytes;
   }
 
   std::vector<uint8_t> Release() {

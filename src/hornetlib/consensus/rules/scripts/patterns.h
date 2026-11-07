@@ -4,22 +4,11 @@
 
 #include "hornetlib/protocol/block.h"
 #include "hornetlib/protocol/script/lang/op.h"
+#include "hornetlib/protocol/script/satisfy.h"
 #include "hornetlib/protocol/script/view.h"
 #include "hornetlib/protocol/transaction.h"
 
 namespace hornet::consensus::rules::scripts {
-
-enum class VerifyFlag { P2SH, Witness };
-
-[[nodiscard]] inline constexpr uint64_t CombineFlags(std::initializer_list<VerifyFlag> flags) {
-  uint64_t result = 0;
-  for (VerifyFlag flag : flags) result |= 1ull << static_cast<int>(flag);
-  return result;
-}
-
-[[nodiscard]] inline constexpr bool IsFlag(uint64_t flags, VerifyFlag flag) {
-  return (flags & (1ull << static_cast<int>(flag))) != 0;
-}
 
 struct WitnessProgram {
   const int version;
@@ -74,7 +63,7 @@ struct WitnessProgram {
 struct SpendScripts {
   protocol::Script pubkey, sig;
   protocol::WitnessView witness;
-  uint64_t flags;
+  protocol::script::FeatureFlags flags = {};
 };
 
 struct SpendPath {
@@ -84,16 +73,18 @@ struct SpendPath {
   std::optional<WitnessProgram> witness = {};
 
   [[nodiscard]] inline static SpendPath Classify(const SpendScripts& spend) {
+    using protocol::script::Feature;
+
     // Native witness path
-    if (IsFlag(spend.flags, VerifyFlag::Witness)) {
+    if (spend.flags.Has(Feature::Witness)) {
       if (const auto witness = WitnessProgram::Parse(spend.pubkey)) return {Witness, {}, witness};
     }
 
     // P2SH path
-    if (IsFlag(spend.flags, VerifyFlag::P2SH) && IsPayToScriptHash(spend.pubkey)) {
+    if (spend.flags.Has(Feature::P2SH) && IsPayToScriptHash(spend.pubkey)) {
       if (const auto redeem = ExtractRedeemScript(spend.sig)) {
         // P2SHWitness path
-        if (IsFlag(spend.flags, VerifyFlag::Witness)) {
+        if (spend.flags.Has(Feature::Witness)) {
           if (const auto witness = WitnessProgram::Parse(*redeem)) return {P2SHWitness, redeem, witness};
         }
         return {P2SH, redeem};

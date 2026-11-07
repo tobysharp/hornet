@@ -4,11 +4,17 @@ add_library(hornetlib STATIC
    protocol/block.cpp
    protocol/message_factory.cpp
    protocol/message_handler.cpp
+   protocol/script/processor.cpp
    protocol/script/runtime/engine.cpp
    protocol/script/runtime/ops/arithmetic.cpp
    protocol/script/runtime/ops/bitwise.cpp
+   protocol/script/runtime/ops/control.cpp
+   protocol/script/runtime/ops/crypto.cpp
+   protocol/script/runtime/ops/lock.cpp
+   protocol/script/runtime/ops/sig.cpp
    protocol/script/runtime/ops/stack.cpp
-   protocol/script/processor.cpp
+   protocol/script/runtime/signing.cpp
+   protocol/script/satisfy.cpp
    util/notify.cpp
 )
 target_compile_features(hornetlib PRIVATE cxx_std_20)

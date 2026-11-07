@@ -12,25 +12,36 @@ namespace hornet::protocol::script::runtime {
 
 void RegisterArithmeticHandlers(Dispatcher& table);  // In ops/arithmetic.cpp
 void RegisterBitwiseHandlers(Dispatcher& table);     // In ops/bitwise.cpp
-void RegisterStackHandlers(Dispatcher& table);        // In ops/stack.cpp
+void RegisterControlHandlers(Dispatcher& table);     // In ops/control.cpp
+void RegisterCryptoHandlers(Dispatcher& table);      // In ops/crypto.cpp
+void RegisterLockHandlers(Dispatcher& table);        // In ops/lock.cpp
+void RegisterSigHandlers(Dispatcher& table);         // In ops/sig.cpp
+void RegisterStackHandlers(Dispatcher& table);       // In ops/stack.cpp
 
 namespace detail {
 // A placeholder handler for opcodes that haven't yet been implemented.
 [[noreturn]] static void OnUnknown(const Context& context) {
-  util::ThrowLogicError("Opcode ", int(context.instruction.opcode), " not yet implemented.");
+  Throw(lang::Error::BadOpcode, "Opcode ", int(context.instruction.opcode), " is not defined for this interpreter.");
+}
+
+void RegisterAllHandlers(Version, Dispatcher& handlers) {
+  RegisterArithmeticHandlers(handlers);
+  RegisterBitwiseHandlers(handlers);
+  RegisterControlHandlers(handlers);
+  RegisterCryptoHandlers(handlers);
+  RegisterLockHandlers(handlers);
+  RegisterSigHandlers(handlers);
+  RegisterStackHandlers(handlers);
 }
 
 Handler GetHandler(Version version, lang::Op opcode) {
   static const auto kDispatchTable = [] {
-    auto BuildDispatcher = [](Version) {
+    auto BuildDispatcher = [](Version version) {
       Dispatcher handlers;
       std::fill(handlers.begin(), handlers.end(), &OnUnknown);
-      RegisterArithmeticHandlers(handlers);
-      RegisterBitwiseHandlers(handlers);
-      RegisterStackHandlers(handlers);
-      // TODO: Fill in other handler entries, depending on version.
+      RegisterAllHandlers(version, handlers);
       return handlers;
-    };    
+    };
     std::array<Dispatcher, Version::Count> table;
     for (int i = 0; i < int{Version::Count}; ++i) table[i] = BuildDispatcher(Version(i));
     return table;
@@ -38,28 +49,25 @@ Handler GetHandler(Version version, lang::Op opcode) {
   return kDispatchTable[uint8_t(version)][opcode];
 }
 
-// Returns the maximum permitted number of non-push operations during a script, depending on script
-// version.
-inline static int MaxNonPushOps(Version version) {
-  static constexpr int kMaxNonPushOps = 201;
-  return version == Version::Legacy || version == Version::SegwitV0
-             ? kMaxNonPushOps
-             : std::numeric_limits<int>::max();
-}
 }  // namespace detail
+
+void ExecuteHandler(lang::Op op, const Context& context) {
+  // Dispatch instruction execution to the opcode handler.
+  detail::GetHandler(context.Version(), op)(context);
+}
 
 void StepExecution(const Context& context) {
   // Validate the number of script operations executed.
-  if (!IsPush(context.Op())) {
-    const int max_non_push_ops = detail::MaxNonPushOps(context.Version());
-    if (context.machine.non_push_op_count >= max_non_push_ops)
-      runtime::Throw(lang::Error::OpCountExcessive, "Hit the limit of ", max_non_push_ops,
-                     "non-push operations per script.");
-    ++context.machine.non_push_op_count;               
-  }
+  if (!IsPush(context.Op())) context.machine.IncNonPushOps();
 
-  // Dispatch instruction execution to the opcode handler.
-  detail::GetHandler(context.Version(), context.Op())(context);
+  // Disabled opcodes fail even when they appear in unexecuted branches.
+  if (IsDisabled(context.Op())) Throw(lang::Error::DisabledOpcode, "Opcode ", int(context.Op()), " is disabled.");
+
+  // If we're in an actively executing scope (or at a condition), dispatch the handler.
+  if (context.Conditions() || IsConditional(context.Op())) ExecuteHandler(context.Op(), context);
+
+  // Validate the total size across both stacks
+  if (context.Stack().Size() + context.AltStack().Size() > Stack::kMaxItems) Throw(lang::Error::StackOverflow);
 }
 
 }  // namespace hornet::protocol::script::runtime

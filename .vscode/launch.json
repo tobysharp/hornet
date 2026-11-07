@@ -82,7 +82,8 @@
       "program": "${workspaceFolder}/build/clang20-debug/validate",
       "args": [
         "--blocksdir=\"/nvme1/bitcoin/blocks\"",
-        "--datadir=\"/hornet/data\""
+        "--datadir=\"/hornet/data\"",
+        "--length=171"
       ],
       "cwd": "${workspaceFolder}/build"
     }        

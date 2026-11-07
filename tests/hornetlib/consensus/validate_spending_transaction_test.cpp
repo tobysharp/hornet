@@ -209,7 +209,6 @@ TEST(ValidateSpendingTransactionTest, RejectsOutputAmountsExceedInputAmounts) {
         test::Blockchain data = test::LoadValidationPipelineChain();
 
         data.Append(data.Sample(2, true));
-        data.Back()->Transaction(0).Output(0).value -= 1;
         data.Back()->Transaction(1).Output(0).value += 1;
         test::FixMerkleRoot(*data.Back());
         return data;
@@ -226,7 +225,7 @@ TEST(ValidateSpendingTransactionTest, AcceptsCoreValidBlockDespiteAccumulatorOve
   protocol::Block block;
   block.AddTransaction(MakeCoinbaseTx(kSubsidy));
 
-  test::StaticUnspentOutputsView unspent;
+  test::StaticChainOutputsView unspent;
   for (int i = 0; i < kSpendCount; ++i) {
     auto tx = MakeMaxMoneySpendTx(i);
     block.AddTransaction(tx);
@@ -243,7 +242,7 @@ TEST(ValidateSpendingTransactionTest, AcceptsCoreValidBlockDespiteAccumulatorOve
   ASSERT_EQ(safe_inputs_total, safe_outputs_total);
 
   const test::StubHeaderAncestryView ancestry;
-  EXPECT_EQ(ValidateBlockSubsidy({block, ancestry, unspent, kHeight, 0}), Result{});
+  EXPECT_EQ(ValidateBlockSubsidy({block, ancestry, unspent, kHeight}), Result{});
 }
 
 TEST(ValidateSpendingTransactionTest, AcceptsExactReferenceRewardDespiteAccumulatorOverflowRisk) {
@@ -255,7 +254,7 @@ TEST(ValidateSpendingTransactionTest, AcceptsExactReferenceRewardDespiteAccumula
   protocol::Block block;
   block.AddTransaction(MakeCoinbaseTx(kSubsidy + 1));
 
-  test::StaticUnspentOutputsView unspent;
+  test::StaticChainOutputsView unspent;
   for (int i = 0; i < kSpendCount; ++i) {
     const int64_t output_value = (i + 1 == kSpendCount) ? (kMaxMoney - 1) : kMaxMoney;
     auto tx = MakeMaxMoneySpendTx(i, output_value);
@@ -274,7 +273,7 @@ TEST(ValidateSpendingTransactionTest, AcceptsExactReferenceRewardDespiteAccumula
   ASSERT_EQ(safe_inputs_total - safe_outputs_total, static_cast<__int128>(1));
 
   const test::StubHeaderAncestryView ancestry;
-  EXPECT_EQ(ValidateBlockSubsidy({block, ancestry, unspent, kHeight, 0}), Result{});
+  EXPECT_EQ(ValidateBlockSubsidy({block, ancestry, unspent, kHeight}), Result{});
 }
 
 TEST(ValidateSpendingTransactionTest, RejectsCoinbaseAboveReferenceRewardDespiteAccumulatorOverflowRisk) {
@@ -286,7 +285,7 @@ TEST(ValidateSpendingTransactionTest, RejectsCoinbaseAboveReferenceRewardDespite
   protocol::Block block;
   block.AddTransaction(MakeCoinbaseTx(kSubsidy + 2));
 
-  test::StaticUnspentOutputsView unspent;
+  test::StaticChainOutputsView unspent;
   for (int i = 0; i < kSpendCount; ++i) {
     const int64_t output_value = (i + 1 == kSpendCount) ? (kMaxMoney - 1) : kMaxMoney;
     auto tx = MakeMaxMoneySpendTx(i, output_value);
@@ -305,7 +304,7 @@ TEST(ValidateSpendingTransactionTest, RejectsCoinbaseAboveReferenceRewardDespite
   ASSERT_EQ(safe_inputs_total - safe_outputs_total, static_cast<__int128>(1));
 
   const test::StubHeaderAncestryView ancestry;
-  EXPECT_EQ(ValidateBlockSubsidy({block, ancestry, unspent, kHeight, 0}),
+  EXPECT_EQ(ValidateBlockSubsidy({block, ancestry, unspent, kHeight}),
             Error::Spending_CoinbaseAmountExceedsBlockReward);
 }
 

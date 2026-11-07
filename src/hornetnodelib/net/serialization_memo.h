@@ -14,7 +14,7 @@
 #include "hornetlib/protocol/framer.h"
 #include "hornetlib/protocol/message.h"
 
-namespace hornet::node::dispatch {
+namespace hornet::node::net {
 
 class SerializationMemo {
  public:
@@ -50,4 +50,4 @@ class SerializationMemo {
 
 using SerializationMemoPtr = std::shared_ptr<SerializationMemo>;
 
-}  // namespace hornet::node::dispatch
+}  // namespace hornet::node::net

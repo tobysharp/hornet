@@ -13,8 +13,11 @@
 
 // Define a common type for testing to avoid repetition
 using TestBigUint64 = hornet::util::BigUint<64, uint32_t>; // 2 words of 32-bit
+using TestBigUint64x64 = hornet::util::BigUint<64, uint64_t>; // 1 word of 64-bit
 using TestBigUint128 = hornet::util::BigUint<128, uint64_t>; // 2 words of 64-bit
+using TestBigUint192 = hornet::util::BigUint<192, uint64_t>; // 3 words of 64-bit
 using TestUint256 = hornet::Uint256; // 4 words of 64-bit
+using TestBigUint512 = hornet::util::BigUint<512, uint64_t>; // 8 words of 64-bit
 
 namespace hornet::util {
 namespace { // Anonymous namespace for internal linkage
@@ -145,6 +148,34 @@ TEST_F(BigUintTest, AdditionWithULowMultiWordCarry) {
   EXPECT_EQ(a + low_val, expected);
 }
 
+TEST_F(BigUintTest, AddWithCarryReportsCarryOutAndHonorsCarryIn) {
+  uint32_t max_u32 = std::numeric_limits<uint32_t>::max();
+
+  TestBigUint64 a = MakeBigUint<64, uint32_t>({max_u32, 10});
+  auto [sum, carry] = a.AddWithCarry(MakeBigUint<64, uint32_t>({0, 0}), true);
+  TestBigUint64 expected_sum = MakeBigUint<64, uint32_t>({0, 11});
+  EXPECT_EQ(sum, expected_sum);
+  EXPECT_FALSE(carry);
+
+  TestBigUint64 b = MakeBigUint<64, uint32_t>({max_u32, max_u32});
+  auto [overflow_sum, overflow] = b.AddWithCarry(MakeBigUint<64, uint32_t>({0, 0}), true);
+  EXPECT_EQ(overflow_sum, TestBigUint64::Zero());
+  EXPECT_TRUE(overflow);
+}
+
+TEST_F(BigUintTest, AddWithCarryWithoutCarryInMatchesModularAddition) {
+  TestBigUint64 a = MakeBigUint<64, uint32_t>({7, 11});
+  TestBigUint64 b = MakeBigUint<64, uint32_t>({5, 13});
+  auto [sum, carry] = a.AddWithCarry(b);
+  EXPECT_EQ(sum, a + b);
+  EXPECT_FALSE(carry);
+
+  auto [wrapped_sum, wrapped_carry] =
+      TestBigUint64::Maximum().AddWithCarry(MakeBigUint<64, uint32_t>({1, 0}));
+  EXPECT_EQ(wrapped_sum, TestBigUint64::Zero());
+  EXPECT_TRUE(wrapped_carry);
+}
+
 // --- Subtraction Tests ---
 
 TEST_F(BigUintTest, SubtractionNoBorrow) {
@@ -187,6 +218,34 @@ TEST_F(BigUintTest, SubtractionUnderflow) {
   uint32_t max_u32 = std::numeric_limits<uint32_t>::max();
   TestBigUint64 expected = MakeBigUint<64, uint32_t>({max_u32 - 4, max_u32}); // 5 - 10 = -5, wraps to MAX_UINT64 - 4
   EXPECT_EQ(a - b, expected);
+}
+
+TEST_F(BigUintTest, SubWithBorrowReportsBorrowOutAndHonorsBorrowIn) {
+  uint32_t max_u32 = std::numeric_limits<uint32_t>::max();
+
+  TestBigUint64 a = MakeBigUint<64, uint32_t>({0, 11});
+  auto [difference, borrow] = a.SubWithBorrow(MakeBigUint<64, uint32_t>({0, 0}), true);
+  TestBigUint64 expected_difference = MakeBigUint<64, uint32_t>({max_u32, 10});
+  EXPECT_EQ(difference, expected_difference);
+  EXPECT_FALSE(borrow);
+
+  auto [underflow_difference, underflow] =
+      TestBigUint64::Zero().SubWithBorrow(TestBigUint64::Zero(), true);
+  EXPECT_EQ(underflow_difference, TestBigUint64::Maximum());
+  EXPECT_TRUE(underflow);
+}
+
+TEST_F(BigUintTest, SubWithBorrowWithoutBorrowInMatchesModularSubtraction) {
+  TestBigUint64 a = MakeBigUint<64, uint32_t>({25, 30});
+  TestBigUint64 b = MakeBigUint<64, uint32_t>({10, 12});
+  auto [difference, borrow] = a.SubWithBorrow(b);
+  EXPECT_EQ(difference, a - b);
+  EXPECT_FALSE(borrow);
+
+  auto [wrapped_difference, wrapped_borrow] =
+      TestBigUint64::Zero().SubWithBorrow(MakeBigUint<64, uint32_t>({1, 0}));
+  EXPECT_EQ(wrapped_difference, TestBigUint64::Maximum());
+  EXPECT_TRUE(wrapped_borrow);
 }
 
 // --- Compound Assignment Operators ---
@@ -277,6 +336,15 @@ TEST_F(BigUintTest, LeftShiftByWordSize) {
   EXPECT_EQ(a, expected);
 }
 
+TEST_F(BigUintTest, LeftShiftByWordSizeThreeWords) {
+  TestBigUint192 a = MakeBigUint<192, uint64_t>({0x0123456789ABCDEFULL, 0x0FEDCBA987654321ULL,
+                                                 0xAAAAAAAA55555555ULL});
+  TestBigUint192 expected =
+      MakeBigUint<192, uint64_t>({0, 0x0123456789ABCDEFULL, 0x0FEDCBA987654321ULL});
+  a <<= 64; // Shift by one word on a 3-word value.
+  EXPECT_EQ(a, expected);
+}
+
 TEST_F(BigUintTest, LeftShiftByTotalBits) {
   TestBigUint64 a = MakeBigUint<64, uint32_t>({0x12345678, 0x9ABCDEF0});
   TestBigUint64 expected = TestBigUint64::Zero();
@@ -307,6 +375,15 @@ TEST_F(BigUintTest, RightShiftByWordSize) {
   TestBigUint64 a = MakeBigUint<64, uint32_t>({0, 0x12345678});
   TestBigUint64 expected = MakeBigUint<64, uint32_t>({0x12345678, 0});
   a >>= 32; // Shift by one word
+  EXPECT_EQ(a, expected);
+}
+
+TEST_F(BigUintTest, RightShiftByWordSizeThreeWords) {
+  TestBigUint192 a = MakeBigUint<192, uint64_t>({0x0123456789ABCDEFULL, 0x0FEDCBA987654321ULL,
+                                                 0xAAAAAAAA55555555ULL});
+  TestBigUint192 expected =
+      MakeBigUint<192, uint64_t>({0x0FEDCBA987654321ULL, 0xAAAAAAAA55555555ULL, 0});
+  a >>= 64; // Shift by one word on a 3-word value.
   EXPECT_EQ(a, expected);
 }
 
@@ -373,10 +450,10 @@ TEST_F(BigUintTest, SetBitThrowsOutOfRange) {
 
 // --- Division Tests ---
 
-TEST_F(BigUintTest, DivisionByZeroThrows) {
+TEST_F(BigUintTest, DivisionByZeroAsserts) {
   TestBigUint64 numerator = MakeBigUint<64, uint32_t>({10, 0});
   TestBigUint64 divisor = TestBigUint64::Zero();
-  EXPECT_THROW(numerator / divisor, std::invalid_argument);
+  EXPECT_DEBUG_DEATH(numerator / divisor, "");
 }
 
 TEST_F(BigUintTest, DivisionNumeratorLessThanDivisor) {
@@ -490,6 +567,23 @@ TEST_F(BigUintTest, MultiplyByWord) {
   EXPECT_EQ(b.Words()[1], 1u);
   for (int i = 2; i < U::kWords; ++i)
     EXPECT_EQ(b.Words()[i], 0u);
+
+  // Full 64x64 -> 128 product in the low two limbs.
+  U c{std::numeric_limits<uint64_t>::max()};
+  c *= std::numeric_limits<uint64_t>::max();
+  EXPECT_EQ(c.Words()[0], 1u);
+  EXPECT_EQ(c.Words()[1], std::numeric_limits<uint64_t>::max() - 1);
+  for (int i = 2; i < U::kWords; ++i)
+    EXPECT_EQ(c.Words()[i], 0u);
+
+  // Carry from one 64-bit product must feed the next limb correctly.
+  U d = MakeBigUint<256, uint64_t>({std::numeric_limits<uint64_t>::max(),
+                                    std::numeric_limits<uint64_t>::max(), 0, 0});
+  d *= 2u;
+  EXPECT_EQ(d.Words()[0], std::numeric_limits<uint64_t>::max() - 1);
+  EXPECT_EQ(d.Words()[1], std::numeric_limits<uint64_t>::max());
+  EXPECT_EQ(d.Words()[2], 1u);
+  EXPECT_EQ(d.Words()[3], 0u);
 }
 
 TEST_F(BigUintTest, DivideByWord) {
@@ -516,6 +610,66 @@ TEST_F(BigUintTest, DivideByWord) {
   U d{1209600u * 42};
   d /= 1209600u;
   EXPECT_EQ(d, U{42u});
+
+  // Exact division of a 128-bit value by a 64-bit divisor.
+  U e = MakeBigUint<256, uint64_t>({std::numeric_limits<uint64_t>::max() - 1, 1, 0, 0});
+  EXPECT_EQ(e / std::numeric_limits<uint64_t>::max(), U{2u});
+
+  // Division with non-zero remainder from a high limb dividend.
+  U f = MakeBigUint<256, uint64_t>({5, 1, 0, 0});
+  U expected_f = MakeBigUint<256, uint64_t>({0x5555555555555557ULL, 0, 0, 0});
+  EXPECT_EQ(f / 3u, expected_f);
+}
+
+TEST_F(BigUintTest, LowBitsAndHighBitsExtractWordAlignedSlices) {
+  TestUint256 value = MakeBigUint<256, uint64_t>({1, 2, 3, 4});
+  TestBigUint64x64 expected_low_64 = MakeBigUint<64, uint64_t>({1});
+  TestBigUint128 expected_low_128 = MakeBigUint<128, uint64_t>({1, 2});
+  TestBigUint64x64 expected_high_64 = MakeBigUint<64, uint64_t>({4});
+  TestBigUint128 expected_high_128 = MakeBigUint<128, uint64_t>({3, 4});
+
+  EXPECT_EQ(value.template LowBits<64>(), expected_low_64);
+  EXPECT_EQ(value.template LowBits<128>(), expected_low_128);
+  EXPECT_EQ(value.template HighBits<64>(), expected_high_64);
+  EXPECT_EQ(value.template HighBits<128>(), expected_high_128);
+  EXPECT_EQ(value.template LowBits<256>(), value);
+  EXPECT_EQ(value.template HighBits<256>(), value);
+}
+
+TEST_F(BigUintTest, MultiplyWideReturnsFullPrecisionProduct) {
+  TestUint256 a =
+      MakeBigUint<256, uint64_t>({std::numeric_limits<uint64_t>::max(), std::numeric_limits<uint64_t>::max(), 0, 0});
+  TestUint256 b = MakeBigUint<256, uint64_t>({2, 0, 0, 0});
+
+  TestBigUint512 expected = MakeBigUint<512, uint64_t>(
+      {std::numeric_limits<uint64_t>::max() - 1, std::numeric_limits<uint64_t>::max(), 1, 0, 0, 0, 0, 0});
+  EXPECT_EQ(a.MultiplyWide(b), expected);
+  EXPECT_EQ(TestUint256::Zero().MultiplyWide(a), TestBigUint512::Zero());
+}
+
+TEST_F(BigUintTest, MultiplyFullSplitsLowAndHighHalves) {
+  TestUint256 a = MakeBigUint<256, uint64_t>({0, 0, 0, 1});
+  auto [lo, hi] = a.MultiplyFull(a);
+  TestUint256 expected_hi = MakeBigUint<256, uint64_t>({0, 0, 1, 0});
+
+  EXPECT_EQ(lo, TestUint256::Zero());
+  EXPECT_EQ(hi, expected_hi);
+}
+
+TEST_F(BigUintTest, MultiplyFullMatchesMultiplyWideWhenBothHalvesAreNonZero) {
+  TestUint256 a = MakeBigUint<256, uint64_t>({std::numeric_limits<uint64_t>::max(),
+                                              std::numeric_limits<uint64_t>::max(),
+                                              std::numeric_limits<uint64_t>::max(),
+                                              std::numeric_limits<uint64_t>::max()});
+  TestUint256 b = MakeBigUint<256, uint64_t>({2, 0, 0, 0});
+
+  const auto wide = a.MultiplyWide(b);
+  const auto [lo, hi] = a.MultiplyFull(b);
+
+  EXPECT_EQ(lo, wide.template LowBits<256>());
+  EXPECT_EQ(hi, wide.template HighBits<256>());
+  EXPECT_NE(lo, TestUint256::Zero());
+  EXPECT_NE(hi, TestUint256::Zero());
 }
 
 }  // namespace

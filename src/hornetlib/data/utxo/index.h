@@ -46,7 +46,7 @@ class Index {
 
  private:
   int ComputeContiguousLength() const;
-  void UpdateContiguousLength();
+  void UpdateContiguousLength(bool allow_decrease = false);
   void EnqueueMerge(int index) { compacter_.Enqueue(index); }
   void DoMerge(int index);
 
@@ -97,7 +97,7 @@ inline void Index::EraseSince(int height) {
   const auto lock = compacter_.Lock();  // Serializes EraseSince with Merge calls.
   for (const auto& ptr : ages_)
     if (ptr->IsMutable()) ptr->EraseSince(height);
-  UpdateContiguousLength();
+  UpdateContiguousLength(true);
 }
 
 inline int Index::GetContiguousLength() const {
@@ -147,10 +147,14 @@ inline int Index::ComputeContiguousLength() const {
     return 0;
 }
 
-inline void Index::UpdateContiguousLength() {
+inline void Index::UpdateContiguousLength(bool allow_decrease) {
   const int current = ComputeContiguousLength();
-  const int prev = contiguous_length_.exchange(current);
-  if (current != prev) contiguous_length_.notify_all();
+  for (int prev = contiguous_length_; allow_decrease || prev < current;) {
+    if (contiguous_length_.compare_exchange_weak(prev, current)) {
+      contiguous_length_.notify_all();
+      break;
+    }
+  }
 }
 
 inline bool Index::ContainsHeight(int height) const {

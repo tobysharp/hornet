@@ -20,7 +20,9 @@ enum class BIP {
    SequenceLocks       =  68,  // BIP68:  Relative locktime via nSequence, July 2016.
    CheckSequenceVerify = 112,  // BIP112: OP_CHECKSEQUENCEVERIFY opcode, July 2016.
    LockTimeMedianPast  = 113,  // BIP113: Locktime uses Median Time Past (MTP), July 2016.
-   SegWit              = 141,  // BIP141: Segregated Witness (SegWit), August 2017.
+   SegWitV0            = 141,  // BIP141: Segregated Witness (SegWit) v0, August 2017.
+   SegWitV0SigHash     = 143,  // BIP143: SegWit v0 sighash construction, August 2017
+   NullDummy           = 147,  // BIP147: Empty dummy element in OP_CHECKMULTISIG, August 2017.
 };
 
 // Bitcoin Improvement Proposals by number.
@@ -30,7 +32,9 @@ inline constexpr BIP BIP66  = BIP::StrictDERSignatures;
 inline constexpr BIP BIP68  = BIP::SequenceLocks;
 inline constexpr BIP BIP112 = BIP::CheckSequenceVerify;
 inline constexpr BIP BIP113 = BIP::LockTimeMedianPast;
-inline constexpr BIP BIP141 = BIP::SegWit;
+inline constexpr BIP BIP141 = BIP::SegWitV0;
+inline constexpr BIP BIP143 = BIP::SegWitV0SigHash;
+inline constexpr BIP BIP147 = BIP::NullDummy;
 
 inline constexpr int GetSoftForkActivationHeight(BIP bip) {
   switch (bip) {
@@ -40,7 +44,9 @@ inline constexpr int GetSoftForkActivationHeight(BIP bip) {
     case BIP::SequenceLocks        : // CSV deployment: BIPs 68, 112, 113.
     case BIP::CheckSequenceVerify  :
     case BIP::LockTimeMedianPast   : return 419'328;
-    case BIP::SegWit               : return 481'824;  
+    case BIP::SegWitV0             : // SegWit v0 deployment: BIPs 141, 143, 147.
+    case BIP::SegWitV0SigHash      : 
+    case BIP::NullDummy            : return 481'824;  
   }
   Assert(false);
   return std::numeric_limits<int>::max();

@@ -36,7 +36,7 @@ using hornet::protocol::Transaction;
 using hornet::test::StubHeaderAncestryView;
 using test::RoundTrip;
 
-constexpr int kSegWitHeight = GetSoftForkActivationHeight(BIP::SegWit);
+constexpr int kSegWitHeight = GetSoftForkActivationHeight(BIP::SegWitV0);
 constexpr int kWitnessCommitmentOutputIndex = 1;
 
 Transaction MakeCoinbaseTransaction() {
@@ -119,7 +119,7 @@ std::vector<uint8_t> MakeWitnessCommitmentScript(std::span<const uint8_t> commit
 }
 
 std::array<uint8_t, 32> ComputeWitnessCommitmentValue(const Block& block) {
-  return crypto::DoubleSha256<64>(ComputeWitnessMerkleRoot(block).hash, block.Transaction(0).WitnessScript(0, 0));
+  return crypto::Hash256Concat<64>(ComputeWitnessMerkleRoot(block).hash, block.Transaction(0).WitnessScript(0, 0));
 }
 
 void SetWitnessCommitmentOutput(Block& block, std::span<const uint8_t> commitment) {

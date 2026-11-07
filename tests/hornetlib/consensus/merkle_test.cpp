@@ -16,6 +16,10 @@ namespace {
 using namespace hornet::protocol;
 using HashPair = std::array<Hash, 2>;
 
+std::span<const uint8_t> AsBytes(const HashPair& pair) {
+  return {reinterpret_cast<const uint8_t*>(pair.data()), sizeof(pair)};
+}
+
 TEST(MerkleRootTest, OneTransactionIsItsOwnRoot) {
   Block block;
   Transaction tx;
@@ -61,7 +65,8 @@ TEST(MerkleRootTest, TwoTransactions) {
   tx2.SetLockTime(0);
   block.AddTransaction(tx2);
 
-  Hash expected_root = crypto::DoubleSha256(HashPair{tx1.GetHash(), tx2.GetHash()});
+  const HashPair expected_pair{tx1.GetHash(), tx2.GetHash()};
+  Hash expected_root = crypto::Hash256(AsBytes(expected_pair));
   auto computed_root = ComputeMerkleRoot(block);
   EXPECT_EQ(computed_root.hash, expected_root);
 }
@@ -89,9 +94,12 @@ TEST(MerkleRootTest, ThreeTransactionsPadLast) {
   // L1: h0, h1, h2, h2
   // L2: hash(h0,h1), hash(h2,h2)
   // Root = hash(hash(h0,h1), hash(h2,h2))
-  Hash l1a = crypto::DoubleSha256(HashPair{hashes[0], hashes[1]});
-  Hash l1b = crypto::DoubleSha256(HashPair{hashes[2], hashes[2]});
-  Hash expected_root = crypto::DoubleSha256(HashPair{l1a, l1b});
+  const HashPair l1a_pair{hashes[0], hashes[1]};
+  const HashPair l1b_pair{hashes[2], hashes[2]};
+  Hash l1a = crypto::Hash256(AsBytes(l1a_pair));
+  Hash l1b = crypto::Hash256(AsBytes(l1b_pair));
+  const HashPair root_pair{l1a, l1b};
+  Hash expected_root = crypto::Hash256(AsBytes(root_pair));
   auto computed_root = ComputeMerkleRoot(block);
   EXPECT_EQ(computed_root.hash, expected_root);
 }

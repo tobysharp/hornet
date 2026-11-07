@@ -12,6 +12,7 @@
 
 // clang-format off
 
+// Copyright (C) Toby Sharp 2026
 namespace hornet::consensus::rules {
 //
 // BLOCK VALIDITY SPECIFICATION
@@ -22,11 +23,11 @@ namespace hornet::consensus::rules {
 static constexpr auto kConsensusRules = All{
   With{MakeHeaderContext, All{                // ## Header Rules
     Rule{ValidatePreviousHash},               // A header MUST reference the hash of a valid parent block.
-    Rule{ValidateProofOfWork},                // A header's hash MUST achieve its own proof-of-work target.
+    Rule{ValidateProofOfWork},                // A header's hash MUST NOT exceed its own proof-of-work target.
     Rule{ValidateDifficultyAdjustment},       // A header's proof-of-work target MUST satisfy the difficulty adjustment formula for the timechain.
-    Rule{ValidateMedianTimePast},             // A header timestamp MUST be strictly greater than the median of its 11 ancestors' timestamps.
-    Rule{ValidateTimestampCurrent},           // A header timestamp MUST be less than or equal to network-adjusted time plus 2 hours.
-    Rule{ValidateVersion}                     // A header's version number MUST NOT have been retired by any activated soft fork.
+    Rule{ValidateMedianTimePast},             // A header timestamp MUST be greater than the median of its 11 ancestor blocks' timestamps.
+    Rule{ValidateTimestampCurrent},           // A header timestamp MUST NOT exceed network-adjusted time plus 2 hours.
+    Rule{ValidateVersion}                     // A header's version number MUST NOT have been retired by any activated soft fork. (See Table 1.)
   }},
   With{MakeEnvironmentContext, All{ All{      // ## Local Rules
     Rule{ValidateNonEmpty},                   // A block MUST contain at least one transaction.
@@ -41,37 +42,40 @@ static constexpr auto kConsensusRules = All{
       Rule{ValidateOutputsNonNegative},       // All transaction output amounts MUST be non-negative.
       Rule{ValidateOutputsSum},               // The sum of a transaction's output amounts MUST NOT exceed 21,000,000 coins.
       Rule{ValidateUniqueInputs},             // A transaction's inputs MUST NOT contain duplicate outpoints.
-      Rule{ValidateCoinbaseSignatureSize},    // A coinbase transaction's sig script size MUST be between 2 and 100 bytes inclusive.
-      Rule{ValidateInputsPrevout}             // A non-coinbase transaction's inputs MUST have non-null previous outputs.    
+      Rule{ValidateCoinbaseSignatureSize},    // A coinbase's sig script size MUST be between 2 and 100 bytes inclusive.
+      Rule{ValidateInputsPrevout},            // A non-coinbase transaction's inputs MUST have non-null previous outputs.
+      Rule{ValidateGenesisCoinbaseUnspent}    // The genesis coinbase output MUST NOT be spent.
     }}}, 
   All{                                        // ## Contextual Rules
     Rule{ValidateTransactionFinality},        // All transactions in the block MUST be final given the block height and locktime rules.
     Rule{ValidateNoWitnessPreSegwit},         // A pre-SegWit block MUST NOT contain any witness data.
     Rule{ValidateBlockWeight},                // A block’s total weight MUST NOT exceed 4,000,000 weight units.
     From(BIP::HeightInCoinbase,
-      Rule{ValidateCoinbaseHeight}),          // From BIP34: The coinbase transaction’s sig script MUST begin by pushing the block height.
-    From(BIP::SegWit, With{MakeWitnessContext, All{
+      Rule{ValidateCoinbaseHeight}),          // From BIP34: A coinbase's sig script MUST begin by pushing the block height.
+    From(BIP::SegWitV0, With{MakeWitnessContext, All{
       Rule{ValidateWitnessCommitment},        // From BIP141: A block containing witness data MUST contain a witness commitment.
       Rule{ValidateWitnessNonce},             // From BIP141: A post-Segwit block containing a witness commitment MUST contain a witness nonce.
       Rule{ValidateWitnessMerkle}             // From BIP141: A post-SegWit block containing a witness commitment MUST commit to its witness Merkle root and nonce.
     }})
   }}},
   With{MakeBlockSpendContext, All{            // ## Spending Rules
-    Rule{ValidateOutPointsUnique},            // Transaction outputs MUST NOT give rise to duplicates of existing unspent outpoints (BIP30).
-    Rule{ValidateInputPrevoutsUnspent},       // A transaction input MUST reference a previous transaction output that remains unspent.
+    Rule{ValidateOutPointsUnique},            // BIP30: A transaction output MUST NOT duplicate the outpoint of an admitted unspent output, except in blocks listed in Table 2.
+    Rule{ValidateInputPrevoutsCreated},       // A non-coinbase input MUST reference an admitted output.
+    Rule{ValidateInputPrevoutsUnspent},       // A non-coinbase input MUST NOT reference an output that was spent in a preceding transaction.
     Rule{ValidateSigOpCosts},                 // The total signature-operation cost over all transactions MUST NOT exceed 80,000.
     Rule{ValidateBlockSubsidy},               // The total amount in coinbase outputs MUST NOT exceed the block reward.
     Each{SpendsInBlock{}, MakeTransactionSpendContext{}, All{
       Rule{ValidateOutputsAtMostInputs},      // The sum of output values in a transaction MUST NOT exceed the sum of all input values being spent.
-      Rule{ValidateScripts},                  // A non-coinbase input MUST satisfy the spent output's locking script.
       From(BIP::SequenceLocks,
         Rule{ValidateSequenceLocks}),         // From BIP68: Each input that signals a relative lock-time interval MUST have reached relative finality.
-      Each{InputsInSpend{}, MakeInputSpendContext{}, 
-        Rule{ValidateCoinbaseMaturity}}       // Coinbase outputs MUST NOT be spent before 100 blocks after their creation.
+      Each{InputsInSpend{}, MakeInputSpendContext{}, All{
+        Rule{ValidateScripts},                // A non-coinbase input MUST satisfy the spent output's locking script.
+        Rule{ValidateScriptSize},             // A pre-Taproot script dependency of a non-coinbase input spend MUST NOT exceed 10,000 bytes.
+        Rule{ValidateCoinbaseMaturity}        // Coinbase outputs MUST NOT be spent before 100 blocks after their creation.
+      }}
     }}
   }}
 };
-
 }  // namespace hornet::consensus::rules
 
 // clang-format on

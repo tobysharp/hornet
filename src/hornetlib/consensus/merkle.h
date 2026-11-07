@@ -42,7 +42,7 @@ class MerkleReducer {
         nodes_[n] = nodes_[n - 1];
 
       // Hash the 64-byte pairs in batches across the whole layer, overwriting in place.
-      crypto::DoubleSha256Batch(nodes_[0].begin(), 64, 64, (n + 1) >> 1, nodes_[0].begin(), 32);
+      crypto::Hash256Batch(nodes_[0].begin(), 64, 64, (n + 1) >> 1, nodes_[0].begin(), 32);
     }
 
     // Return the root hash.

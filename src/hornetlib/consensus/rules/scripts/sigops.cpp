@@ -4,6 +4,7 @@
 #include "hornetlib/consensus/rules/scripts/sigops.h"
 #include "hornetlib/consensus/rules/scripts/sigops_detail.h"
 #include "hornetlib/consensus/utxo.h"
+#include "hornetlib/protocol/script/satisfy.h"
 #include "hornetlib/protocol/transaction.h"
 
 namespace hornet::consensus::rules::scripts {
@@ -17,10 +18,11 @@ int LegacySigOpCount(protocol::TransactionConstView tx) {
 }
 
 // Returns the sum of sigop costs for a transaction, given spending information.
-int SigOpCost(protocol::TransactionConstView tx, std::span<const SpendRecord> spends, uint64_t flags) {
+int SigOpCost(protocol::TransactionConstView tx, std::span<const SpendRecord> spends, protocol::script::FeatureFlags flags) {
   using namespace scripts;
+  using protocol::script::Feature;
   constexpr int kWitnessScale = 4;
-  Assert(!IsFlag(flags, VerifyFlag::Witness) || IsFlag(flags, VerifyFlag::P2SH));
+  Assert(!flags.Has(Feature::Witness) || flags.Has(Feature::P2SH));
   Assert(tx.InputCount() == std::ssize(spends));
 
   // Count the number of sig-ops in legacy pubkey and sig scripts.

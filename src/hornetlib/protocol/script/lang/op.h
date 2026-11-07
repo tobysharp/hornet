@@ -4,9 +4,9 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
+#include <array>
 #include <compare>
 #include <cstdint>
-#include <optional>
 
 #include "hornetlib/util/assert.h"
 
@@ -39,27 +39,89 @@ enum class Op : uint8_t {
   PushTrue = PushConst1,      // Pushes the immediate Boolean TRUE.
 
   // Control operations.
+  Nop = 0x61,
+  If = 0x63,
+  NotIf = 0x64,
+  Else = 0x67,
+  EndIf = 0x68,
+  Verify = 0x69,
   Return = 0x6a,
   
   // Stack operations.
+  ToAltStack = 0x6b,
+  FromAltStack = 0x6c,
+  Drop2 = 0x6d,
+  Duplicate2 = 0x6e,
+  Duplicate3 = 0x6f,
+  Over2 = 0x70,
+  Rotate2 = 0x71,
+  Swap2 = 0x72,
+  IfDup = 0x73,
+  Depth = 0x74,
   Drop = 0x75,
   Pop = Drop,
   Duplicate = 0x76,
+  Nip = 0x77,
+  Over = 0x78,
+  Pick = 0x79,
+  Roll = 0x7a,
+  Rotate = 0x7b,
+  Swap = 0x7c,
+  Tuck = 0x7d,
+  Size = 0x82,
 
   // Bitwise operations.
   Equal = 0x87,
+  EqualVerify = 0x88,
 
   // Arithmetic operations.
+  Increment = 0x8b,
+  Decrement = 0x8c,
+  Negate =  0x8f,
+  Abs = 0x90,
+  IsZero = 0x91,
+  IsNonZero = 0x92,
   Add = 0x93,
+  Subtract = 0x94,
+  BooleanAnd = 0x9a,
+  BooleanOr = 0x9b,
+  NumEqual = 0x9c,
+  NumEqualVerify = 0x9d,
+  NumNotEqual = 0x9e,
+  LessThan = 0x9f,
+  GreaterThan = 0xa0,
+  LessThanOrEqual = 0xa1,
+  GreaterThanOrEqual = 0xa2,
+  Min = 0xa3,
+  Max = 0xa4,
+  Within = 0xa5,
 
   // Cryptographic operations.
+  RIPEMD160 = 0xa6,
+  SHA1 = 0xa7,
+  SHA256 = 0xa8,
   Hash160 = 0xa9,
-
-  // Check signature opcodes.
+  Hash256 = 0xaa,
+  CodeSeparator = 0xab,
   CheckSig = 0xac,
   CheckSigVerify = 0xad,
   CheckMultiSig = 0xae,
-  CheckMultiSigVerify = 0xaf
+  CheckMultiSigVerify = 0xaf,
+
+  // Later operations.
+  CheckLockTimeVerify = 0xb1,
+  CheckSequenceVerify = 0xb2,
+  CheckSigAdd = 0xba,
+
+  // Upgradeable operations
+  Nop1 = 0xb0,
+  Nop4 = 0xb3,
+  Nop5 = 0xb4,
+  Nop6 = 0xb5,
+  Nop7 = 0xb6,
+  Nop8 = 0xb7,
+  Nop9 = 0xb8,
+  Nop10 = 0xb9
 };
 
 inline constexpr int OpCount = 256;
@@ -120,6 +182,23 @@ inline constexpr bool IsDirectPush(Op opcode) {
 inline constexpr int DirectPushSize(Op opcode) {
   Assert(IsDirectPush(opcode));
   return +opcode;
+}
+
+inline constexpr bool IsConditional(Op opcode) {
+  return opcode >= Op::If && opcode <= Op::EndIf;
+}
+
+inline constexpr bool IsDisabled(Op opcode) {
+  static constexpr auto kDisabledTable = [] {
+    static constexpr uint8_t kDisabledOps[] = {
+        0x7e, 0x7f, 0x80, 0x81, 0x83, 0x84, 0x85, 0x86,
+        0x8d, 0x8e, 0x95, 0x96, 0x97, 0x98, 0x99,
+    };
+    std::array<bool, OpCount> disabled{};
+    for (uint8_t op : kDisabledOps) disabled[op] = true;
+    return disabled;
+  }();
+  return kDisabledTable[+opcode];
 }
 
 }  // namespace hornet::protocol::script::lang

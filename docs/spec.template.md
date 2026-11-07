@@ -30,6 +30,10 @@ Copyright © 2026 Toby Sharp \
 
 Below is an auto-generated rendering of Hornet’s [declarative specification](../src/hornetlib/consensus/rules/spec.h) of Bitcoin block validity. It lists the semantic invariants that together determine whether a block is consensus-valid, with links to the corresponding Hornet validation functions that realize those invariants in executable form.
 
+The rules apply to a deserialized block, and its sizes and weights are those of its canonical serialization.
+
+Among chains whose blocks all satisfy these rules, the active chain is the one whose tip has the greatest cumulative work. A competing tip of equal work does not displace a node's current tip. Nodes may therefore hold different tips until a later block breaks the tie.
+
 ## Block Validation Rules
 
 | ID | Rule | Function |
@@ -45,10 +49,36 @@ Genesis|The *genesis* block is the first block in the Bitcoin timechain.
 Header|A *header* is a structured set of fields over the first 80 bytes in a block.
 Timechain|A *timechain* is a tree of validated blocks.
 Proof of Work|A 256-bit hash must be found that does not exceed a given target value. 
-Coinbase|The coinbase transaction is the first in a block. It creates new outputs and spends no previous outputs.
-Outpoint|An outpoint identifies a previous output by its transaction's hash and its output index.
+Work|The work of a header with target T is ⌊2²⁵⁶ / (T + 1)⌋. The work of a chain is the sum over its headers.
+Preceding Transaction|A preceding transaction is one that appears in an ancestor block or earlier in the current block.
+Outpoint|An outpoint contains a transaction hash and output index. In a transaction input, it references the output of the most recent preceding transaction with the specified hash and index.
+Spent|An output is spent when its outpoint is referenced by a transaction input.
+Provably Unspendable|An output is provably unspendable if its locking script begins with 0x6a or exceeds 10,000 bytes, or if it is the genesis coinbase output.
+Admitted|An output is admitted if it is created in a preceding transaction and is not provably unspendable.
+Coinbase|A coinbase is a transaction with exactly one input whose outpoint is null.
 Witness|Witness data is segregated transaction input data committed separately under SegWit rules.
 Signature Operation|A signature operation is a script accounting unit associated with signature-checking opcodes.
 BIP34|The coinbase height soft fork is active from block height 227,931.
 BIP68|The sequence locks soft fork is active from block height 419,328.
 BIP141|The SegWit soft fork is active from block height 481,824.
+
+
+## Table 1. Activated Soft Forks
+| BIP | Description | Activated Height | Versions Retired |
+|--|--|--|--| 
+| BIP34 | Height in coinbase | 227,931 | 0, 1|
+| BIP66 | Strict DER signature encoding | 363,725 | 2
+| BIP68 | Sequence locks |  ^
+| BIP112 | Check sequence verify | ^
+| BIP65 | Check locktime verify | 388,381 | 3
+| BIP113 | Locktime median past | 419,328
+| BIP141 | SegWit v0 | ^
+| BIP143 | SegWit v0 Sighash | ^
+| BIP147 | Null dummy | 481,824
+
+
+## Table 2. BIP30 Exceptions
+| Block Height | Block Hash |
+|-|-|
+91842|00000000000a4d0a398161ffc163c503763b1f4360639393e0e4c8e300e0caec
+91880|00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721

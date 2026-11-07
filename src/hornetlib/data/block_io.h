@@ -166,11 +166,12 @@ class SerializedBlockReader {
     try {
       int key_pos = stream_.tellg() & 7;
       uint64_t raw = util::Read<uint64_t>(stream_);
-      for (unsigned int i = 0; i < sizeof(raw); ++i)
+      if (raw == 0) return; // Zero-padded tail
+    
+      for (unsigned int i = 0; i < sizeof(raw); ++i)  // XOR bytes
         reinterpret_cast<uint8_t*>(&raw)[i] ^= xor_key_[key_pos++ & 7];
+
       const Header header = *reinterpret_cast<const Header*>(&raw);
-      
-      if (header.magic == 0) return;
       if (header.magic != static_cast<uint32_t>(protocol::Magic::Main))
         util::ThrowRuntimeError("Block file does not contain mainnet blocks.");
       if (header.size > 4u << 20)

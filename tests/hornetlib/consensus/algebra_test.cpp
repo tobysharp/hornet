@@ -114,7 +114,7 @@ constexpr auto From(BIP bip, Child&& child) {
 }
 
 TEST(AlgebraTest, FromNode) {
-  static constexpr auto kGraph = From(BIP::SegWit, With{MakeX{}, Rule{ExpectPi}});
+  static constexpr auto kGraph = From(BIP::SegWitV0, With{MakeX{}, Rule{ExpectPi}});
   EXPECT_TRUE(Validate(kGraph, FloatContext{std::numbers::pi_v<float>, 1'000'000}));
   EXPECT_TRUE(Validate(kGraph, FloatContext{0.0f, 1}));
   EXPECT_FALSE(Validate(kGraph, FloatContext{0.0f, 1'000'000}));
@@ -145,7 +145,7 @@ TEST(AlgebraTest, CompositeProjectedIteratorNode) {
 
 TEST(AlgebraTest, CompositeGatedIteratorNode) {
   static constexpr auto kGraph = From(
-    BIP::SegWit,
+    BIP::SegWitV0,
     With{MakeHeightValues{}, Each{Rule{ExpectNonNegative}}});
 
   EXPECT_TRUE(Validate(kGraph, FloatRangeHeightContext{{1.0f, -2.0f}, 1}));

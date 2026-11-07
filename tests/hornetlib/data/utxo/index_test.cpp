@@ -1,6 +1,9 @@
 #include "hornetlib/data/utxo/index.h"
 
+#include <atomic>
+#include <chrono>
 #include <random>
+#include <thread>
 
 #include <gtest/gtest.h>
 
@@ -84,6 +87,50 @@ TEST(IndexTest, TestQuery) {
 
   EXPECT_EQ(query.funded, std::ssize(keys));
   EXPECT_EQ(query.spent, 0);
+}
+
+TEST(IndexTest, ContiguousLengthDoesNotDecreaseDuringAppend) {
+  constexpr int kHeights = 2048;
+  constexpr int kEntriesPerRun = 64;
+
+  Index index;
+  std::atomic<bool> stop = false;
+  std::atomic<int> decrease_from = -1;
+  std::atomic<int> decrease_to = -1;
+
+  std::thread reader([&] {
+    int last = index.GetContiguousLength();
+    while (!stop.load(std::memory_order_relaxed)) {
+      const int current = index.GetContiguousLength();
+      if (current < last) {
+        decrease_from = last;
+        decrease_to = current;
+        return;
+      }
+      last = current;
+      std::this_thread::yield();
+    }
+  });
+
+  for (int height = 1; height <= kHeights; ++height) {
+    auto entries = MakeEntries(index, kEntriesPerRun, height);
+    index.SortEntries(&entries);
+    index.Append(std::move(entries), height);
+
+    if (height % 16 == 0) {
+      std::this_thread::sleep_for(std::chrono::microseconds(50));
+    } else {
+      std::this_thread::yield();
+    }
+  }
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  stop = true;
+  reader.join();
+
+  EXPECT_EQ(index.GetContiguousLength(), kHeights + 1);
+  EXPECT_EQ(decrease_from.load(), -1) << "Contiguous length decreased from " << decrease_from.load()
+                                      << " to " << decrease_to.load();
 }
 
 }  // namespace

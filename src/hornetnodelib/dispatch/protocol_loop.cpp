@@ -23,22 +23,23 @@
 #include "hornetnodelib/dispatch/protocol_loop.h"
 #include "hornetnodelib/net/peer.h"
 #include "hornetnodelib/net/peer_manager.h"
+#include "hornetnodelib/net/serialization_memo.h"
 
 namespace hornet::node::dispatch {
 
 void ProtocolLoop::SendToOne(net::SharedPeer peer, std::unique_ptr<protocol::Message> message) {
   if (peer && !peer->IsDropped()) {
-    const SerializationMemoPtr memo = std::make_shared<SerializationMemo>(std::move(message));
-    outbox_[peer].push_back(memo);  // Creates queue if previously non-existent
+    const net::SerializationMemoPtr memo = std::make_shared<net::SerializationMemo>(std::move(message));
+    peer->Outbox().Push(memo);
     LogInfo() << "Sent: peer = " << *peer << ", msg = " << *memo;
   }
 }
 
 void ProtocolLoop::SendToAll(std::unique_ptr<protocol::Message> message) {
-  const SerializationMemoPtr memo = std::make_shared<SerializationMemo>(std::move(message));
-  for (auto pair : outbox_) {
-    pair.second.push_back(memo);
-    LogInfo() << "Sent: peer = " << *pair.first.lock() << ", message = " << *memo;
+  const net::SerializationMemoPtr memo = std::make_shared<net::SerializationMemo>(std::move(message));
+  for (auto peer : peers_.GetRegistry().Snapshot()) {
+    peer->Outbox().Push(memo);
+    LogInfo() << "Sent: peer = " << *peer << ", message = " << *memo;
   }
 }
 
@@ -80,8 +81,9 @@ void ProtocolLoop::RunMessageLoop(BreakCondition condition /* = BreakOnTimeout{}
 net::PeerManager::PollResult ProtocolLoop::PollReadWrite() {
   // Determines whether there is remaining parsing or processing work to be done left over from
   // a previous frame which, if not prioritized, could lead us to block unproductively on polling.
-  const bool outbox_pending = std::any_of(outbox_.begin(), outbox_.end(),
-                                          [](const auto& entry) { return !entry.second.empty(); });
+  const auto peer_snapshot = peers_.GetRegistry().Snapshot();
+  const bool outbox_pending = std::any_of(peer_snapshot.begin(), peer_snapshot.end(),
+                                          [](auto peer) { return !peer->Outbox().Empty(); });
   const bool backlog = !peers_for_parsing_.empty() || !inbox_.empty() || outbox_pending;
   if (backlog)
     LogDebug() << "ProtocolLoop::PollReadWrite non-blocking poll due to backlog.";
@@ -133,7 +135,7 @@ void ProtocolLoop::ReadToInbox(std::span<net::SharedPeer> read) {
 
 void ProtocolLoop::WriteFromOutbox(std::span<net::SharedPeer> write) {
   // Serialize and frame messages.
-  FrameMessagesToBuffers(outbox_);
+  FrameMessagesToBuffers(peers_);
 
   // Write to sockets.
   WriteBuffersToSockets(write);
@@ -165,6 +167,8 @@ void ProtocolLoop::NotifyLoop() {
 /* static */ void ProtocolLoop::ReadSocketsToBuffers(std::span<net::SharedPeer> read,
                                                      std::queue<net::WeakPeer>& peers_for_parsing) {
   for (const auto& peer : read) {
+    if (peer->IsDropped()) continue;
+
     // Reads bytes from a peer's socket to its internal memory buffer.
     // Limit the number of bytes read per peer per frame to avoid memory pressure from bursty peers.
     const ssize_t bytes = peer->GetConnection().ReadToBuffer(kMaxReadBytesPerFrame);
@@ -252,15 +256,18 @@ void ProtocolLoop::ProcessMessages() {
   while (!inbox_.empty() && !timeout.IsExpired()) {
     std::unique_ptr<protocol::Message> message = std::move(inbox_.front());
     inbox_.pop();
+    const auto envelope = message->GetEnvelope();
+    if (!envelope) continue;
+    const auto peer = peers_.GetRegistry().FromId(envelope->peer_id);
+    if (!peer || peer->IsDropped()) continue;
+
     try {
       LogInfo() << "Received: " << *message;
       for (EventHandler* handler : event_handlers_)
         message->Notify(*handler);  // Double-dispatch via virtual visitor pattern.
     } catch (std::exception& e) {
       // On unexpected exception, treat as protocol violation: close socket.
-      if (const auto envelope = message->GetEnvelope())
-        if (const auto peer = peers_.GetRegistry().FromId(envelope->peer_id)) 
-          peer->Drop();
+      peer->Drop();
     }
   }
   if (timeout.IsExpired() && !inbox_.empty())
@@ -270,19 +277,20 @@ void ProtocolLoop::ProcessMessages() {
 // Iterates over peers, and over queued work per peer. While each peer has space available and work
 // items waiting, serialize the message if not already done, then queue the serialized buffer to the
 // peer's output.
-/* static */ void ProtocolLoop::FrameMessagesToBuffers(Outbox& outbox) {
-  for (auto& [wpeer, queue] : outbox) {
-    const auto peer = wpeer.lock();
+/* static */ void ProtocolLoop::FrameMessagesToBuffers(const net::PeerManager& peers) {
+  const auto peer_snapshot = peers.GetRegistry().Snapshot();
+  for (auto peer : peer_snapshot) {
     if (!peer || peer->IsDropped())
       continue;
 
     try {
+      auto& queue = peer->Outbox();
       size_t queue_size = peer->GetConnection().QueuedWriteBufferCount();
       // Skip serialization if peer has reached max buffer count, preventing unbounded memory use.
-      while (!queue.empty() && queue_size < kMaxWriteBuffersPerPeer) {
-        const auto memo = std::move(queue.front());
-        queue.pop_front();  // Pop now so that if we throw an exception during processing, we don't
-                            // repeat the error next frame.
+      while (queue_size < kMaxWriteBuffersPerPeer) {
+        const auto item = queue.TryPop();
+        if (!item.has_value()) break;
+        const auto& memo = *item;
         peer->GetConnection().EnqueueWrite(memo->GetSerializedBuffer());
         ++queue_size;
       }
@@ -304,10 +312,10 @@ void ProtocolLoop::ProcessMessages() {
 void ProtocolLoop::Cleanup() {
   // Removes all the peers whose sockets have been closed,
   // and cleans up any auxiliary associated data.
-  for (const auto& peer : peers_.GetRegistry().Snapshot()) {
+  for (const auto& peer : peers_.GetRegistry().Snapshot(true)) {
     if (!peer->IsDropped())
       continue;
-    outbox_.erase(peer);
+    peer->GetConnection().Drop();
     handshake_complete_.erase(peer->GetId());
     for (EventHandler* handler : event_handlers_)
       handler->OnPeerDisconnect(peer);

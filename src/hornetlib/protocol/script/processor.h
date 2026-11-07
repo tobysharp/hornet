@@ -11,6 +11,7 @@
 #include "hornetlib/protocol/script/lang/op.h"
 #include "hornetlib/protocol/script/lang/types.h"
 #include "hornetlib/protocol/script/parser.h"
+#include "hornetlib/protocol/script/spend.h"
 #include "hornetlib/protocol/script/runtime/engine.h"
 #include "hornetlib/protocol/script/runtime/stack.h"
 #include "hornetlib/util/expected.h"
@@ -20,16 +21,17 @@ namespace hornet::protocol::script {
 
 class Processor {
  public:
-  explicit Processor(std::span<const uint8_t> script,
-                     bool require_minimal = true,  // Becomes execution policy
-                     int height = 0                // Becomes environment context
-                     );
-
-  void Reset(std::span<const uint8_t> script, int height);
+  explicit Processor(const runtime::Policy& policy = {},  // Execution policy
+                     //int height = 0,                      // Becomes environment context
+                     std::optional<SpendContext> spend = std::nullopt);
 
   // Runs until completion and returns the Boolean interpretation of the top-of-stack (or error).                     
-  util::Expected<bool, lang::Error> Run();
+  util::Expected<bool, lang::Error> Run(std::span<const uint8_t> script) {
+    Reset(script);
+    return Run();
+  }
 
+  void Reset(std::span<const uint8_t> script);
   // Executes the next instruction and returns true iff it's possible to Step() again (or error).
   util::Expected<bool, lang::Error> Step();
 
@@ -52,12 +54,16 @@ class Processor {
   }
 
  private:
+  util::Expected<bool, lang::Error> Run();
   void Execute(const lang::Instruction& instruction);
 
   script::Parser parser_;
   runtime::Policy policy_;
   runtime::Environment env_;
   runtime::Stack stack_;
+  runtime::Stack altstack_;
+  
+  runtime::ConditionStack conditions_;
   std::optional<runtime::Machine> machine_;
   std::optional<lang::Error> error_;
 };

@@ -6,13 +6,17 @@
 
 #include <array>
 #include <bit>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <iomanip>
 #include <ostream>
+#include <span>
 #include <stdexcept>
 #include <tuple>
+
+#include "hornetlib/util/assert.h"
 
 namespace hornet::util {
 
@@ -42,9 +46,11 @@ class BigUint {
     }
   }
 
-  constexpr explicit BigUint(T word) {
+  template <std::integral U>
+    requires std::convertible_to<U, T>
+  constexpr BigUint(U word) {
     words_ = {};
-    words_[0] = word;
+    words_[0] = static_cast<T>(word);
   }
 
   constexpr BigUint(const BigUint&) = default;
@@ -67,31 +73,51 @@ class BigUint {
     return ~Zero();
   }
 
-  constexpr BigUint& operator+=(const BigUint& rhs) noexcept {
-    T carry = 0;
+  static constexpr BigUint FromBigEndianBytes(std::span<const uint8_t> bytes) {
+    constexpr int kBytesPerWord = sizeof(T);
+    constexpr int kBytes = kWords * kBytesPerWord;
+    Assert(bytes.size() == kBytes);
+
+    BigUint result = Zero();
     for (int i = 0; i < kWords; ++i) {
-      const T partial = words_[i] + carry;
-      words_[i] = partial + rhs.words_[i];
-      carry = (partial < carry) || (words_[i] < partial);
+      for (int j = 0; j < kBytesPerWord; ++j)
+        result.words_[i] |= T{bytes[kBytes - 1 - (i * kBytesPerWord + j)]} << (j << 3);
     }
-    // NB: if carry > 0 then overflow.
-    return *this;
+    return result;
   }
 
-  constexpr BigUint& operator-=(const BigUint& rhs) noexcept {
-    T borrow = 0;
+  [[nodiscard]] constexpr std::pair<BigUint, bool> AddWithCarry(const BigUint& rhs, bool carry_in = false) const noexcept {
+    BigUint result;
+    T carry = carry_in ? 1 : 0;
     for (int i = 0; i < kWords; ++i) {
-      const T previous = words_[i];
+      const T partial = words_[i] + carry;
+      result.words_[i] = partial + rhs.words_[i];
+      carry = (partial < carry) || (result.words_[i] < partial);
+    }
+    return {result, carry != 0};
+  }
+
+  constexpr BigUint& operator+=(const BigUint& rhs) noexcept {
+    return *this = AddWithCarry(rhs).first;
+  }
+
+  [[nodiscard]] constexpr std::pair<BigUint, bool> SubWithBorrow(const BigUint& rhs, bool borrow_in = false) const noexcept {
+    BigUint result;
+    T borrow = borrow_in ? 1 : 0;
+    for (int i = 0; i < kWords; ++i) {
       const T partial = words_[i] - borrow;
       // With no underflow, partial <= previous, borrow <= previous,
       // With underflow, previous < partial, previous < borrow.
-      words_[i] = partial - rhs.words_[i];
+      result.words_[i] = partial - rhs.words_[i];
       // With no underflow, words_[i] <= partial, rhs.words_[i] <= partial.
-      // With underflow, partial < words_[i], partial < rhs.words_[i].
-      borrow = (previous < borrow) || (partial < words_[i]);
+      // With underflow, partial < result.words_[i], partial < rhs.words_[i].
+      borrow = (words_[i] < borrow) || (partial < result.words_[i]);
     }
-    // NB: if borrow > 0 then underflow.
-    return *this;
+    return {result, borrow != 0};
+  }
+
+  constexpr BigUint& operator-=(const BigUint& rhs) noexcept {
+    return *this = SubWithBorrow(rhs).first;
   }
 
   constexpr BigUint& operator+=(T low) noexcept {
@@ -108,6 +134,25 @@ class BigUint {
     return BigUint{*this} += low;
   }
 
+  [[nodiscard]] constexpr BigUint<kBits * 2, T> MultiplyWide(const BigUint& rhs) const noexcept {
+    BigUint<kBits * 2, T> result = BigUint<kBits * 2, T>::Zero();
+    const auto AddWord = [&](int index, T value) {
+      for (int i = index; value != 0 && i < result.kWords; ++i) {
+        const T sum = result.Words()[i] + value;
+        value = sum < result.Words()[i];
+        result.Words()[i] = sum;
+      }
+    };
+    for (int i = 0; i < kWords; ++i) {
+      for (int j = 0; j < kWords; ++j) {
+        const auto [lo, hi] = MulWide(words_[i], rhs.words_[j]);
+        AddWord(i + j, lo);
+        AddWord(i + j + 1, hi);
+      }
+    }
+    return result;
+  }
+
   constexpr BigUint operator*(T rhs) const noexcept {
     if (rhs == 0) return Zero();
     if (rhs == 1) return *this;
@@ -115,13 +160,9 @@ class BigUint {
     BigUint result = Zero();
     for (int i = 0; i < kWords; ++i) {
       const auto [lo, hi] = MulWide(words_[i], rhs);
-      result.words_[i] += lo;
-      carry = hi + (result.words_[i] < lo);
-      // Propogates carry forward
-      for (int j = i + 1; j < kWords && carry > 0; ++j) {
-        result.words_[j] += carry;
-        carry = result.words_[j] < carry;
-      }
+      const T sum = lo + carry;
+      result.words_[i] = sum;
+      carry = hi + (sum < carry);
     }
     // NB: if carry > 0 then overflow.
     return result;
@@ -131,34 +172,29 @@ class BigUint {
     return *this = *this * rhs;
   }
 
-  constexpr BigUint& operator /=(T rhs) {
-    if (rhs == 0) throw std::invalid_argument("BigUint division by zero.");
-    if (rhs == 1) return *this;
-
-    T remainder = 0;
-    for (int i = kWords - 1; i >= 0; --i) {
-      std::tie(words_[i], remainder) = DivDoubleWord(remainder, words_[i], rhs);
-    }
-    return *this;
+  template <int kOutBits>
+  [[nodiscard]] constexpr BigUint<kOutBits, T> ZeroExtend() const noexcept {
+    static_assert(kOutBits >= kBits);
+    BigUint<kOutBits, T> result;
+    for (int i = 0; i < result.kWords; ++i) result.Words()[i] = i < kWords ? words_[i] : T{0};
+    return result;
   }
 
-  constexpr BigUint operator/(T rhs) const {
-    return BigUint{*this} /= rhs;
-  }
-
-  constexpr BigUint& operator/=(const BigUint& rhs) {
+  template <int kDivBits>
+  [[nodiscard]] constexpr std::pair<BigUint, BigUint<kDivBits, T>> QuotientRemainder(const BigUint<kDivBits, T>& rhs) const {
+    static_assert(kDivBits <= kBits);
     const int numerator_sig_bits = SignificantBits();
     const int divisor_sig_bits = rhs.SignificantBits();
 
     // During this function, we will maintain the invariant:
     //    Quotient * Divisor + Remainder = Numerator.
-    BigUint divisor = rhs;      // Divisor
-    BigUint remainder = *this;  // Remainder
-    *this = 0;                  // Quotient
+    BigUint divisor = rhs.template ZeroExtend<kBits>();  // Divisor
+    BigUint remainder = *this;                           // Remainder
+    BigUint quotient = BigUint::Zero();                  // Quotient
 
     // Handle special cases
-    if (divisor_sig_bits == 0) throw std::invalid_argument("BigUint division by zero.");
-    if (numerator_sig_bits < divisor_sig_bits) return *this;
+    Assert(divisor_sig_bits != 0);  // Division by zero is undefined behavior.
+    if (numerator_sig_bits < divisor_sig_bits) return {quotient, remainder.template LowBits<kDivBits>()};
 
     // This gives us the largest possible value L such that Divisor * 2^L could still
     // be less than or equal to Remainder.
@@ -170,11 +206,35 @@ class BigUint {
       if (remainder >= divisor) {  // Remainder >= Divisor * 2^L
         // Subtract Divisor * 2^L from Remainder, and add 2^L to Quotient:
         remainder -= divisor;
-        SetBit(divisor_lshift);
+        quotient.SetBit(divisor_lshift);
       }
     }
     // Now L=0, and Remainder < Divisor, so we're complete.
-    return *this;  // Quotient
+    return {quotient, remainder.template LowBits<kDivBits>()};
+  }
+
+  template <int kDivBits>
+  [[nodiscard]] constexpr BigUint<kDivBits, T> Modulo(const BigUint<kDivBits, T>& rhs) const {
+    return QuotientRemainder(rhs).second;
+  }
+
+  constexpr BigUint& operator /=(T rhs) {
+    if (rhs == 0) throw std::invalid_argument("BigUint division by zero.");
+    if (rhs == 1) return *this;
+
+    T remainder = 0;
+    for (int i = kWords - 1; i >= 0; --i) {
+      std::tie(words_[i], remainder) = DivWide(remainder, words_[i], rhs);
+    }
+    return *this;
+  }
+
+  constexpr BigUint operator/(T rhs) const {
+    return BigUint{*this} /= rhs;
+  }
+
+  constexpr BigUint& operator/=(const BigUint& rhs) {
+    return *this = QuotientRemainder(rhs).first;
   }
 
   constexpr BigUint operator/(const BigUint& rhs) const {
@@ -228,9 +288,9 @@ class BigUint {
     const int rshift_bits = kBitsPerWord - lshift_bits;
     for (int i = kWords - 1; i >= lshift_words + 1; --i) {
       words_[i] =
-          (words_[i - lshift_words] << lshift_bits) | (words_[i - lshift_words - 1] >> rshift_bits);
+          Shl(words_[i - lshift_words], lshift_bits) | Shr(words_[i - lshift_words - 1], rshift_bits);
     }
-    words_[lshift_words] = words_[0] << lshift_bits;
+    words_[lshift_words] = Shl(words_[0], lshift_bits);
     for (int i = lshift_words - 1; i >= 0; --i) words_[i] = 0;
     return *this;
   }
@@ -251,9 +311,9 @@ class BigUint {
     const int lshift_bits = kBitsPerWord - rshift_bits;
     for (int i = 0; i < kWords - rshift_words - 1; ++i) {
       words_[i] =
-          (words_[i + rshift_words] >> rshift_bits) | (words_[i + rshift_words + 1] << lshift_bits);
+          Shr(words_[i + rshift_words], rshift_bits) | Shl(words_[i + rshift_words + 1], lshift_bits);
     }
-    words_[kWords - rshift_words - 1] = words_[kWords - 1] >> rshift_bits;
+    words_[kWords - rshift_words - 1] = Shr(words_[kWords - 1], rshift_bits);
     for (int i = kWords - rshift_words; i < kWords; ++i) words_[i] = 0;
     return *this;
   }
@@ -273,6 +333,33 @@ class BigUint {
     return 0;
   }
 
+  template <int kOutBits> [[nodiscard]] constexpr BigUint<kOutBits, T> LowBits() const noexcept {
+    static_assert(kOutBits > 0);
+    static_assert(kOutBits <= kBits);
+    static_assert(kOutBits % kBitsPerWord == 0);
+
+    constexpr int kOutWords = kOutBits / kBitsPerWord;
+    std::array<T, kOutWords> array;
+    std::copy(words_.begin(), words_.begin() + kOutWords, array.begin());
+    return BigUint<kOutBits, T>{array};
+  }
+
+  template <int kOutBits> [[nodiscard]] constexpr BigUint<kOutBits, T> HighBits() const noexcept {
+    static_assert(kOutBits > 0);
+    static_assert(kOutBits <= kBits);
+    static_assert(kOutBits % kBitsPerWord == 0);
+
+    constexpr int kOutWords = kOutBits / kBitsPerWord;
+    std::array<T, kOutWords> array;
+    std::copy(words_.begin() + (kWords - kOutWords), words_.end(), array.begin());
+    return BigUint<kOutBits, T>{array};
+  }
+  
+  [[nodiscard]] constexpr std::pair<BigUint, BigUint> MultiplyFull(const BigUint& rhs) const noexcept {
+    const auto wide = MultiplyWide(rhs);
+    return { wide.template LowBits<kBits>(), wide.template HighBits<kBits>() };
+  }
+
   constexpr const std::array<T, kWords>& Words() const {
     return words_;
   }
@@ -281,6 +368,15 @@ class BigUint {
     return words_;
   }
 
+  constexpr bool GetBit(int bitIndex) const
+  {
+    constexpr int Log2BitsPerElement = Log2(kBitsPerWord);    
+    const int elementIndex = bitIndex >> Log2BitsPerElement;
+    const int bitWithinElement = bitIndex - (elementIndex << Log2BitsPerElement);
+    const T bitMask = T{1} << bitWithinElement;
+    return (words_[elementIndex] & bitMask) != 0;
+  }
+  
   // Set the bit at the given bit index
   constexpr void SetBit(int index) {
     if (index >= kBits) throw std::invalid_argument("SetBit index out of range.");
@@ -300,16 +396,42 @@ class BigUint {
   static_assert(std::endian::native == std::endian::little);
   static_assert(kBits % kBitsPerWord == 0);
 
-  static constexpr std::pair<T, T> MulWide(T a, T b) noexcept {
-    using Prod = decltype(a * b);
+  template <typename U> struct DoubleWord;
+  template <> struct DoubleWord<uint32_t> { using Type = uint64_t; };
+#if defined(__SIZEOF_INT128__)
+  template <> struct DoubleWord<uint64_t> { using Type = unsigned __int128; };
+#endif
 
-    if constexpr (sizeof(Prod) > sizeof(T)) {
-      static_assert(sizeof(Prod) == 2 * sizeof(T));
-      const Prod product = a * b;
-      const T lo = static_cast<T>(product);
-      const T hi = static_cast<T>(product >> (sizeof(T) * 8));
-      return {lo, hi};
-    } else {
+  static constexpr T Shl(T a, int b) {
+    return b >= kBitsPerWord ? 0 : (a << b);
+  }
+
+  static constexpr T Shr(T a, int b) {
+    return b >= kBitsPerWord ? 0 : (a >> b);
+  }
+  
+  static consteval int Log2(int x)
+  {
+    // 1 << rv == x
+    int rv = 0;
+    while ((1 << rv) < x)
+        ++rv;
+    return rv;
+  }
+  
+  static constexpr std::pair<T, T> MulWide(T a, T b) noexcept {
+    if constexpr (requires { typename DoubleWord<T>::Type; }) {
+      const typename DoubleWord<T>::Type product = static_cast<DoubleWord<T>::Type>(a) * b;
+      return { static_cast<T>(product), static_cast<T>(product >> kBitsPerWord) };
+    }
+#if defined(_MSC_VER)
+    else if constexpr (sizeof(T) == 8) {
+      unsigned long long hi;
+      unsigned long long lo = _umul128(a, b, &hi);
+      return { static_cast<T>(lo), static_cast<T>(hi) };
+    }
+#endif
+    else {
       // Manual full-width multiplication fallback
       constexpr int kHalfBits = sizeof(T) * 4;
       constexpr T kLowMask = (T{1} << kHalfBits) - 1;
@@ -331,15 +453,21 @@ class BigUint {
     }
   }
 
-  static constexpr std::pair<T, T> DivDoubleWord(T hi, T lo, T divisor) noexcept {
-    using Wide = decltype((T{1} << (sizeof(T) * 8)) | T{1});
-
-    if constexpr (sizeof(Wide) > sizeof(T)) {
-      Wide dividend = (hi << (sizeof(T) * 8)) | lo;
+  static constexpr std::pair<T, T> DivWide(T hi, T lo, T divisor) noexcept {
+    if constexpr (requires { typename DoubleWord<T>::Type; }) {
+      typename DoubleWord<T>::Type dividend = (static_cast<DoubleWord<T>::Type>(hi) << kBitsPerWord) | lo;
       T q = static_cast<T>(dividend / divisor);
       T r = static_cast<T>(dividend % divisor);
       return {q, r};
-    } else {
+    }
+#if defined(_MSC_VER)
+    else if constexpr (sizeof(T) == 8) {
+      unsigned long long r = 0;
+      const unsigned long long q = _udiv128(hi, lo, divisor, &r);
+      return { static_cast<T>(q), static_cast<T>(r) };
+    }
+#endif
+    else {
       // Manual long division
       T q = 0;
       T r = hi;

@@ -1,0 +1,107 @@
+<svg viewBox="8 235 1187 493" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, system-ui, 'Segoe UI', sans-serif">
+<defs><linearGradient id="sort" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#12110d"/><stop offset="0.5" stop-color="#2e74cf"/><stop offset="1" stop-color="#b9c8de"/></linearGradient><marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#eba13c"/></marker><marker id="arm" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#9aa0a6"/></marker><style>.lbl{font-size:15px;fill:#f5f5f2;}.age{font-family:ui-monospace,Menlo,monospace;font-size:16px;font-weight:600;fill:#eba13c;text-anchor:end;}.blk{font-family:ui-monospace,Menlo,monospace;font-size:13px;fill:#9aa0a6;text-anchor:end;}.note{font-size:14px;fill:#9aa0a6;}.noteo{font-size:14px;fill:#eba13c;}</style></defs>
+<rect x="250.0" y="250.0" width="14.2" height="86" rx="3" fill="url(#sort)" stroke="#6c6f73" stroke-width="1.2"/>
+<rect x="272.2" y="250.0" width="14.2" height="86" rx="3" fill="url(#sort)" stroke="#6c6f73" stroke-width="1.2"/>
+<rect x="294.3" y="250.0" width="14.2" height="86" rx="3" fill="url(#sort)" stroke="#6c6f73" stroke-width="1.2"/>
+<rect x="316.5" y="250.0" width="14.2" height="86" rx="3" fill="url(#sort)" stroke="#6c6f73" stroke-width="1.2"/>
+<text x="215" y="290.0" class="age">age 0</text>
+<text x="215" y="308.0" class="blk">1 block/run</text>
+<rect x="250.0" y="382.0" width="56.6" height="86" rx="3" fill="url(#sort)" stroke="#6c6f73" stroke-width="1.2"/>
+<line x1="264.2" y1="385.0" x2="264.2" y2="465.0" stroke="#eba13c" stroke-width="1.0"/>
+<line x1="278.3" y1="385.0" x2="278.3" y2="465.0" stroke="#eba13c" stroke-width="1.0"/>
+<line x1="292.5" y1="385.0" x2="292.5" y2="465.0" stroke="#eba13c" stroke-width="1.0"/>
+<rect x="314.6" y="382.0" width="56.6" height="86" rx="3" fill="url(#sort)" stroke="#6c6f73" stroke-width="1.2"/>
+<line x1="328.8" y1="385.0" x2="328.8" y2="465.0" stroke="#eba13c" stroke-width="1.0"/>
+<line x1="342.9" y1="385.0" x2="342.9" y2="465.0" stroke="#eba13c" stroke-width="1.0"/>
+<line x1="357.1" y1="385.0" x2="357.1" y2="465.0" stroke="#eba13c" stroke-width="1.0"/>
+<rect x="379.2" y="382.0" width="56.6" height="86" rx="3" fill="url(#sort)" stroke="#6c6f73" stroke-width="1.2"/>
+<line x1="393.4" y1="385.0" x2="393.4" y2="465.0" stroke="#eba13c" stroke-width="1.0"/>
+<line x1="407.6" y1="385.0" x2="407.6" y2="465.0" stroke="#eba13c" stroke-width="1.0"/>
+<line x1="421.7" y1="385.0" x2="421.7" y2="465.0" stroke="#eba13c" stroke-width="1.0"/>
+<rect x="443.9" y="382.0" width="56.6" height="86" rx="3" fill="url(#sort)" stroke="#6c6f73" stroke-width="1.2"/>
+<line x1="458.0" y1="385.0" x2="458.0" y2="465.0" stroke="#eba13c" stroke-width="1.0"/>
+<line x1="472.2" y1="385.0" x2="472.2" y2="465.0" stroke="#eba13c" stroke-width="1.0"/>
+<line x1="486.3" y1="385.0" x2="486.3" y2="465.0" stroke="#eba13c" stroke-width="1.0"/>
+<text x="215" y="422.0" class="age">age 1</text>
+<text x="215" y="440.0" class="blk">4 blocks/run</text>
+<rect x="250.0" y="514.0" width="226.5" height="86" rx="3" fill="url(#sort)" stroke="#6c6f73" stroke-width="1.2"/>
+<line x1="264.2" y1="517.0" x2="264.2" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="278.3" y1="517.0" x2="278.3" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="292.5" y1="517.0" x2="292.5" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="306.6" y1="517.0" x2="306.6" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="320.8" y1="517.0" x2="320.8" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="334.9" y1="517.0" x2="334.9" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="349.1" y1="517.0" x2="349.1" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="363.2" y1="517.0" x2="363.2" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="377.4" y1="517.0" x2="377.4" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="391.6" y1="517.0" x2="391.6" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="405.7" y1="517.0" x2="405.7" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="419.9" y1="517.0" x2="419.9" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="434.0" y1="517.0" x2="434.0" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="448.2" y1="517.0" x2="448.2" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="462.3" y1="517.0" x2="462.3" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<rect x="484.5" y="514.0" width="226.5" height="86" rx="3" fill="url(#sort)" stroke="#6c6f73" stroke-width="1.2"/>
+<line x1="498.7" y1="517.0" x2="498.7" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="512.8" y1="517.0" x2="512.8" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="527.0" y1="517.0" x2="527.0" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="541.1" y1="517.0" x2="541.1" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="555.3" y1="517.0" x2="555.3" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="569.4" y1="517.0" x2="569.4" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="583.6" y1="517.0" x2="583.6" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="597.8" y1="517.0" x2="597.8" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="611.9" y1="517.0" x2="611.9" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="626.1" y1="517.0" x2="626.1" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="640.2" y1="517.0" x2="640.2" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="654.4" y1="517.0" x2="654.4" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="668.5" y1="517.0" x2="668.5" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="682.7" y1="517.0" x2="682.7" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="696.8" y1="517.0" x2="696.8" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<rect x="719.0" y="514.0" width="226.5" height="86" rx="3" fill="url(#sort)" stroke="#6c6f73" stroke-width="1.2"/>
+<line x1="733.2" y1="517.0" x2="733.2" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="747.3" y1="517.0" x2="747.3" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="761.5" y1="517.0" x2="761.5" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="775.6" y1="517.0" x2="775.6" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="789.8" y1="517.0" x2="789.8" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="803.9" y1="517.0" x2="803.9" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="818.1" y1="517.0" x2="818.1" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="832.2" y1="517.0" x2="832.2" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="846.4" y1="517.0" x2="846.4" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="860.6" y1="517.0" x2="860.6" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="874.7" y1="517.0" x2="874.7" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="888.9" y1="517.0" x2="888.9" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="903.0" y1="517.0" x2="903.0" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="917.2" y1="517.0" x2="917.2" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="931.3" y1="517.0" x2="931.3" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<rect x="953.5" y="514.0" width="226.5" height="86" rx="3" fill="url(#sort)" stroke="#6c6f73" stroke-width="1.2"/>
+<line x1="967.7" y1="517.0" x2="967.7" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="981.8" y1="517.0" x2="981.8" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="996.0" y1="517.0" x2="996.0" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="1010.1" y1="517.0" x2="1010.1" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="1024.3" y1="517.0" x2="1024.3" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="1038.4" y1="517.0" x2="1038.4" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="1052.6" y1="517.0" x2="1052.6" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="1066.8" y1="517.0" x2="1066.8" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="1080.9" y1="517.0" x2="1080.9" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="1095.1" y1="517.0" x2="1095.1" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="1109.2" y1="517.0" x2="1109.2" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="1123.4" y1="517.0" x2="1123.4" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="1137.5" y1="517.0" x2="1137.5" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="1151.7" y1="517.0" x2="1151.7" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<line x1="1165.8" y1="517.0" x2="1165.8" y2="597.0" stroke="#eba13c" stroke-width="0.7"/>
+<text x="215" y="554.0" class="age">age 2</text>
+<text x="215" y="572.0" class="blk">16 blocks/run</text>
+<line x1="80" y1="293.0" x2="80" y2="557.0" stroke="#9aa0a6" stroke-width="1.6" marker-end="url(#arm)"/>
+<text x="70" y="260.0" class="note" text-anchor="end">newest</text>
+<text x="90" y="598.0" class="noteo" text-anchor="start">older &#183; more data</text>
+<path d="M250.0,336.0 L250.0,382.0" stroke="#eba13c" stroke-width="1.3" stroke-dasharray="4 3" fill="none"/>
+<path d="M330.6,336.0 L306.6,382.0" stroke="#eba13c" stroke-width="1.3" stroke-dasharray="4 3" fill="none"/>
+<path d="M250.0,468.0 L250.0,514.0" stroke="#eba13c" stroke-width="1.3" stroke-dasharray="4 3" fill="none"/>
+<path d="M500.5,468.0 L476.5,514.0" stroke="#eba13c" stroke-width="1.3" stroke-dasharray="4 3" fill="none"/>
+<text x="514.5" y="496.0" class="noteo" text-anchor="start">4 runs compact into 1 run, &#215;4 longer</text>
+<rect x="250" y="636" width="200" height="22" rx="3" fill="url(#sort)" stroke="#6c6f73" stroke-width="1.2"/>
+<line x1="258" y1="647" x2="442" y2="647" stroke="#eba13c" stroke-width="1.6" marker-end="url(#ar)"/>
+<text x="462" y="652" class="lbl">each run is independently sorted by key (OutputKV)</text>
+<line x1="250" y1="680" x2="280" y2="680" stroke="#eba13c" stroke-width="1.6"/>
+<text x="290" y="685" class="note">amber = block boundaries within a run</text>
+<text x="250" y="710" class="note">Block width is constant: an older age holds &#215;4 the data of the age below. Most of the set is old and stable; new data is small.</text>
+</svg>

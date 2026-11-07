@@ -35,7 +35,7 @@ enum class Error {
   Structure_WitnessDataWithoutCommitment,
   Structure_WitnessDataPreSegwit,
   Structure_BadBlockWeight,
-  
+
   // Transactions
   Transaction_EmptyInputs,
   Transaction_EmptyOutputs,
@@ -45,15 +45,19 @@ enum class Error {
   Transaction_DuplicatedInput,
   Transaction_NullPreviousOutput,
   Transaction_BadCoinBaseSigScriptSize,
+  Transaction_GenesisCoinbaseSpend,
 
   // Spending
-  Spending_DuplicateOutPoint,
-  Spending_PrevoutNotUnspent,
+  Spending_OutPointDuplicate,
+  Spending_OutPointNotCreated,
+  Spending_OutPointSpent,
   Spending_PrematureSpend,
   Spending_OutputAmountsExceedInputAmounts,
   Spending_NonFinalTransaction,
   Spending_BadSigOpsCost,
-  Spending_CoinbaseAmountExceedsBlockReward
+  Spending_CoinbaseAmountExceedsBlockReward,
+  Spending_OversizedScript,
+  Spending_ScriptLocked
 };
 
 // SuccessOr represents state that is either "success" or it is a specific typed error.

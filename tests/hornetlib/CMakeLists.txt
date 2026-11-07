@@ -11,7 +11,10 @@ add_executable(hornetlib_tests
    consensus/validate_spending_input_test.cpp
    consensus/validate_spending_transaction_test.cpp
    consensus/validate_transaction_test.cpp
+   crypto/curve_test.cpp
    crypto/hash_test.cpp
+   crypto/fp_test.cpp
+   crypto/signature_test.cpp
    data/block_io_test.cpp
    data/chain_tree_test.cpp
    data/hashed_tree_test.cpp
@@ -22,6 +25,7 @@ add_executable(hornetlib_tests
    data/utxo/block_outputs_test.cpp
    data/utxo/database_test.cpp
    data/utxo/directory_test.cpp
+   data/utxo/duplicate_coinbase_test.cpp
    data/utxo/filter_test.cpp
    data/utxo/index_test.cpp
    data/utxo/joiner_test.cpp
@@ -47,8 +51,17 @@ add_executable(hornetlib_tests
    protocol/genesis_test.cpp
    protocol/handshake_test.cpp
    protocol/parser_test.cpp
+   protocol/transaction_test.cpp
    protocol/script/parser_test.cpp
+   protocol/script/runtime/stack_call_test.cpp
    protocol/script/runtime/push_ops_test.cpp
+   protocol/script/runtime/ops/arithmetic_test.cpp
+   protocol/script/runtime/ops/bitwise_test.cpp
+   protocol/script/runtime/ops/control_test.cpp
+   protocol/script/runtime/ops/crypto_test.cpp
+   protocol/script/runtime/ops/lock_test.cpp
+   protocol/script/runtime/ops/sig_test.cpp
+   protocol/script/runtime/ops/stack_test.cpp
    protocol/script/script_demo_test.cpp
    protocol/script/script_processor_test.cpp
    protocol/script/script_view_test.cpp

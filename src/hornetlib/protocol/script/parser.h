@@ -17,15 +17,20 @@ class Parser {
  public:
   using Iterator = lang::Bytes::iterator;
 
-  Parser(lang::Bytes bytes) : script_(bytes), cursor_(bytes.begin()) {}
+  Parser(lang::Bytes bytes = {}) : script_(bytes), cursor_(bytes.begin()) {}
 
   bool IsEof() const { return cursor_ >= script_.end(); }
   bool IsValid() const { return IsEof() || Peek(); }
 
+  void Reset(lang::Bytes bytes = {}) {
+    script_ = bytes;
+    cursor_ = script_.begin();
+  }
+
   std::optional<lang::Instruction> Next() {
     if (cursor_ >= script_.end()) return std::nullopt;
     const auto rv = Peek();
-    if (rv) cursor_ += rv->size;
+    if (rv) cursor_ += rv->raw.size();
     return rv;
   }
 
@@ -44,8 +49,12 @@ class Parser {
     const auto it_payload = it_pushdata + size->pushdata_bytes;
     return {{.opcode = opcode, 
       .data = {size->payload_bytes > 0 ? &*it_payload : nullptr, size->payload_bytes},
-      .offset = int(it_opcode - script_.begin()),
-      .size = int(it_payload + size->payload_bytes - cursor_)}};
+      .raw = {it_opcode, static_cast<size_t>(it_payload + size->payload_bytes - cursor_)}
+    }};
+  }
+
+  lang::Bytes Tail() const {
+    return {cursor_, static_cast<size_t>(script_.end() - cursor_)};
   }
 
   lang::Bytes Script() const {

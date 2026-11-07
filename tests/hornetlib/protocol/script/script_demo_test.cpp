@@ -19,7 +19,7 @@ TEST(ScriptTest, RunSimpleScript) {
                                  Then(Op::Equal).Release();
 
     // Execute the script using the stack-based virtual machine.
-    const auto result = Processor{script}.Run();
+    const auto result = Processor{}.Run(script);
 
     // Assert that the script execution completed without error.
     ASSERT_TRUE(result);

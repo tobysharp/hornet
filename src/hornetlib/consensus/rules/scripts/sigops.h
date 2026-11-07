@@ -3,6 +3,7 @@
 #include <span>
 
 #include "hornetlib/consensus/utxo.h"
+#include "hornetlib/protocol/script/satisfy.h"
 #include "hornetlib/protocol/transaction.h"
 
 namespace hornet::consensus::rules::scripts {
@@ -11,6 +12,6 @@ namespace hornet::consensus::rules::scripts {
 [[nodiscard]] int LegacySigOpCount(protocol::TransactionConstView tx);
 
 // Returns the sum of sigop costs for a transaction, given spending information.
-[[nodiscard]] int SigOpCost(protocol::TransactionConstView tx, std::span<const SpendRecord> spends, uint64_t flags);
+[[nodiscard]] int SigOpCost(protocol::TransactionConstView tx, std::span<const SpendRecord> spends, protocol::script::FeatureFlags flags);
 
 }  // namespace hornet::consensus::rules::scripts

@@ -14,7 +14,7 @@
 namespace hornet::protocol::script::runtime {
 
 template <std::signed_integral T, int kMaxNumBytes>
-inline T Decode(lang::Bytes bytes, bool require_minimal) {
+inline T Decode(lang::Bytes bytes, bool require_minimal = false) {
   if (std::ssize(bytes) > kMaxNumBytes)
     Throw(lang::Error::NumberOverflow, "Could not decode a buffer of size ", bytes.size(), " bytes (max ", kMaxNumBytes, ").");
   const auto decoded = lang::DecodeMinimalInt<T>(bytes);

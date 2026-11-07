@@ -7,9 +7,20 @@
 
 #include "hornetlib/consensus/types.h"
 #include "hornetlib/protocol/block.h"
+#include "hornetlib/protocol/script/lang/op.h"
 #include "hornetlib/protocol/transaction.h"
 
 namespace hornet::consensus {
+
+// An output is admitted if it is created in a preceding transaction and is not provably unspendable. This predicate
+// decides the second condition from the locking script alone: a script beginning with OP_RETURN or exceeding 10,000
+// bytes can never be satisfied, so such outputs never enter the output set. The genesis coinbase output is excluded by
+// the output set itself, which holds nothing from the genesis block.
+[[nodiscard]] inline bool IsOutputAdmissible(std::span<const uint8_t> pk_script) {
+  constexpr int kMaxScriptBytes = 10'000;
+  if (!pk_script.empty() && pk_script.front() == +protocol::script::lang::Op::Return) return false;
+  return std::ssize(pk_script) <= kMaxScriptBytes;
+}
 
 struct SpendRecord {
   int funding_height;
@@ -30,12 +41,16 @@ class JoinedSpendRange {
  public:
   JoinedSpendRange() {}
   // Create a range object that forwards Size/At calls to the object `self`.
-  template <typename T> JoinedSpendRange(const T& self) : self_(&self), vtable_(&kVTable<T>) {}
+  template <typename T>
+  JoinedSpendRange(const T& self) : self_(&self), vtable_(&kVTable<T>) {}
 
   int Size() const { return self_ != nullptr ? vtable_->Size(self_) : 0; }
-  JoinedSpend operator[](int index) const { Assert(self_ != nullptr); return vtable_->At(self_, index); }
+  JoinedSpend operator[](int index) const {
+    Assert(self_ != nullptr);
+    return vtable_->At(self_, index);
+  }
 
-  struct Sentinel{};
+  struct Sentinel {};
   struct Iterator {
     Iterator(const JoinedSpendRange& range, int index) : range_(range), index_(index) {}
     bool operator!=(Sentinel) const { return index_ < range_.Size(); }
@@ -44,6 +59,7 @@ class JoinedSpendRange {
       return *this;
     }
     JoinedSpend operator*() const { return range_[index_]; }
+
    private:
     const JoinedSpendRange& range_;
     int index_;
@@ -57,25 +73,33 @@ class JoinedSpendRange {
     int (*Size)(const void* self);
     JoinedSpend (*At)(const void* self, int index);
   };
-  template <typename T> static const T* Cast(const void* self) { return static_cast<const T*>(self); }
-  template <typename T> static inline const VTable kVTable = {
-    [](const void* self) -> int { return Cast<T>(self)->SpendSize(); },
-    [](const void* self, int index) -> JoinedSpend { return Cast<T>(self)->SpendAt(index); }
-  };
+  template <typename T>
+  static const T* Cast(const void* self) {
+    return static_cast<const T*>(self);
+  }
+  template <typename T>
+  static inline const VTable kVTable = {
+      [](const void* self) -> int { return Cast<T>(self)->SpendSize(); },
+      [](const void* self, int index) -> JoinedSpend { return Cast<T>(self)->SpendAt(index); }};
   const void* self_ = nullptr;
   const VTable* vtable_ = nullptr;
 };
 
-// This class represents an abstract view onto the whole set of unspent outputs.
-class UnspentOutputsView {
+// The chain outputs view abstracts the accumulated UTXO state of the chain. Implementations MUST enforce transaction
+// ordering: "preceding transaction" means any transaction in an ancestor block, or an earlier transaction in the
+// current block. Intra-block forward references MUST be treated as non-existent.
+class ChainOutputsView {
  public:
-  virtual ~UnspentOutputsView() = default;
+  virtual ~ChainOutputsView() = default;
 
-  // Returns success if every spending input in this block references an existing unspent output.  
-  virtual Result QueryPrevoutsUnspent(const protocol::Block& block) const = 0;
+  // [S01] Returns success iff no output in this block duplicates the outpoint of an admitted unspent output (BIP30).
+  virtual bool QueryOutPointsUnique(const protocol::Block& block) const = 0;
 
-  // Returns success if none of this block's transaction outputs already exist as unspent outputs (BIP30).
-  virtual Result QueryOutPointsUnique(const protocol::Block& block) const = 0;
+  // [S02] Returns success iff every spending input in this block references an admitted output.
+  virtual bool QueryPreviousOutputsCreated(const protocol::Block& block) const = 0;
+
+  // [S03] Returns success iff no spending input in this block references an output spent by a preceding transaction.
+  virtual bool QueryPreviousOutputsUnspent(const protocol::Block& block) const = 0;
 
   virtual std::optional<JoinedSpendRange> Spends(const protocol::Block& block) const = 0;
 };

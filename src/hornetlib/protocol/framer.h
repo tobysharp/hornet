@@ -32,7 +32,7 @@ class Framer {
     header.bytes = writer_.GetPos() - payload_pos;
 
     // Compute the hash of the payload.
-    const auto hash = crypto::DoubleSha256(std::span{Buffer().data() + payload_pos, header.bytes});
+    const auto hash = crypto::Hash256({Buffer().data() + payload_pos, header.bytes});
     std::copy_n(hash.begin(), header.checksum.size(), header.checksum.begin());
 
     // Rewind and serialize the correct header.
