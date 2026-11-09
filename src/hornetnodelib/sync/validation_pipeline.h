@@ -188,10 +188,9 @@ class ValidationPipeline {
     }
   }
 
-  // Returns the current epoch time in milliseconds for consensus validation.
-  static int64_t GetCurrentTime() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
-        .count();
+  // Returns the current system time in epoch seconds for consensus validation.
+  static std::chrono::seconds GetCurrentTime() {
+    return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch());
   }
 
   data::Timechain& timechain_;

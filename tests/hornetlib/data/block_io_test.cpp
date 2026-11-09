@@ -27,7 +27,7 @@ TEST(BlockIOTest, TestFileRead) {
   test::TempFolder folder;
   utxo::Database database(folder.Path());
 
-  const int64_t current_time = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+  const auto current_time = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch());
   auto headers = timechain.WriteHeaders();
   for (auto block : reader.Blocks()) {
     const auto tip = headers->ChainTip();
