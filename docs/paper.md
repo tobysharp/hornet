@@ -170,7 +170,7 @@ We now show the first part of the executable declarative C++ specification: head
     Rule{ValidateDifficultyAdjustment},
     // A header timestamp MUST be greater than the median of the prior 11.
     Rule{ValidateMedianTimePast},
-    // A header timestamp MUST NOT exceed network-adjusted time plus 2 hours.
+    // A header timestamp MUST NOT exceed system time plus 2 hours.
     Rule{ValidateTimestampCurrent},
     // A header version number MUST meet BIP deployment requirements.
     Rule{ValidateVersion}       
@@ -236,7 +236,7 @@ inline bool IsVersionValidAtHeight(const int32_t version, const int height) {
   return {};
 }
 
-// A header timestamp MUST be less than or equal to network-adjusted time plus 2 hours.
+// A header timestamp MUST be less than or equal to system time plus 2 hours.
 [[nodiscard]] inline ValidateHeaderResult ValidateTimestampCurrent(
     const HeaderValidationContext& context) {
   constexpr int kTimestampTolerance = 2 * 60 * 60;
@@ -286,7 +286,7 @@ Remarkably, we can express the full set of Bitcoin's header, transaction, and bl
     Rule{ValidateDifficultyAdjustment},
     // A header timestamp MUST be greater than the median of the prior 11.
     Rule{ValidateMedianTimePast},
-    // A header timestamp MUST NOT exceed network-adjusted time plus 2 hours.
+    // A header timestamp MUST NOT exceed system time plus 2 hours.
     Rule{ValidateTimestampCurrent},
     // A header version number MUST meet BIP deployment requirements.
     Rule{ValidateVersion}       

@@ -41,12 +41,12 @@ Among chains whose blocks all satisfy these rules, the active chain is the one w
 |
 ||**Header Rules**
 |
-H01|A header MUST reference the hash of a valid parent block.|[`ValidatePreviousHash`](../src/hornetlib/consensus/rules/validate_header.h#L33)
-H02|A header's hash MUST NOT exceed its own proof-of-work target.|[`ValidateProofOfWork`](../src/hornetlib/consensus/rules/validate_header.h#L39)
-H03|A header's proof-of-work target MUST satisfy the difficulty adjustment formula for the timechain.|[`ValidateDifficultyAdjustment`](../src/hornetlib/consensus/rules/validate_header.h#L47)
-H04|A header timestamp MUST be greater than the median of its 11 ancestor blocks' timestamps.|[`ValidateMedianTimePast`](../src/hornetlib/consensus/rules/validate_header.h#L54)
-H05|A header timestamp MUST NOT exceed network-adjusted time plus 2 hours.|[`ValidateTimestampCurrent`](../src/hornetlib/consensus/rules/validate_header.h#L60)
-H06|A header's version number MUST NOT have been retired by any activated soft fork. (See Table 1.)|[`ValidateVersion`](../src/hornetlib/consensus/rules/validate_header.h#L68)
+H01|A header MUST reference the hash of a valid parent block.|[`ValidatePreviousHash`](../src/hornetlib/consensus/rules/validate_header.h#L34)
+H02|A header's hash MUST NOT exceed its own proof-of-work target.|[`ValidateProofOfWork`](../src/hornetlib/consensus/rules/validate_header.h#L40)
+H03|A header's proof-of-work target MUST satisfy the difficulty adjustment formula for the timechain.|[`ValidateDifficultyAdjustment`](../src/hornetlib/consensus/rules/validate_header.h#L48)
+H04|A header timestamp MUST be greater than the median of its 11 ancestor blocks' timestamps.|[`ValidateMedianTimePast`](../src/hornetlib/consensus/rules/validate_header.h#L55)
+H05|A header timestamp MUST NOT exceed system time plus 2 hours.|[`ValidateTimestampCurrent`](../src/hornetlib/consensus/rules/validate_header.h#L61)
+H06|A header's version number MUST NOT have been retired by any activated soft fork. (See Table 1.)|[`ValidateVersion`](../src/hornetlib/consensus/rules/validate_header.h#L69)
 |
 ||**Local Rules**
 |

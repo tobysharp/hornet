@@ -26,7 +26,7 @@ static constexpr auto kConsensusRules = All{
     Rule{ValidateProofOfWork},                // A header's hash MUST NOT exceed its own proof-of-work target.
     Rule{ValidateDifficultyAdjustment},       // A header's proof-of-work target MUST satisfy the difficulty adjustment formula for the timechain.
     Rule{ValidateMedianTimePast},             // A header timestamp MUST be greater than the median of its 11 ancestor blocks' timestamps.
-    Rule{ValidateTimestampCurrent},           // A header timestamp MUST NOT exceed network-adjusted time plus 2 hours.
+    Rule{ValidateTimestampCurrent},           // A header timestamp MUST NOT exceed system time plus 2 hours.
     Rule{ValidateVersion}                     // A header's version number MUST NOT have been retired by any activated soft fork. (See Table 1.)
   }},
   With{MakeEnvironmentContext, All{ All{      // ## Local Rules
