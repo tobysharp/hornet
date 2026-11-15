@@ -5,6 +5,7 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 
 #include "hornetlib/consensus/bips.h"
 #include "hornetlib/consensus/difficulty_adjustment.h"
@@ -56,11 +57,11 @@ inline bool IsVersionValidAtHeight(int32_t version, int height) {
   return {};
 }
 
-// A header timestamp MUST be less than or equal to network-adjusted time plus 2 hours.
+// A header timestamp MUST be less than or equal to system time plus 2 hours.
 [[nodiscard]] inline Result ValidateTimestampCurrent(const HeaderValidationContext& context) {
-  constexpr int kTimestampToleranceSeconds = 2 * 60 * 60;
-  if (context.header.GetTimestamp() > context.current_time + kTimestampToleranceSeconds)
-    return Error::Header_BadTimestamp;
+  constexpr auto kTimestampTolerance = std::chrono::hours{2};
+  const auto header_time = std::chrono::seconds{context.header.GetTimestamp()};
+  if (header_time > context.current_time + kTimestampTolerance) return Error::Header_BadTimestamp;
   return {};
 }
 
