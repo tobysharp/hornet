@@ -150,9 +150,8 @@ inline void HeaderSync::Process() {
           headers->GetValidationView(parent);
 
       for (const auto& header : item->batch) {
-        const int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                std::chrono::system_clock::now().time_since_epoch())
-                                .count();
+        const auto now = std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch());
 
         // Validates the header against consensus rules.
         const auto validated = consensus::ValidateHeader(header, parent->data, *view, now);
