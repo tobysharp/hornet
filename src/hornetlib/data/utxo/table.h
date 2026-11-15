@@ -183,6 +183,9 @@ inline int Table::AppendOutputs(const protocol::Block& block, int height,
     for (int i = 0; i < tx.OutputCount(); ++i)
       if (consensus::IsOutputAdmissible(tx.PkScript(i))) bytes += sizeof(OutputHeader) + tx.PkScript(i).size();
 
+  // A block that admits no outputs occupies no table space and needs no tail entry.
+  if (bytes == 0) return 0;
+
   // Builds a local buffer holding the outputs.
   int count = 0;
   std::vector<uint8_t> data;

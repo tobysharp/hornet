@@ -7,6 +7,7 @@
 
 #include "testutil/blockchain.h"
 #include "testutil/temp_folder.h"
+#include "testutil/transaction.h"
 
 namespace hornet::data::utxo {
 namespace {
@@ -136,6 +137,48 @@ TEST(TableTest, TestPartialFetch) {
   std::vector<uint8_t> scripts_all;
   int fetched_all = table.Fetch(rids_all, details_all, &scripts_all);
   EXPECT_EQ(fetched_all, static_cast<int>(all_rids.size()));
+}
+
+// A block whose outputs are all provably unspendable contributes no bytes to the table. The blocks after it must
+// still commit to segments and remain fetchable.
+TEST(TableTest, CommitsPastBlockWithNoAdmittedOutputs) {
+  test::TempFolder folder;
+  Table table{folder.Path()};
+  table.SetMutableWindow(100);  // Hold everything in the tail; commits are driven manually below.
+
+  const auto make_block = [](uint8_t opcode) {
+    protocol::Block block;
+    auto tx = test::MakeCoinbaseLikeTransaction();
+    tx.SetPkScript(0, std::vector<uint8_t>{opcode});
+    block.AddTransaction(tx);
+    return block;
+  };
+
+  TiledVector<OutputKV> entries;
+  EXPECT_EQ(table.AppendOutputs(make_block(0x51), 1, &entries), 1);
+  EXPECT_EQ(table.AppendOutputs(make_block(0x6a), 2, &entries), 0);  // OP_RETURN only: nothing admitted.
+  EXPECT_EQ(table.AppendOutputs(make_block(0x52), 3, &entries), 1);
+  EXPECT_EQ(table.AppendOutputs(make_block(0x53), 4, &entries), 1);
+  ASSERT_EQ(entries.Size(), 3u);
+
+  const auto expect_fetch = [&](int entry, int height, uint8_t opcode) {
+    std::vector<uint8_t> script;
+    OutputDetail detail;
+    ASSERT_EQ(table.Fetch({&entries[entry].rid, 1}, {&detail, 1}, &script), 1);
+    const auto pk_script = detail.script.Span(script);
+    EXPECT_EQ(detail.header.height, height);
+    ASSERT_EQ(pk_script.size(), 1u);
+    EXPECT_EQ(pk_script[0], opcode);
+  };
+
+  table.CommitBefore(4);  // Heights 1 to 3 leave the tail.
+  expect_fetch(0, 1, 0x51);
+  expect_fetch(1, 3, 0x52);
+  expect_fetch(2, 4, 0x53);
+
+  table.CommitBefore(5);  // Height 4 follows.
+  expect_fetch(1, 3, 0x52);
+  expect_fetch(2, 4, 0x53);
 }
 
 }  // namespace
