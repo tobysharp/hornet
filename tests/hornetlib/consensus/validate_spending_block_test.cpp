@@ -67,7 +67,7 @@ Result EvaluateCandidateSpendingRule(const test::Blockchain& chain, const protoc
   while (joiner->IsAdvanceReady()) joiner->Advance();
 
   const data::utxo::DatabaseView utxo{joiner};
-  const BlockValidationContext validation{*joiner->GetBlock(), chain[height - 1]->Header(), *ancestry, 0, utxo};
+  const BlockValidationContext validation{*joiner->GetBlock(), chain[height - 1]->Header(), *ancestry, std::chrono::seconds{0}, utxo};
   return callback(MakeBlockSpendContext(validation));
 }
 
