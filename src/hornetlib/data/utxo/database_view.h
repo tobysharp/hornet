@@ -9,23 +9,28 @@
 
 namespace hornet::data::utxo {
 
-class DatabaseView : public consensus::UnspentOutputsView {
+class DatabaseView : public consensus::ChainOutputsView {
  public:
   DatabaseView(std::shared_ptr<SpendJoiner> ptr) : joiner_(std::move(ptr)) {}
 
-  // Returns success if every spending input in this block references an existing unspent output.
-  consensus::Result QueryPrevoutsUnspent(const protocol::Block& block) const override {
-    Assert(&block == joiner_->GetBlock().get());
-    if (!joiner_->WaitForQuery()) return consensus::Error::Spending_PrevoutNotUnspent;
-    return {};
-  }
-
-  // Returns success if none of this block's transaction outputs already exist as unspent outputs (BIP30).
-  consensus::Result QueryOutPointsUnique(const protocol::Block& block) const override {
+  // [S01] Returns success iff no output in this block duplicates an unspent outpoint created by a preceding transaction
+  // (BIP30).
+  bool QueryOutPointsUnique(const protocol::Block& block) const override {
     Assert(&block == joiner_->GetBlock().get());
     joiner_->WaitForDependencies();
-    if (!joiner_->AllOutPointsUnique()) return consensus::Error::Spending_DuplicateOutPoint;
-    return {};
+    return joiner_->AllOutPointsUnique();
+  }
+
+  // [S02] Returns success iff every spending input in this block references an output created by a preceding transaction.
+  bool QueryPreviousOutputsCreated(const protocol::Block& block) const override {
+    Assert(&block == joiner_->GetBlock().get());
+    return joiner_->AllOutPointsCreated();
+  }
+
+  // [S03] Returns success iff no spending input in this block references an output spent by a preceding transaction.
+  bool QueryPreviousOutputsUnspent(const protocol::Block& block) const override {
+    Assert(&block == joiner_->GetBlock().get());
+    return joiner_->AllOutPointsUnspent();
   }
 
   std::optional<consensus::JoinedSpendRange> Spends(const protocol::Block& block) const override {

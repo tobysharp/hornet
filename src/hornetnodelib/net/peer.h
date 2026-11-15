@@ -4,6 +4,7 @@
 // For licensing or usage inquiries, contact: ask@hornetnode.com.
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <ostream>
 #include <string>
@@ -11,8 +12,10 @@
 #include "hornetlib/protocol/capabilities.h"
 #include "hornetlib/protocol/handshake.h"
 #include "hornetlib/util/log.h"
+#include "hornetlib/util/thread_safe_queue.h"
 #include "hornetnodelib/net/connection.h"
 #include "hornetnodelib/net/constants.h"
+#include "hornetnodelib/net/serialization_memo.h"
 
 namespace hornet::node::net {
 
@@ -23,6 +26,9 @@ using PeerId = uint64_t;
 
 class Peer {
  public:
+  using SharedOutboundMessage = std::shared_ptr<SerializationMemo>;
+  using OutQueue = util::ThreadSafeQueue<SharedOutboundMessage>;
+
   enum class Direction { Inbound, Outbound };
 
   Peer(const std::string& host, uint16_t port)
@@ -36,7 +42,7 @@ class Peer {
   }
 
   bool IsDropped() const {
-    return !conn_.GetSocket().IsOpen();
+    return dropped_.test() || !conn_.GetSocket().IsOpen();
   }
 
   const std::string& Address() const {
@@ -71,13 +77,16 @@ class Peer {
   }
 
   void Drop() {
-    LogWarn() << "Dropping peer " << id_ << ".";
-    conn_.Drop();
+    if (!dropped_.test_and_set())
+      LogWarn() << "Dropping peer " << id_ << ".";
   }
 
   friend std::ostream& operator<<(std::ostream& os, const Peer& peer) {
     return os << "{ id = " << peer.id_ << " }";
   }
+
+  OutQueue& Outbox() { return outbox_; }
+  const OutQueue& Outbox() const { return outbox_; }
 
  private:
   friend class PeerRegistry;
@@ -92,6 +101,8 @@ class Peer {
   std::string address_;
   protocol::Handshake handshake_;
   protocol::Capabilities capabilities_;
+  OutQueue outbox_;
+  std::atomic_flag dropped_;
 };
 
 inline bool operator==(WeakPeer a, WeakPeer b) {

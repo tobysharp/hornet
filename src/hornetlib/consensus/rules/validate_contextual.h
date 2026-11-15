@@ -62,7 +62,7 @@ inline bool IsTransactionFinalAt(const protocol::TransactionConstView& transacti
   return {};
 }
 
-// From BIP34: The coinbase transaction’s sig script MUST begin by pushing the block height.
+// From BIP34: A coinbase's sig script MUST begin by pushing the block height.
 [[nodiscard]] /* [[BIP::HeightInCoinbase]] */ inline Result ValidateCoinbaseHeight(
     const BlockEnvironmentContext& context) {
   const auto expected = protocol::script::Writer{}.PushInt(context.height).Release();

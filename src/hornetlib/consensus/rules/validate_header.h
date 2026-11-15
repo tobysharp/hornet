@@ -36,11 +36,11 @@ inline bool IsVersionValidAtHeight(int32_t version, int height) {
   return {};
 }
 
-// A header's hash MUST achieve its own proof-of-work target.
+// A header's hash MUST NOT exceed its own proof-of-work target.
 [[nodiscard]] inline Result ValidateProofOfWork(const HeaderValidationContext& context) {
   const auto hash = context.header.ComputeHash();
   const auto target = context.header.GetCompactTarget().Expand();
-  if (!(hash <= target)) return Error::Header_InvalidProofOfWork;
+  if (hash > target) return Error::Header_InvalidProofOfWork;
   return {};
 }
 
@@ -51,13 +51,13 @@ inline bool IsVersionValidAtHeight(int32_t version, int height) {
   return {};
 }
 
-// A header timestamp MUST be strictly greater than the median of its 11 ancestors' timestamps.
+// A header timestamp MUST be greater than the median of its 11 ancestor blocks' timestamps.
 [[nodiscard]] inline Result ValidateMedianTimePast(const HeaderValidationContext& context) {
   if (context.header.GetTimestamp() <= context.view.MedianTimePast()) return Error::Header_BadTimestamp;
   return {};
 }
 
-// A header timestamp MUST be less than or equal to system time plus 2 hours.
+// A header timestamp MUST NOT exceed system time plus 2 hours.
 [[nodiscard]] inline Result ValidateTimestampCurrent(const HeaderValidationContext& context) {
   constexpr auto kTimestampTolerance = std::chrono::hours{2};
   const auto header_time = std::chrono::seconds{context.header.GetTimestamp()};
@@ -65,7 +65,7 @@ inline bool IsVersionValidAtHeight(int32_t version, int height) {
   return {};
 }
 
-// A header's version number MUST NOT have been retired by any activated soft fork.
+// A header's version number MUST NOT have been retired by any activated soft fork. (See Table 1.)
 [[nodiscard]] inline Result ValidateVersion(const HeaderValidationContext& context) {
   if (!detail::IsVersionValidAtHeight(context.header.GetVersion(), context.height)) return Error::Header_BadVersion;
   return {};

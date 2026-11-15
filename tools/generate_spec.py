@@ -93,6 +93,7 @@ class RefNode(GraphNode):
 class WrapperNode(GraphNode):
     kind: str
     child: GraphNode
+    comment: str = ""
     section: Section | None = None
 
 
@@ -113,7 +114,17 @@ def attach_section(node: GraphNode, section: Section | None) -> GraphNode:
     if isinstance(node, RefNode):
         return RefNode(node.name, section=section)
     if isinstance(node, WrapperNode):
-        return WrapperNode(node.kind, node.child, section=section)
+        return WrapperNode(node.kind, node.child, comment=node.comment, section=section)
+    return node
+
+
+def inherit_wrapper_comment(node: GraphNode, comment: str) -> GraphNode:
+    if not comment:
+        return node
+    if isinstance(node, RuleNode) and not node.comment:
+        return RuleNode(node.function, comment, section=node.section)
+    if isinstance(node, WrapperNode):
+        return WrapperNode(node.kind, inherit_wrapper_comment(node.child, comment), comment=node.comment, section=node.section)
     return node
 
 
@@ -440,19 +451,23 @@ def parse_graph_expression(text: str) -> GraphNode:
     if name == "With":
         if len(args) != 2:
             raise SystemExit(f"With expects exactly two arguments, got {len(args)}")
-        return WrapperNode(kind=name, child=parse_graph_expression(args[1]), section=section)
+        child = inherit_wrapper_comment(parse_graph_expression(args[1]), comment)
+        return WrapperNode(kind=name, child=child, comment=comment, section=section)
     if name == "When":
         if len(args) != 2:
             raise SystemExit(f"When expects exactly two arguments, got {len(args)}")
-        return WrapperNode(kind=name, child=parse_graph_expression(args[1]), section=section)
+        child = inherit_wrapper_comment(parse_graph_expression(args[1]), comment)
+        return WrapperNode(kind=name, child=child, comment=comment, section=section)
     if name == "Each":
         if not args:
             raise SystemExit("Each expects at least one argument")
-        return WrapperNode(kind=name, child=parse_graph_expression(args[-1]), section=section)
+        child = inherit_wrapper_comment(parse_graph_expression(args[-1]), comment)
+        return WrapperNode(kind=name, child=child, comment=comment, section=section)
     if name == "From":
         if len(args) != 2:
             raise SystemExit(f"From expects exactly two arguments, got {len(args)}")
-        return WrapperNode(kind=name, child=parse_graph_expression(args[1]), section=section)
+        child = inherit_wrapper_comment(parse_graph_expression(args[1]), comment)
+        return WrapperNode(kind=name, child=child, comment=comment, section=section)
 
     raise SystemExit(f"Unsupported graph node kind: {name}")
 

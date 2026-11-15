@@ -23,7 +23,7 @@ struct BlockValidationContext {
   const protocol::BlockHeader& parent;
   const HeaderAncestryView& view;
   const std::chrono::seconds current_time;  // Wall-clock time (epoch seconds) for the future-timestamp rule.
-  const UnspentOutputsView& unspent;
+  const ChainOutputsView& unspent;
 };
 
 struct HeaderValidationContext {
@@ -63,7 +63,7 @@ struct WitnessContext {
 struct BlockSpendContext {
   const protocol::Block& block;
   const HeaderAncestryView& ancestry;
-  const UnspentOutputsView& unspent;
+  const ChainOutputsView& unspent;
   const int height;
   const uint64_t script_flags;
 };

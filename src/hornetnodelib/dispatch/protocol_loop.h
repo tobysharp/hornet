@@ -16,7 +16,6 @@
 #include "hornetlib/util/timeout.h"
 #include "hornetnodelib/dispatch/broadcaster.h"
 #include "hornetnodelib/dispatch/event_handler.h"
-#include "hornetnodelib/dispatch/serialization_memo.h"
 #include "hornetnodelib/net/peer.h"
 #include "hornetnodelib/net/peer_registry.h"
 #include "hornetnodelib/net/peer_manager.h"
@@ -54,11 +53,6 @@ class ProtocolLoop : public Broadcaster {
 
  private:
   using Inbox = std::queue<std::unique_ptr<protocol::Message>>;
-  using SharedOutboundMessage = std::shared_ptr<SerializationMemo>;
-  using OutboundMessageQueue = std::deque<SharedOutboundMessage>;
-  using OutboxKey = std::weak_ptr<net::Peer>;
-  using OutboxCompare = std::owner_less<OutboxKey>;
-  using Outbox = std::map<OutboxKey, OutboundMessageQueue, OutboxCompare>;
 
   net::PeerManager::PollResult PollReadWrite();
   void ReadToInbox(std::span<net::SharedPeer> read);
@@ -69,7 +63,7 @@ class ProtocolLoop : public Broadcaster {
   static void ReadSocketsToBuffers(std::span<net::SharedPeer> read, std::queue<net::WeakPeer>& peers_for_parsing);
   static void ParseBuffersToMessages(std::queue<net::WeakPeer>& peers_for_parsing, Inbox& inbox);
   void ProcessMessages();
-  static void FrameMessagesToBuffers(Outbox& outbox);
+  static void FrameMessagesToBuffers(const net::PeerManager& peers);
   static int WriteBuffersToSockets(std::span<net::SharedPeer> write);
   void Cleanup();
 
@@ -77,7 +71,6 @@ class ProtocolLoop : public Broadcaster {
   std::atomic<bool> abort_ = false;
   std::queue<net::WeakPeer> peers_for_parsing_;
   Inbox inbox_;
-  Outbox outbox_;
   std::vector<EventHandler*> event_handlers_;
   std::unordered_set<net::PeerId> handshake_complete_;
 
