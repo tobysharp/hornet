@@ -1,6 +1,7 @@
 #include "hornetlib/data/utxo/memory_run.h"
 
 #include <algorithm>
+#include <memory>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -47,6 +48,190 @@ TEST(MemoryRunTest, TestSameHeightDeletePrecedesAdd) {
   std::vector<OutputKey> keys{key};
   std::vector<OutputId> rids(1, kNullOutputId);
   const auto result = run.Query(keys, rids, 0, height + 1);
+
+  EXPECT_EQ(result.funded, 0);
+  EXPECT_EQ(result.spent, 1);
+  EXPECT_EQ(rids[0], kSpentOutputId);
+}
+
+// Core treats a BIP30-exempt duplicate coinbase (blocks 91842 and 91880) as overwriting the earlier coin, leaving one
+// coin at the newer height. Hornet appends the repeat as a new Add and retires the superseded output with a Delete at
+// the height below, so the key carries Add@h, Delete@h-1, Add@h0. Lookups resolve to the newest entry, compaction
+// annihilates the superseded pair, and a later spend leaves nothing funded, matching Core at every step.
+
+MemoryRun MakeSupersededAddsRun(const OutputKey& key, bool is_mutable) {
+  TiledVector<OutputKV> entries;
+  entries.PushBack(OutputKV::Funded(key, 91812, 1));
+  entries.PushBack(OutputKV::Spent(key, 91841));
+  entries.PushBack(OutputKV::Funded(key, 91842, 2));
+  std::sort(entries.begin(), entries.end());
+  return MemoryRun{is_mutable, std::move(entries), {91812, 91843}};
+}
+
+TEST(MemoryRunTest, SupersededAddsResolveToNewest) {
+  const OutputKey key{{0x42}, 0u};
+  const MemoryRun run = MakeSupersededAddsRun(key, true);
+
+  std::vector<OutputKey> keys{key};
+  std::vector<OutputId> rids(1, kNullOutputId);
+  const auto result = run.Query(keys, rids, 0, 91843);
+
+  EXPECT_EQ(result.funded, 1);
+  EXPECT_EQ(rids[0], OutputId{2});
+}
+
+TEST(MemoryRunTest, ImmutableMergeAnnihilatesSupersededAdd) {
+  const OutputKey key{{0x42}, 0u};
+  const std::vector<std::shared_ptr<const MemoryRun>> inputs{
+      std::make_shared<const MemoryRun>(MakeSupersededAddsRun(key, false))};
+  const MemoryRun merged = MemoryRun::Merge(false, inputs);
+
+  EXPECT_EQ(merged.Size(), 1u);
+
+  std::vector<OutputKey> keys{key};
+  std::vector<OutputId> rids(1, kNullOutputId);
+  const auto result = merged.Query(keys, rids, 0, 91843);
+
+  EXPECT_EQ(result.funded, 1);
+  EXPECT_EQ(rids[0], OutputId{2});
+}
+
+TEST(MemoryRunTest, ImmutableMergeOfSpendAfterSupersessionLeavesNothingFunded) {
+  const OutputKey key{{0x42}, 0u};
+  TiledVector<OutputKV> spend;
+  spend.PushBack(OutputKV::Spent(key, 500'000));
+
+  const std::vector<std::shared_ptr<const MemoryRun>> inputs{
+      std::make_shared<const MemoryRun>(false, std::move(spend), std::pair{500'000, 500'001}),
+      std::make_shared<const MemoryRun>(MakeSupersededAddsRun(key, false))};
+  const MemoryRun merged = MemoryRun::Merge(false, inputs);
+
+  EXPECT_TRUE(merged.Empty());
+
+  std::vector<OutputKey> keys{key};
+  std::vector<OutputId> rids(1, kNullOutputId);
+  const auto result = merged.Query(keys, rids, 0, 500'001);
+
+  EXPECT_EQ(result.funded, 0);
+  EXPECT_FALSE(IsOutputIdValid(rids[0]));
+}
+
+TEST(MemoryRunTest, TestHigherHeightAddWinsForSameKey) {
+  const OutputKey key{{0x42}, 0u};
+
+  TiledVector<OutputKV> entries;
+  entries.PushBack(OutputKV::Funded(key, 5, 111));
+  entries.PushBack(OutputKV::Funded(key, 7, 222));
+  std::sort(entries.begin(), entries.end());
+
+  ASSERT_EQ(entries.Size(), 2);
+  EXPECT_EQ(entries[0].rid, 222);
+  EXPECT_EQ(entries[0].Height(), 7);
+  EXPECT_EQ(entries[1].rid, 111);
+  EXPECT_EQ(entries[1].Height(), 5);
+
+  const MemoryRun run{true, std::move(entries), {5, 8}};
+  std::vector<OutputKey> keys{key};
+  std::vector<OutputId> rids(1, kNullOutputId);
+  const auto result = run.Query(keys, rids, 0, 8);
+
+  EXPECT_EQ(result.funded, 1);
+  EXPECT_EQ(result.spent, 0);
+  EXPECT_EQ(rids[0], 222);
+}
+
+TEST(MemoryRunTest, TestSameKeyAtOrAfterBeforeIsIgnored) {
+  const OutputKey key{{0x42}, 0u};
+
+  TiledVector<OutputKV> entries;
+  entries.PushBack(OutputKV::Funded(key, 10, 111));
+  entries.PushBack(OutputKV::Funded(key, 12, 222));
+  std::sort(entries.begin(), entries.end());
+
+  const MemoryRun run{true, std::move(entries), {10, 13}};
+  std::vector<OutputKey> keys{key};
+  std::vector<OutputId> rids(1, kNullOutputId);
+  const auto result = run.Query(keys, rids, 0, 10);
+
+  EXPECT_EQ(result.funded, 0);
+  EXPECT_EQ(result.spent, 0);
+  EXPECT_EQ(rids[0], kNullOutputId);
+}
+
+TEST(MemoryRunTest, TestSameKeyFallsBackToHighestHeightBelowBefore) {
+  const OutputKey key{{0x42}, 0u};
+
+  TiledVector<OutputKV> entries;
+  entries.PushBack(OutputKV::Funded(key, 5, 111));
+  entries.PushBack(OutputKV::Funded(key, 10, 222));
+  std::sort(entries.begin(), entries.end());
+
+  const MemoryRun run{true, std::move(entries), {5, 11}};
+  std::vector<OutputKey> keys{key};
+  std::vector<OutputId> rids(1, kNullOutputId);
+  const auto result = run.Query(keys, rids, 0, 10);
+
+  EXPECT_EQ(result.funded, 1);
+  EXPECT_EQ(result.spent, 0);
+  EXPECT_EQ(rids[0], 111);
+}
+
+// Pre-BIP30, duplicate txids could recreate the same outpoint while an older version still existed.
+// The query must report the newest event for that key within the requested height window.
+TEST(MemoryRunTest, TestPreBIP30_F1F2S1_IsSpent) {
+  const OutputKey key{{0x42}, 0u};
+
+  TiledVector<OutputKV> entries;
+  entries.PushBack(OutputKV::Funded(key, 5, 111));
+  entries.PushBack(OutputKV::Funded(key, 7, 222));
+  entries.PushBack(OutputKV::Spent(key, 9));
+  std::sort(entries.begin(), entries.end());
+
+  const MemoryRun run{true, std::move(entries), {5, 10}};
+  std::vector<OutputKey> keys{key};
+  std::vector<OutputId> rids(1, kNullOutputId);
+  const auto result = run.Query(keys, rids, 0, 10);
+
+  EXPECT_EQ(result.funded, 0);
+  EXPECT_EQ(result.spent, 1);
+  EXPECT_EQ(rids[0], kSpentOutputId);
+}
+
+// After the old outpoint is spent, a later duplicate funding recreates the same key as unspent.
+TEST(MemoryRunTest, TestPreBIP30_F1S1F2_IsFunded) {
+  const OutputKey key{{0x42}, 0u};
+
+  TiledVector<OutputKV> entries;
+  entries.PushBack(OutputKV::Funded(key, 5, 111));
+  entries.PushBack(OutputKV::Spent(key, 6));
+  entries.PushBack(OutputKV::Funded(key, 7, 222));
+  std::sort(entries.begin(), entries.end());
+
+  const MemoryRun run{true, std::move(entries), {5, 8}};
+  std::vector<OutputKey> keys{key};
+  std::vector<OutputId> rids(1, kNullOutputId);
+  const auto result = run.Query(keys, rids, 0, 8);
+
+  EXPECT_EQ(result.funded, 1);
+  EXPECT_EQ(result.spent, 0);
+  EXPECT_EQ(rids[0], 222);
+}
+
+// A second spend of the recreated outpoint should leave the key spent again.
+TEST(MemoryRunTest, TestPreBIP30_F1S1F2S2_IsSpent) {
+  const OutputKey key{{0x42}, 0u};
+
+  TiledVector<OutputKV> entries;
+  entries.PushBack(OutputKV::Funded(key, 5, 111));
+  entries.PushBack(OutputKV::Spent(key, 6));
+  entries.PushBack(OutputKV::Funded(key, 7, 222));
+  entries.PushBack(OutputKV::Spent(key, 8));
+  std::sort(entries.begin(), entries.end());
+
+  const MemoryRun run{true, std::move(entries), {5, 9}};
+  std::vector<OutputKey> keys{key};
+  std::vector<OutputId> rids(1, kNullOutputId);
+  const auto result = run.Query(keys, rids, 0, 9);
 
   EXPECT_EQ(result.funded, 0);
   EXPECT_EQ(result.spent, 1);

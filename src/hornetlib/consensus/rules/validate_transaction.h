@@ -5,35 +5,31 @@
 #pragma once
 
 #include "hornetlib/consensus/types.h"
+#include "hornetlib/protocol/constants.h"
 #include "hornetlib/protocol/transaction.h"
 
 namespace hornet::consensus::rules {
 
 // A transaction MUST contain at least one input.
-[[nodiscard]] inline Result ValidateInputCount(
-    const protocol::TransactionConstView transaction) {
+[[nodiscard]] inline Result ValidateInputCount(const protocol::TransactionConstView transaction) {
   if (transaction.InputCount() < 1) return Error::Transaction_EmptyInputs;
   return {};
 }
 
 // A transaction MUST contain at least one output.
-[[nodiscard]] inline Result ValidateOutputCount(
-    const protocol::TransactionConstView transaction) {
+[[nodiscard]] inline Result ValidateOutputCount(const protocol::TransactionConstView transaction) {
   if (transaction.OutputCount() < 1) return Error::Transaction_EmptyOutputs;
   return {};
 }
 
 // A transaction's serialized size excluding witness flags and data MUST NOT exceed 1,000,000 bytes.
-[[nodiscard]] inline Result ValidateTransactionSize(
-    const protocol::TransactionConstView transaction) {
-  if (transaction.SerializedBytesNoWitness() > 1'000'000)
-    return Error::Transaction_OversizedByteCount;
+[[nodiscard]] inline Result ValidateTransactionSize(const protocol::TransactionConstView transaction) {
+  if (transaction.SerializedBytesNoWitness() > 1'000'000) return Error::Transaction_OversizedByteCount;
   return {};
 }
 
 // All transaction output amounts MUST be non-negative.
-[[nodiscard]] inline Result ValidateOutputsNonNegative(
-    const protocol::TransactionConstView transaction) {
+[[nodiscard]] inline Result ValidateOutputsNonNegative(const protocol::TransactionConstView transaction) {
   for (const auto& output : transaction.Outputs()) {
     if (output.value < 0) return Error::Transaction_NegativeOutputValue;
   }
@@ -41,8 +37,7 @@ namespace hornet::consensus::rules {
 }
 
 // The sum of a transaction's output amounts MUST NOT exceed 21,000,000 coins.
-[[nodiscard]] inline Result ValidateOutputsSum(
-    const protocol::TransactionConstView transaction) {
+[[nodiscard]] inline Result ValidateOutputsSum(const protocol::TransactionConstView transaction) {
   constexpr int64_t kSatoshisPerBitcoin = 100'000'000;
   constexpr int64_t kMoneySupplyLimit = 21'000'000 * kSatoshisPerBitcoin;
 
@@ -56,13 +51,11 @@ namespace hornet::consensus::rules {
 }
 
 // A transaction's inputs MUST NOT contain duplicate outpoints.
-[[nodiscard]] inline Result ValidateUniqueInputs(
-    const protocol::TransactionConstView transaction) {
+[[nodiscard]] inline Result ValidateUniqueInputs(const protocol::TransactionConstView transaction) {
   // Uses full sort rather than set insert for better performance on average.
   /* mutable */ std::vector<protocol::OutPoint> out_points;
   out_points.reserve(transaction.InputCount());
-  for (const auto& input : transaction.Inputs())
-    out_points.push_back(input.previous_output);
+  for (const auto& input : transaction.Inputs()) out_points.push_back(input.previous_output);
   std::sort(out_points.begin(), out_points.end());
   if (std::adjacent_find(out_points.begin(), out_points.end()) != out_points.end())
     return Error::Transaction_DuplicatedInput;
@@ -70,24 +63,28 @@ namespace hornet::consensus::rules {
 }
 
 // A coinbase's sig script size MUST be between 2 and 100 bytes inclusive.
-[[nodiscard]] inline Result ValidateCoinbaseSignatureSize(
-    const protocol::TransactionConstView transaction) {
+[[nodiscard]] inline Result ValidateCoinbaseSignatureSize(const protocol::TransactionConstView transaction) {
   if (transaction.IsCoinBase()) {
     const int sig_script_size = std::ssize(transaction.SignatureScript(0));
     // Coin base script must be between 2 and 100 bytes.
-    if (sig_script_size < 2 || sig_script_size > 100)
-      return Error::Transaction_BadCoinBaseSigScriptSize;
+    if (sig_script_size < 2 || sig_script_size > 100) return Error::Transaction_BadCoinBaseSigScriptSize;
   }
   return {};
 }
 
 // A non-coinbase transaction's inputs MUST have non-null previous outputs.
-[[nodiscard]] inline Result ValidateInputsPrevout(
-    const protocol::TransactionConstView transaction) {
+[[nodiscard]] inline Result ValidateInputsPrevout(const protocol::TransactionConstView transaction) {
   if (!transaction.IsCoinBase()) {
     for (const auto& input : transaction.Inputs())
       if (input.previous_output.IsNull()) return Error::Transaction_NullPreviousOutput;
   }
+  return {};
+}
+
+// The genesis coinbase output MUST NOT be spent.
+[[nodiscard]] inline Result ValidateGenesisCoinbaseUnspent(const protocol::TransactionConstView transaction) {
+  for (const auto& input : transaction.Inputs())
+    if (input.previous_output.hash == protocol::kGenesisCoinbaseTxid) return Error::Transaction_GenesisCoinbaseSpend;
   return {};
 }
 

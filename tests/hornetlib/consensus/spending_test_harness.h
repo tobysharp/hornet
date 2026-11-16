@@ -21,11 +21,15 @@ void FixMerkleRoot(protocol::Block& block);
 
 Blockchain LoadValidationPipelineChain();
 
+// A positive `mutable_window` holds that many heights of outputs in the table's uncommitted tail, as happens in the
+// node whenever blocks are appended faster than the background flusher commits them.
 template <typename Callback>
-consensus::Result WithCandidateSpendState(const Blockchain& chain, const protocol::Block& block, Callback&& callback) {
+consensus::Result WithCandidateSpendState(const Blockchain& chain, const protocol::Block& block, Callback&& callback,
+                                          int mutable_window = 0) {
   data::HeaderTimechain headers;
   TempFolder datadir;
   data::utxo::Database db{datadir.Path()};
+  if (mutable_window > 0) db.SetMutableWindow(mutable_window);
   model::HeaderContext context;
   data::HeaderTimechain::ConstIterator tip;
 
