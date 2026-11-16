@@ -8,6 +8,8 @@
 #include "testutil/blockchain.h"
 #include "testutil/transaction.h"
 
+#include <algorithm>
+
 #include <gtest/gtest.h>
 
 namespace hornet::consensus::rules {
@@ -72,14 +74,15 @@ test::Blockchain MakeLockingScriptSpendChain(std::span<const uint8_t> locking_sc
 
 template <typename Callback>
 Result EvaluateCandidateSpendingBlock(const test::Blockchain& chain, const protocol::Block& block,
-                                      Callback&& callback) {
+                                      Callback&& callback, int mutable_window = 0) {
   return test::WithCandidateSpendState(
       chain, block,
       [&](const HeaderAncestryView& ancestry, const std::shared_ptr<data::utxo::SpendJoiner>& joiner, int height) {
         const data::utxo::DatabaseView utxo{joiner};
         const BlockValidationContext validation{*joiner->GetBlock(), chain[height - 1]->Header(), ancestry, std::chrono::seconds{0}, utxo};
         return callback(MakeBlockSpendContext(validation));
-      });
+      },
+      mutable_window);
 }
 
 template <typename Callback>
@@ -626,6 +629,52 @@ TEST(ValidateSpendingBlockTest, AcceptsGenesisCoinbaseDuplicateAsUnique) {
   EXPECT_EQ(EvaluateCandidateSpendingBlock(
                 chain, candidate, [](const BlockSpendContext& context) { return ValidateOutPointsUnique(context); }),
             Result{});
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Blocks that admit no outputs
+//
+// A coinbase may burn its whole reward to an OP_RETURN output, so a block whose outputs are all provably unspendable
+// is consensus-valid. It adds nothing to the output set, and outputs funded by later blocks must remain spendable.
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+TEST(ValidateSpendingBlockTest, AcceptsSpendOfOutputFundedAfterBlockWithNoAdmittedOutputs) {
+  constexpr int kCoinbaseMaturity = 100;
+  constexpr int kMutableWindow = 2;  // The height-1 outputs are still uncommitted when height 2 is appended.
+  test::Blockchain chain;
+
+  protocol::Block burn = chain.Sample(1);
+  burn.Transaction(0).SetPkScript(0, std::vector<uint8_t>{+Op::Return});
+  chain.AppendFixed(std::move(burn));  // Height 1 admits no outputs.
+
+  chain.Append(chain.Sample(1));  // Height 2 funds the output spent below.
+  for (int i = 0; i < kCoinbaseMaturity; ++i) chain.Append(chain.Sample(1));
+
+  const auto funding = chain[2]->Transaction(0);
+  const protocol::OutPoint prevout{funding.GetHash(), 0};
+  const int unspent_index = FindUnspentIndex(chain, prevout);
+  ASSERT_GE(unspent_index, 0);
+  const int64_t amount = chain.Unspent(unspent_index).amount;
+
+  // The candidate spends the height-2 coinbase with a fee of 1, and its own coinbase claims that fee.
+  protocol::Block candidate = chain.Sample(1);
+  candidate.AddTransaction(MakeSpendTransaction(prevout, amount - 1));
+  candidate.Transaction(0).Output(0).value += 1;
+  test::FixMerkleRoot(candidate);
+
+  const auto evaluate = [&](const BlockSpendContext& context) -> Result {
+    // The spent output must be read back exactly as height 2 funded it.
+    const auto joined = context.unspent.Spends(context.block);
+    EXPECT_TRUE(joined.has_value());
+    if (!joined || joined->Size() != 1 || (*joined)[0].spends.size() != 1) return Error::Spending_OutPointNotCreated;
+    const SpendRecord& spend = (*joined)[0].spends[0];
+    EXPECT_EQ(spend.funding_height, 2);
+    EXPECT_TRUE(spend.IsCoinbase());
+    EXPECT_EQ(spend.amount, amount);
+    EXPECT_TRUE(std::ranges::equal(spend.pubkey_script, funding.PkScript(0)));
+    return ValidateBlockSubsidy(context);
+  };
+  EXPECT_EQ(EvaluateCandidateSpendingBlock(chain, candidate, evaluate, kMutableWindow), Result{});
 }
 
 }  // namespace
